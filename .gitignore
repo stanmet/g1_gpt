@@ -1,5 +1,5 @@
 node_modules/
-/dist/
-/site/
+mentra/dist/
+mentra/site/
 *.log
 .DS_Store

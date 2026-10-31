@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "OpenAI voice assistant for Even Realities G1 as a Mentra miniapp",
   "scripts": {
-    "build": "bun run build.ts && rm -rf docs && cp -r site docs",
+    "build": "bun run build.ts && rm -rf ../docs && cp -r site ../docs",
     "test": "bun test tests"
   },
   "devDependencies": {

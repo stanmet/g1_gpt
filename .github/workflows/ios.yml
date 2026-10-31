@@ -1,0 +1,93 @@
+name: iOS app (IPA for SideStore)
+
+# Builds the Flutter app in ios-app/ on a macOS runner without code signing and
+# publishes GPT-G1.ipa as a GitHub Release. SideStore on the iPhone signs it with
+# a free Apple ID. Stable download link:
+#   https://github.com/<owner>/<repo>/releases/latest/download/GPT-G1.ipa
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ios-app/**"
+      - ".github/workflows/ios.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ios-build
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: "3.24.5"
+
+jobs:
+  analyze:
+    name: Dart analyze
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ios-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+  build:
+    name: Build unsigned IPA
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: ios-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 16
+        run: |
+          ls -d /Applications/Xcode*.app || true
+          X=$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$X" ]; then sudo xcode-select -s "$X/Contents/Developer"; fi
+          xcodebuild -version
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: Build iOS (no codesign)
+        run: flutter build ios --release --no-codesign --build-number ${{ github.run_number }}
+
+      - name: Package IPA
+        run: |
+          rm -rf Payload GPT-G1.ipa
+          mkdir Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          zip -qry GPT-G1.ipa Payload
+          ls -la GPT-G1.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GPT-G1-ipa
+          path: ios-app/GPT-G1.ipa
+          retention-days: 30
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ios-build-${{ github.run_number }}
+          name: "GPT для G1 — iOS, сборка ${{ github.run_number }}"
+          make_latest: "true"
+          files: ios-app/GPT-G1.ipa
+          body: |
+            Неподписанный IPA для установки через SideStore (бесплатный Apple ID).
+            Коммит: ${{ github.sha }}
