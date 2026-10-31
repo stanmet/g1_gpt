@@ -12,7 +12,7 @@
 
 ## Установка
 
-Страница установки: `https://<ваш-логин>.github.io/g1-gpt/`.
+Страница установки: `https://<ваш-логин>.github.io/g1_gpt/`.
 
 **Только iPhone.** Mentra → Settings → Miniapp Developer Settings → **Load Miniapp from URL** → вставить адрес страницы установки → Load Miniapp → разрешить микрофон.
 
