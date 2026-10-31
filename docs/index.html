@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GPT для G1 — установка</title>
+    <style>
+      :root {
+        --bg: #f4f5f2; --card: #fff; --text: #15181a; --muted: #6b7275; --line: #e2e5e1; --accent: #1f7a4d; --accent-text: #fff; --code: #f0f2ef;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg: #0f1211; --card: #181c1b; --text: #eef1ee; --muted: #98a19d; --line: #2a302e; --accent: #3fbf7a; --accent-text: #06140c; --code: #121615; }
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+      main { max-width: 640px; margin: 0 auto; padding: 28px 16px 48px; }
+      h1 { font-size: 28px; margin: 0 0 4px; }
+      h2 { font-size: 19px; margin: 0 0 8px; }
+      .muted { color: var(--muted); }
+      .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px; margin: 16px 0; }
+      ol { padding-left: 22px; margin: 8px 0 0; }
+      li { margin: 0 0 6px; }
+      code, .url { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 15px; background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 2px 6px; word-break: break-all; }
+      .url { display: block; padding: 10px 12px; margin: 10px 0; }
+      button { font: inherit; font-weight: 600; min-height: 44px; padding: 0 16px; border-radius: 10px; border: 0; background: var(--accent); color: var(--accent-text); }
+      #qr { background: #fff; padding: 14px; border-radius: 12px; width: min(320px, 100%); margin: 10px 0; }
+      #qr svg { display: block; width: 100%; height: auto; }
+      .small { font-size: 14px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>GPT для G1</h1>
+      <p class="muted">Мини‑приложение для Mentra: голосовые вопросы к OpenAI, ответы текстом на очках Even Realities G1.</p>
+
+      <section class="card">
+        <h2>Способ 1 — только iPhone</h2>
+        <ol>
+          <li>Скопируйте адрес:
+            <span class="url" id="base">…</span>
+            <button id="copy">Скопировать адрес</button>
+          </li>
+          <li>Откройте приложение <b>Mentra</b> → <b>Settings</b> → <b>Miniapp Developer Settings</b> → <b>Load Miniapp from URL</b>.</li>
+          <li>Вставьте адрес и нажмите <b>Load Miniapp</b>, разрешите микрофон.</li>
+        </ol>
+        <p class="small muted">В этом режиме Mentra загружает приложение с этой страницы при каждом запуске и сохраняет копию на случай отсутствия связи.</p>
+      </section>
+
+      <section class="card">
+        <h2>Способ 2 — QR с другого экрана</h2>
+        <p class="small">Откройте эту страницу на компьютере, планшете или другом телефоне. На iPhone: <b>Mentra</b> → <b>Settings</b> → <b>Miniapp Developer Settings</b> → <b>Scan Miniapp QR Code</b> и наведите камеру.</p>
+        <div id="qr"></div>
+        <p class="small muted">Так приложение устанавливается в телефон целиком и работает без этой страницы.</p>
+      </section>
+
+      <section class="card small">
+        <h2>После установки</h2>
+        <ol>
+          <li>Откройте плитку «GPT для G1» в Mentra и вставьте ключ OpenAI API — он хранится только на телефоне.</li>
+          <li>Нажмите «Тест дисплея», затем спросите что‑нибудь текстом.</li>
+          <li>Скажите в очки: «Вопрос, …». Листайте голосом: «дальше», «назад».</li>
+        </ol>
+      </section>
+
+      <p class="small muted" id="ver"></p>
+    </main>
+    <script src="qrcode.js"></script>
+    <script>
+      ;(async function () {
+        var base = location.href.split("#")[0].split("?")[0].replace(/\/[^/]*$/, "")
+        document.getElementById("base").textContent = base
+        document.getElementById("copy").onclick = function () {
+          var done = function () { document.getElementById("copy").textContent = "Скопировано ✓" }
+          if (navigator.clipboard) navigator.clipboard.writeText(base).then(done, function () { prompt("Скопируйте адрес:", base) })
+          else prompt("Скопируйте адрес:", base)
+        }
+        var m = {packageName: "com.g1gpt.assistant", version: "1.0.0", name: "GPT для G1"}
+        try {
+          var r = await fetch("miniapp.json", {cache: "no-store"})
+          if (r.ok) m = await r.json()
+        } catch (e) {}
+        document.getElementById("ver").textContent = "Версия " + m.version + " · " + m.packageName
+        var link =
+          "miniapp://release?url=" + encodeURIComponent(base) +
+          "&package=" + encodeURIComponent(m.packageName) +
+          "&version=" + encodeURIComponent(m.version) +
+          "&name=" + encodeURIComponent(m.name)
+        var qr = qrcode(0, "M")
+        qr.addData(link)
+        qr.make()
+        document.getElementById("qr").innerHTML = qr.createSvgTag({cellSize: 6, margin: 2, scalable: true})
+      })()
+    </script>
+  </body>
+</html>

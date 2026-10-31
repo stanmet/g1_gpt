@@ -1,0 +1,5595 @@
+(() => {
+  var __create = Object.create;
+  var __getProtoOf = Object.getPrototypeOf;
+  var __defProp = Object.defineProperty;
+  var __getOwnPropNames = Object.getOwnPropertyNames;
+  var __hasOwnProp = Object.prototype.hasOwnProperty;
+  function __accessProp(key) {
+    return this[key];
+  }
+  var __toESMCache_node;
+  var __toESMCache_esm;
+  var __toESM = (mod, isNodeMode, target) => {
+    var canCache = mod != null && typeof mod === "object";
+    if (canCache) {
+      var cache = isNodeMode ? __toESMCache_node ??= new WeakMap : __toESMCache_esm ??= new WeakMap;
+      var cached = cache.get(mod);
+      if (cached)
+        return cached;
+    }
+    target = mod != null ? __create(__getProtoOf(mod)) : {};
+    const to = isNodeMode || !mod || !mod.__esModule || !__hasOwnProp.call(mod, "default") ? __defProp(target, "default", { value: mod, enumerable: true }) : target;
+    if (mod && typeof mod === "object" || typeof mod === "function") {
+      for (let key of __getOwnPropNames(mod))
+        if (!__hasOwnProp.call(to, key))
+          __defProp(to, key, {
+            get: __accessProp.bind(mod, key),
+            enumerable: true
+          });
+    }
+    if (canCache)
+      cache.set(mod, to);
+    return to;
+  };
+  var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
+
+  // vendor/eventemitter3/index.js
+  var require_eventemitter3 = __commonJS(function(exports, module) {
+    var has = Object.prototype.hasOwnProperty;
+    var prefix = "~";
+    function Events() {}
+    if (Object.create) {
+      Events.prototype = Object.create(null);
+      if (!new Events().__proto__)
+        prefix = false;
+    }
+    function EE(fn, context, once) {
+      this.fn = fn;
+      this.context = context;
+      this.once = once || false;
+    }
+    function addListener(emitter, event, fn, context, once) {
+      if (typeof fn !== "function") {
+        throw new TypeError("The listener must be a function");
+      }
+      var listener = new EE(fn, context || emitter, once), evt = prefix ? prefix + event : event;
+      if (!emitter._events[evt])
+        emitter._events[evt] = listener, emitter._eventsCount++;
+      else if (!emitter._events[evt].fn)
+        emitter._events[evt].push(listener);
+      else
+        emitter._events[evt] = [emitter._events[evt], listener];
+      return emitter;
+    }
+    function clearEvent(emitter, evt) {
+      if (--emitter._eventsCount === 0)
+        emitter._events = new Events;
+      else
+        delete emitter._events[evt];
+    }
+    function EventEmitter() {
+      this._events = new Events;
+      this._eventsCount = 0;
+    }
+    EventEmitter.prototype.eventNames = function eventNames() {
+      var names = [], events, name;
+      if (this._eventsCount === 0)
+        return names;
+      for (name in events = this._events) {
+        if (has.call(events, name))
+          names.push(prefix ? name.slice(1) : name);
+      }
+      if (Object.getOwnPropertySymbols) {
+        return names.concat(Object.getOwnPropertySymbols(events));
+      }
+      return names;
+    };
+    EventEmitter.prototype.listeners = function listeners(event) {
+      var evt = prefix ? prefix + event : event, handlers = this._events[evt];
+      if (!handlers)
+        return [];
+      if (handlers.fn)
+        return [handlers.fn];
+      for (var i = 0, l = handlers.length, ee = new Array(l);i < l; i++) {
+        ee[i] = handlers[i].fn;
+      }
+      return ee;
+    };
+    EventEmitter.prototype.listenerCount = function listenerCount(event) {
+      var evt = prefix ? prefix + event : event, listeners = this._events[evt];
+      if (!listeners)
+        return 0;
+      if (listeners.fn)
+        return 1;
+      return listeners.length;
+    };
+    EventEmitter.prototype.emit = function emit(event, a1, a2, a3, a4, a5) {
+      var evt = prefix ? prefix + event : event;
+      if (!this._events[evt])
+        return false;
+      var listeners = this._events[evt], len = arguments.length, args, i;
+      if (listeners.fn) {
+        if (listeners.once)
+          this.removeListener(event, listeners.fn, undefined, true);
+        switch (len) {
+          case 1:
+            return listeners.fn.call(listeners.context), true;
+          case 2:
+            return listeners.fn.call(listeners.context, a1), true;
+          case 3:
+            return listeners.fn.call(listeners.context, a1, a2), true;
+          case 4:
+            return listeners.fn.call(listeners.context, a1, a2, a3), true;
+          case 5:
+            return listeners.fn.call(listeners.context, a1, a2, a3, a4), true;
+          case 6:
+            return listeners.fn.call(listeners.context, a1, a2, a3, a4, a5), true;
+        }
+        for (i = 1, args = new Array(len - 1);i < len; i++) {
+          args[i - 1] = arguments[i];
+        }
+        listeners.fn.apply(listeners.context, args);
+      } else {
+        var length = listeners.length, j;
+        for (i = 0;i < length; i++) {
+          if (listeners[i].once)
+            this.removeListener(event, listeners[i].fn, undefined, true);
+          switch (len) {
+            case 1:
+              listeners[i].fn.call(listeners[i].context);
+              break;
+            case 2:
+              listeners[i].fn.call(listeners[i].context, a1);
+              break;
+            case 3:
+              listeners[i].fn.call(listeners[i].context, a1, a2);
+              break;
+            case 4:
+              listeners[i].fn.call(listeners[i].context, a1, a2, a3);
+              break;
+            default:
+              if (!args)
+                for (j = 1, args = new Array(len - 1);j < len; j++) {
+                  args[j - 1] = arguments[j];
+                }
+              listeners[i].fn.apply(listeners[i].context, args);
+          }
+        }
+      }
+      return true;
+    };
+    EventEmitter.prototype.on = function on(event, fn, context) {
+      return addListener(this, event, fn, context, false);
+    };
+    EventEmitter.prototype.once = function once(event, fn, context) {
+      return addListener(this, event, fn, context, true);
+    };
+    EventEmitter.prototype.removeListener = function removeListener(event, fn, context, once) {
+      var evt = prefix ? prefix + event : event;
+      if (!this._events[evt])
+        return this;
+      if (!fn) {
+        clearEvent(this, evt);
+        return this;
+      }
+      var listeners = this._events[evt];
+      if (listeners.fn) {
+        if (listeners.fn === fn && (!once || listeners.once) && (!context || listeners.context === context)) {
+          clearEvent(this, evt);
+        }
+      } else {
+        for (var i = 0, events = [], length = listeners.length;i < length; i++) {
+          if (listeners[i].fn !== fn || once && !listeners[i].once || context && listeners[i].context !== context) {
+            events.push(listeners[i]);
+          }
+        }
+        if (events.length)
+          this._events[evt] = events.length === 1 ? events[0] : events;
+        else
+          clearEvent(this, evt);
+      }
+      return this;
+    };
+    EventEmitter.prototype.removeAllListeners = function removeAllListeners(event) {
+      var evt;
+      if (event) {
+        evt = prefix ? prefix + event : event;
+        if (this._events[evt])
+          clearEvent(this, evt);
+      } else {
+        this._events = new Events;
+        this._eventsCount = 0;
+      }
+      return this;
+    };
+    EventEmitter.prototype.off = EventEmitter.prototype.removeListener;
+    EventEmitter.prototype.addListener = EventEmitter.prototype.on;
+    EventEmitter.prefixed = prefix;
+    EventEmitter.EventEmitter = EventEmitter;
+    if (typeof module !== "undefined") {
+      module.exports = EventEmitter;
+    }
+  });
+
+  // vendor/eventemitter3/index.mjs
+  var import__ = __toESM(require_eventemitter3(), 1);
+
+  // vendor/mentra-miniapp/src/envelope.ts
+  function serializeEnvelope(envelope) {
+    return JSON.stringify(envelope);
+  }
+  function parseEnvelope(raw) {
+    if (typeof raw !== "string")
+      return null;
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+    if (typeof parsed !== "object" || parsed === null)
+      return null;
+    const obj = parsed;
+    if (typeof obj.payload !== "object" || obj.payload === null)
+      return null;
+    if (obj.requestId !== undefined && typeof obj.requestId !== "string")
+      return null;
+    return {
+      payload: obj.payload,
+      requestId: obj.requestId
+    };
+  }
+  function makeRequestId() {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+    return `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+  }
+
+  // vendor/mentra-miniapp/src/globals.ts
+  function getMentraOSGlobals() {
+    if (typeof window === "undefined")
+      return {};
+    return window.MentraOS ?? {};
+  }
+
+  // vendor/mentra-miniapp/src/transport/dispatch.ts
+  class DispatchTransport {
+    messageHandler = null;
+    disconnectHandler = null;
+    open_ = false;
+    static isAvailable() {
+      return typeof globalThis.__dispatch === "function";
+    }
+    async open() {
+      if (!DispatchTransport.isAvailable()) {
+        throw new Error("DispatchTransport: __dispatch is not installed on globalThis");
+      }
+      const g = globalThis;
+      g.__mentraDeliverBridgeRaw = (raw) => {
+        if (this.messageHandler)
+          this.messageHandler(raw);
+      };
+      this.open_ = true;
+    }
+    send(raw) {
+      if (!this.open_) {
+        throw new Error("DispatchTransport: send() before open()");
+      }
+      const g = globalThis;
+      if (typeof g.__dispatch !== "function") {
+        this.open_ = false;
+        this.disconnectHandler?.("DispatchTransport: __dispatch disappeared");
+        return;
+      }
+      try {
+        g.__dispatch("__bridge", "send", JSON.stringify([raw]));
+      } catch (e) {
+        this.disconnectHandler?.(`DispatchTransport: __dispatch threw: ${String(e)}`);
+      }
+    }
+    onMessage(handler) {
+      this.messageHandler = handler;
+    }
+    onDisconnect(handler) {
+      this.disconnectHandler = handler;
+    }
+    close() {
+      this.open_ = false;
+      const g = globalThis;
+      if (g.__mentraDeliverBridgeRaw) {
+        delete g.__mentraDeliverBridgeRaw;
+      }
+    }
+    isOpen() {
+      return this.open_;
+    }
+  }
+
+  // vendor/mentra-miniapp/src/transport/local-socket.ts
+  var DEFAULT_URL = "ws://127.0.0.1:8765";
+
+  class LocalSocketTransport {
+    url;
+    ws = null;
+    messageHandler = null;
+    disconnectHandler = null;
+    constructor(options = {}) {
+      this.url = options.url ?? DEFAULT_URL;
+    }
+    async open() {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN)
+        return;
+      if (typeof WebSocket === "undefined") {
+        throw new Error("LocalSocketTransport: browser WebSocket global not available");
+      }
+      await new Promise((resolve, reject) => {
+        const ws = new WebSocket(this.url);
+        let settled = false;
+        const settle = (fn) => {
+          if (settled)
+            return;
+          settled = true;
+          fn();
+        };
+        ws.onopen = () => {
+          this.ws = ws;
+          settle(() => resolve());
+        };
+        ws.onerror = (ev) => {
+          settle(() => reject(new Error(`LocalSocketTransport: failed to connect to ${this.url}: ${String(ev)}`)));
+        };
+        ws.onmessage = (ev) => {
+          const data = ev.data;
+          if (typeof data === "string")
+            this.messageHandler?.(data);
+        };
+        ws.onclose = (ev) => {
+          if (this.ws === ws)
+            this.ws = null;
+          this.disconnectHandler?.(`closed: ${ev.code} ${ev.reason}`);
+        };
+      });
+    }
+    send(raw) {
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+        throw new Error("LocalSocketTransport: not connected");
+      }
+      this.ws.send(raw);
+    }
+    onMessage(handler) {
+      this.messageHandler = handler;
+    }
+    onDisconnect(handler) {
+      this.disconnectHandler = handler;
+    }
+    close() {
+      if (!this.ws)
+        return;
+      try {
+        this.ws.close();
+      } catch {}
+      this.ws = null;
+    }
+    isOpen() {
+      return !!this.ws && this.ws.readyState === WebSocket.OPEN;
+    }
+  }
+
+  // vendor/mentra-miniapp/src/transport/mock.ts
+  var LOG_PREFIX = "[mock-transport]";
+  function isMockExplicitlyRequested() {
+    if (typeof window === "undefined")
+      return false;
+    try {
+      if (typeof window.location !== "undefined" && window.location.search) {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get("mentra") === "mock")
+          return true;
+      }
+    } catch {}
+    try {
+      if (typeof localStorage !== "undefined" && localStorage.getItem("MENTRA_MOCK") === "1") {
+        return true;
+      }
+    } catch {}
+    return false;
+  }
+
+  class MockTransport {
+    messageHandler = null;
+    disconnectHandler = null;
+    open_ = false;
+    userId;
+    authToken;
+    packageName;
+    silent;
+    configuration;
+    constructor(options = {}) {
+      this.userId = options.userId ?? "mock-user";
+      this.authToken = options.authToken ?? "mock-miniapp-token";
+      this.packageName = options.packageName ?? null;
+      this.silent = options.silent === true;
+      this.configuration = { ...options.configuration ?? {} };
+    }
+    async open() {
+      if (this.open_)
+        return;
+      this.open_ = true;
+      this.log("transport opened (no real host; synthetic responses only)");
+    }
+    send(raw) {
+      if (!this.open_) {
+        throw new Error("MockTransport: send() before open()");
+      }
+      const envelope = parseEnvelope(raw);
+      if (!envelope) {
+        this.log("dropped unparseable envelope:", raw.slice(0, 200));
+        return;
+      }
+      const payload = envelope.payload;
+      const type = payload?.type;
+      this.log(`recv ${type ?? "<unknown>"}${envelope.requestId ? ` (rid=${envelope.requestId})` : ""}`);
+      switch (type) {
+        case "miniapp_connect" /* CONNECT */:
+          this.deliverConnectAck(payload);
+          return;
+        case "miniapp_ping" /* PING */:
+          return;
+        case "miniapp_subscribe" /* SUBSCRIBE */:
+          return;
+        default:
+          if (envelope.requestId) {
+            this.deliverSyntheticResult(envelope.requestId, type ?? "<unknown>", payload);
+          }
+          return;
+      }
+    }
+    onMessage(handler) {
+      this.messageHandler = handler;
+    }
+    onDisconnect(handler) {
+      this.disconnectHandler = handler;
+    }
+    close() {
+      if (!this.open_)
+        return;
+      this.open_ = false;
+      this.disconnectHandler?.("MockTransport.close()");
+    }
+    isOpen() {
+      return this.open_;
+    }
+    deliverConnectAck(connectPayload) {
+      const incomingPackage = connectPayload.packageName ?? this.packageName ?? "com.mock.app";
+      const ackPayload = {
+        type: "miniapp_connect_ack" /* CONNECT_ACK */,
+        userId: this.userId,
+        packageName: incomingPackage,
+        capabilities: null,
+        visibility: "foreground",
+        colorScheme: "light",
+        configuration: { ...this.configuration },
+        auth: {
+          mentraUserId: this.userId,
+          oemId: "mock",
+          token: this.authToken,
+          expiresAt: Date.now() + 60 * 60 * 1000
+        }
+      };
+      const envelope = { payload: ackPayload };
+      this.log(`-> CONNECT_ACK userId=${this.userId} pkg=${incomingPackage}`);
+      queueMicrotask(() => this.messageHandler?.(serializeEnvelope(envelope)));
+    }
+    deliverSyntheticResult(requestId, requestType, requestPayload) {
+      const data = syntheticDataFor(requestId, requestType, requestPayload);
+      const responsePayload = {
+        type: "miniapp_request_result" /* REQUEST_RESULT */,
+        ok: true,
+        data
+      };
+      const envelope = { payload: responsePayload, requestId };
+      this.log(`-> REQUEST_RESULT (rid=${requestId}) synthetic ${requestType}`);
+      queueMicrotask(() => this.messageHandler?.(serializeEnvelope(envelope)));
+    }
+    log(...args) {
+      if (this.silent)
+        return;
+      console.log(LOG_PREFIX, ...args);
+    }
+  }
+  function syntheticDataFor(requestId, requestType, requestPayload) {
+    switch (requestType) {
+      case "miniapp_camera_fov" /* CAMERA_FOV */: {
+        const presetFov = requestPayload.preset === "narrow" ? 82 : requestPayload.preset === "wide" ? 118 : requestPayload.preset === "standard" ? 102 : undefined;
+        const fov = typeof requestPayload.fov === "number" ? requestPayload.fov : presetFov ?? 102;
+        const roi = requestPayload.roiPosition;
+        const roiPosition = roi === "bottom" ? "bottom" : roi === "top" ? "top" : "center";
+        return {
+          requestId,
+          fov,
+          roiPosition,
+          timestamp: Date.now()
+        };
+      }
+      case "miniapp_photo" /* PHOTO */:
+        return {
+          photoUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=",
+          requestId: "mock-photo"
+        };
+      case "miniapp_rgb_led" /* RGB_LED */:
+        return { type: "rgb_led_control_response", state: "success", requestId };
+      case "miniapp_location_poll" /* LOCATION_POLL */:
+        return { lat: 37.7956, lng: -122.3933, accuracy: 0, timestamp: Date.now() };
+      case "miniapp_calendar_list_events" /* CALENDAR_LIST_EVENTS */:
+        return { events: [], truncated: false };
+      case "miniapp_storage_get" /* STORAGE_GET */:
+        return { value: null };
+      case "miniapp_storage_list" /* STORAGE_LIST */:
+        return { keys: [] };
+      case "miniapp_speak" /* SPEAK */:
+        return { audioUrl: null, durationMs: 0 };
+      case "miniapp_share" /* SHARE */:
+      case "miniapp_open_url" /* OPEN_URL */:
+      case "miniapp_copy_clipboard" /* COPY_CLIPBOARD */:
+      case "miniapp_download" /* DOWNLOAD */:
+      case "miniapp_request_wifi_setup" /* REQUEST_WIFI_SETUP */:
+      case "miniapp_set_wifi_adb_state" /* SET_WIFI_ADB_STATE */:
+        return { ok: true };
+      case "miniapp_scan_qr" /* SCAN_QR */:
+        return { cancelled: true };
+      default:
+        return null;
+    }
+  }
+
+  // vendor/mentra-miniapp/src/transport/postmessage.ts
+  class PostMessageTransport {
+    messageHandler = null;
+    disconnectHandler = null;
+    open_ = false;
+    windowListener = null;
+    async open() {
+      if (this.open_)
+        return;
+      if (typeof window === "undefined" || !window.ReactNativeWebView) {
+        throw new Error("PostMessageTransport: not running inside a React Native WebView");
+      }
+      this.windowListener = (ev) => {
+        const data = ev.data;
+        if (typeof data !== "string")
+          return;
+        this.messageHandler?.(data);
+      };
+      window.addEventListener("message", this.windowListener);
+      if (typeof document !== "undefined") {
+        document.addEventListener("message", this.windowListener);
+      }
+      window.receiveNativeMessage = (raw) => {
+        this.messageHandler?.(raw);
+      };
+      this.open_ = true;
+    }
+    send(raw) {
+      if (typeof window === "undefined" || !window.ReactNativeWebView) {
+        throw new Error("PostMessageTransport: not running inside a React Native WebView");
+      }
+      window.ReactNativeWebView.postMessage(raw);
+    }
+    onMessage(handler) {
+      this.messageHandler = handler;
+    }
+    onDisconnect(handler) {
+      this.disconnectHandler = handler;
+    }
+    close() {
+      if (!this.open_)
+        return;
+      this.open_ = false;
+      if (this.windowListener) {
+        window.removeEventListener("message", this.windowListener);
+        if (typeof document !== "undefined") {
+          document.removeEventListener("message", this.windowListener);
+        }
+        this.windowListener = null;
+      }
+      if (typeof window !== "undefined" && window.receiveNativeMessage) {
+        window.receiveNativeMessage = undefined;
+      }
+      this.disconnectHandler?.("closed");
+    }
+    isOpen() {
+      return this.open_;
+    }
+  }
+
+  // vendor/mentra-miniapp/src/transport/auto.ts
+  var LOCAL_SOCKET_OPEN_TIMEOUT_MS = 500;
+  function createTransport(options = {}) {
+    if (options.transport)
+      return options.transport;
+    if (DispatchTransport.isAvailable()) {
+      return new DispatchTransport;
+    }
+    if (typeof window !== "undefined" && window.ReactNativeWebView) {
+      return new PostMessageTransport;
+    }
+    if (isMockExplicitlyRequested()) {
+      return new MockTransport;
+    }
+    if (typeof WebSocket !== "undefined") {
+      const localSocketOptions = {};
+      if (options.localSocketUrl)
+        localSocketOptions.url = options.localSocketUrl;
+      return new LocalSocketWithMockFallback(localSocketOptions);
+    }
+    return new MockTransport;
+  }
+
+  class LocalSocketWithMockFallback {
+    options;
+    active = null;
+    messageHandler = null;
+    disconnectHandler = null;
+    constructor(options) {
+      this.options = options;
+    }
+    async open() {
+      const local = new LocalSocketTransport(this.options);
+      let timedOut = false;
+      const timeout = new Promise((_, reject) => {
+        setTimeout(() => {
+          timedOut = true;
+          reject(new Error("LocalSocketTransport open timed out"));
+        }, LOCAL_SOCKET_OPEN_TIMEOUT_MS);
+      });
+      try {
+        await Promise.race([local.open(), timeout]);
+        this.active = local;
+      } catch {
+        try {
+          local.close();
+        } catch {}
+        const mock = new MockTransport;
+        await mock.open();
+        this.active = mock;
+        console.log(timedOut ? "[mentra-miniapp] No phone WebSocket reachable; using MockTransport so the page can render." : "[mentra-miniapp] LocalSocketTransport failed; using MockTransport.");
+      }
+      if (this.messageHandler)
+        this.active.onMessage(this.messageHandler);
+      if (this.disconnectHandler)
+        this.active.onDisconnect(this.disconnectHandler);
+    }
+    send(raw) {
+      if (!this.active)
+        throw new Error("LocalSocketWithMockFallback: send() before open()");
+      this.active.send(raw);
+    }
+    onMessage(handler) {
+      this.messageHandler = handler;
+      this.active?.onMessage(handler);
+    }
+    onDisconnect(handler) {
+      this.disconnectHandler = handler;
+      this.active?.onDisconnect(handler);
+    }
+    close() {
+      this.active?.close();
+    }
+    isOpen() {
+      return this.active?.isOpen() === true;
+    }
+  }
+
+  // vendor/mentra-cloud-protocol/src/photo-compression.ts
+  var photoCompressionValues = ["none", "low", "medium", "high"];
+  function parsePhotoCompression(value = "none") {
+    if (typeof value === "string" && photoCompressionValues.includes(value)) {
+      return value;
+    }
+    throw new TypeError(`Invalid photo compression ${JSON.stringify(value)}. Expected none, low, medium, or high.`);
+  }
+
+  // vendor/mentra-miniapp/src/modules/camera.ts
+  class CameraModule {
+    session;
+    constructor(session) {
+      this.session = session;
+    }
+    get hasPermission() {
+      return this.session._hasManifestPermission("CAMERA");
+    }
+    async setFov(request) {
+      return this.session.sendRequest({
+        type: "miniapp_camera_fov" /* CAMERA_FOV */,
+        ...request
+      });
+    }
+    async takePhoto(options = {}) {
+      return this.session.sendRequest({
+        type: "miniapp_photo" /* PHOTO */,
+        size: options.size ?? "medium",
+        mode: options.mode ?? "photo",
+        ...options.transferMethod !== undefined ? { transferMethod: options.transferMethod } : {},
+        compress: parsePhotoCompression(options.compress),
+        sound: options.sound ?? true,
+        saveToGallery: options.saveToGallery ?? false,
+        exposureTimeNs: options.exposureTimeNs,
+        iso: options.iso,
+        aeExposureDivisor: options.aeExposureDivisor,
+        isoCap: options.isoCap,
+        noiseReduction: options.noiseReduction,
+        edgeEnhancement: options.edgeEnhancement,
+        zsl: options.zsl,
+        mfnr: options.mfnr,
+        ispDigitalGain: options.ispDigitalGain,
+        ispAnalogGain: options.ispAnalogGain
+      }, options.timeoutMs != null ? { timeoutMs: options.timeoutMs } : undefined);
+    }
+    async warmUp(options = {}) {
+      await this.session.sendRequest({
+        type: "miniapp_camera_warm_up" /* CAMERA_WARM_UP */,
+        size: options.size ?? "medium",
+        mode: options.mode ?? "photo",
+        exposureTimeNs: options.exposureTimeNs,
+        durationMs: options.durationMs ?? 15000,
+        zsl: options.zsl,
+        mfnr: options.mfnr
+      });
+    }
+    async startVideoRecording(options = {}) {
+      return this.session.sendRequest({
+        type: "miniapp_video_recording_start" /* VIDEO_RECORDING_START */,
+        width: options.width,
+        height: options.height,
+        fps: options.fps,
+        sound: options.sound ?? true,
+        save: options.save ?? false
+      });
+    }
+    async stopVideoRecording(recordingId, options = {}) {
+      await this.session.sendRequest({
+        type: "miniapp_video_recording_stop" /* VIDEO_RECORDING_STOP */,
+        recordingId,
+        uploadUrl: options.uploadUrl,
+        uploadAuthToken: options.uploadAuthToken
+      });
+    }
+  }
+
+  // vendor/mentra-miniapp/src/modules/auth.ts
+  var DEFAULT_MIN_TTL_MS = 30000;
+
+  class AuthModule {
+    session;
+    constructor(session) {
+      this.session = session;
+    }
+    get current() {
+      return this.session._getAuth();
+    }
+    get mentraUserId() {
+      return this.current?.mentraUserId ?? null;
+    }
+    get oemId() {
+      return this.current?.oemId ?? null;
+    }
+    async getToken(options = {}) {
+      const auth = await this.session._waitForAuth(options.minTtlMs ?? DEFAULT_MIN_TTL_MS);
+      return auth.token;
+    }
+    async getAuthHeader(options = {}) {
+      return `Bearer ${await this.getToken(options)}`;
+    }
+    async fetch(input, init = {}) {
+      const { minTtlMs, ...requestInit } = init;
+      const token = await this.getToken({ minTtlMs });
+      const headers = mergeHeaders(requestInit.headers, { Authorization: `Bearer ${token}` });
+      return fetch(input, { ...requestInit, headers });
+    }
+    onUpdate(handler) {
+      return this.session.on("auth", handler);
+    }
+  }
+  function mergeHeaders(base, next) {
+    const headers = {};
+    if (Array.isArray(base)) {
+      for (const [key, value] of base) {
+        headers[key] = value;
+      }
+    } else if (typeof Headers !== "undefined" && base instanceof Headers) {
+      base.forEach((value, key) => {
+        headers[key] = value;
+      });
+    } else if (base && typeof base === "object") {
+      for (const [key, value] of Object.entries(base)) {
+        if (typeof value === "string")
+          headers[key] = value;
+      }
+    }
+    return { ...headers, ...next };
+  }
+
+  // vendor/mentra-miniapp/src/modules/cloud.ts
+  var CLOUD_STATUS_STREAM = "_cloud_status";
+  var DEFAULT_STATUS = {
+    status: "disconnected",
+    audioTransport: "none"
+  };
+  function normalizeCloudStatus(data) {
+    if (!data || typeof data !== "object")
+      return null;
+    const raw = data;
+    const status = raw.status;
+    const audioTransport = raw.audioTransport;
+    if (status !== "connected" && status !== "connecting" && status !== "reconnecting" && status !== "disconnected") {
+      return null;
+    }
+    if (audioTransport !== "udp" && audioTransport !== "ws" && audioTransport !== "offline" && audioTransport !== "none") {
+      return null;
+    }
+    return { status, audioTransport };
+  }
+
+  class CloudModule {
+    session;
+    emitter = new import__.default;
+    current = { ...DEFAULT_STATUS };
+    constructor(session) {
+      this.session = session;
+      this.session._subscribe(CLOUD_STATUS_STREAM, (data) => {
+        const next = normalizeCloudStatus(data);
+        if (!next)
+          return;
+        if (next.status === this.current.status && next.audioTransport === this.current.audioTransport)
+          return;
+        this.current = next;
+        this.emitter.emit("status", { ...this.current });
+      });
+    }
+    get status() {
+      return { ...this.current };
+    }
+    get connected() {
+      return this.current.status === "connected";
+    }
+    isConnected() {
+      return this.connected;
+    }
+    onStatusChanged(handler) {
+      handler({ ...this.current });
+      this.emitter.on("status", handler);
+      return () => {
+        this.emitter.off("status", handler);
+      };
+    }
+  }
+
+  // vendor/mentra-miniapp/src/modules/configuration.ts
+  class MiniappConfigurationError extends Error {
+    key;
+    constructor(key) {
+      super(`Required miniapp configuration is missing: ${key}`);
+      this.key = key;
+      this.name = "MiniappConfigurationError";
+    }
+  }
+
+  class ConfigurationModule {
+    session;
+    constructor(session) {
+      this.session = session;
+    }
+    async get(key) {
+      await this.session.waitForReady();
+      const configuration = this.session._getConfiguration();
+      return Object.prototype.hasOwnProperty.call(configuration, key) ? configuration[key] : undefined;
+    }
+    async require(key) {
+      const value = await this.get(key);
+      if (value === undefined)
+        throw new MiniappConfigurationError(key);
+      return value;
+    }
+    async getAll() {
+      await this.session.waitForReady();
+      return Object.assign(Object.create(null), this.session._getConfiguration());
+    }
+  }
+
+  // vendor/mentra-miniapp/src/modules/dashboard.ts
+  class DashboardAPI {
+    session;
+    warned = false;
+    constructor(session) {
+      this.session = session;
+    }
+    setContent(mode, content) {
+      if (!this.warned) {
+        console.warn("[@mentra/miniapp] dashboard.setContent() is deferred in v1.");
+        this.warned = true;
+      }
+      this.session.sendOneShot({
+        type: "miniapp_dashboard_content_update" /* DASHBOARD_CONTENT_UPDATE */,
+        mode,
+        content
+      });
+    }
+  }
+
+  // vendor/mentra-miniapp/src/modules/display.ts
+  class DisplayManager {
+    session;
+    constructor(session) {
+      this.session = session;
+    }
+    render(elements, options = {}) {
+      return this.session.sendRequest({
+        type: "miniapp_render" /* RENDER */,
+        view: options.view ?? "main",
+        elements,
+        durationMs: options.durationMs,
+        includeTextLayout: options.includeTextLayout,
+        ifDisplayToken: options.ifDisplayToken
+      }).catch((err) => ({
+        status: "blocked",
+        reason: typeof err === "object" && err !== null && "message" in err ? String(err.message) : String(err)
+      }));
+    }
+  }
+
+  // vendor/mentra-miniapp/src/modules/events.ts
+  class EventManager {
+    session;
+    emitter = new import__.default;
+    refCounts = new Map;
+    forceLocalRefCounts = new Map;
+    constructor(session) {
+      this.session = session;
+    }
+    subscribe(stream, handler, options = {}) {
+      const isInternal = stream.startsWith("_");
+      const forceLocal = options.forceLocal === true && stream.startsWith(`${"transcription" /* TRANSCRIPTION */}:`);
+      const listener = (data, route) => {
+        if (stream.startsWith(`${"transcription" /* TRANSCRIPTION */}:`)) {
+          if (forceLocal ? route !== "forceLocal" && route !== "all" : route === "forceLocal")
+            return;
+        }
+        handler(data);
+      };
+      this.emitter.on(stream, listener);
+      if (!isInternal) {
+        const before = this.refCounts.get(stream) ?? 0;
+        this.refCounts.set(stream, before + 1);
+        const forceLocalBefore = this.forceLocalRefCounts.get(stream) ?? 0;
+        const defaultBefore = before - forceLocalBefore;
+        if (forceLocal)
+          this.forceLocalRefCounts.set(stream, forceLocalBefore + 1);
+        if (before === 0 || forceLocal && forceLocalBefore === 0 || !forceLocal && defaultBefore === 0) {
+          this.sendSubscriptionUpdate();
+        }
+      }
+      return () => {
+        this.emitter.off(stream, listener);
+        if (isInternal)
+          return;
+        const current = this.refCounts.get(stream) ?? 0;
+        const forceLocalCurrent = this.forceLocalRefCounts.get(stream) ?? 0;
+        let subscriptionChanged = current <= 1;
+        if (current <= 1) {
+          this.refCounts.delete(stream);
+        } else {
+          this.refCounts.set(stream, current - 1);
+        }
+        if (forceLocal) {
+          if (forceLocalCurrent <= 1) {
+            this.forceLocalRefCounts.delete(stream);
+            subscriptionChanged = true;
+          } else {
+            this.forceLocalRefCounts.set(stream, forceLocalCurrent - 1);
+          }
+        } else if (current - forceLocalCurrent <= 1) {
+          subscriptionChanged = true;
+        }
+        if (subscriptionChanged)
+          this.sendSubscriptionUpdate();
+      };
+    }
+    unsubscribeAll() {
+      this.emitter.removeAllListeners();
+      this.refCounts.clear();
+      this.forceLocalRefCounts.clear();
+      this.sendSubscriptionUpdate();
+    }
+    _forwardEvent(stream, data, transcriptionRoute) {
+      this.emitter.emit(stream, data, transcriptionRoute);
+      if (stream.startsWith("transcription:") && stream !== "transcription:auto") {
+        this.emitter.emit("transcription:auto", data, transcriptionRoute);
+      } else if (stream.startsWith("translation:")) {
+        const parts = stream.split(":");
+        const patterns = new Set(["translation:auto"]);
+        if (parts.length === 3) {
+          const [, source, target] = parts;
+          patterns.add("translation:*:*");
+          patterns.add(`translation:*:${target}`);
+          patterns.add(`translation:${source}:*`);
+        }
+        patterns.delete(stream);
+        for (const pattern of patterns) {
+          this.emitter.emit(pattern, data);
+        }
+      }
+    }
+    sendSubscriptionUpdate() {
+      const subscriptions = Array.from(this.refCounts.keys()).map((stream) => {
+        if (stream === "location_update" /* LOCATION_UPDATE */)
+          return { stream: "location_stream", rate: "realtime" };
+        const forceLocalRefs = this.forceLocalRefCounts.get(stream) ?? 0;
+        if (forceLocalRefs === 0)
+          return stream;
+        const totalRefs = this.refCounts.get(stream) ?? 0;
+        return {
+          stream,
+          forceLocal: true,
+          ...totalRefs > forceLocalRefs ? { includeCloud: true } : {}
+        };
+      });
+      this.session.sendOneShot({
+        type: "miniapp_subscribe" /* SUBSCRIBE */,
+        subscriptions
+      });
+    }
+  }
+
+  // vendor/mentra-miniapp/src/modules/glasses.ts
+  class GlassesModule {
+    session;
+    constructor(session) {
+      this.session = session;
+    }
+    onBattery(handler) {
+      return this.session._subscribe("glasses_battery" /* GLASSES_BATTERY */, handler);
+    }
+    onConnection(handler) {
+      return this.session._subscribe("glasses_connection" /* GLASSES_CONNECTION */, handler);
+    }
+    onWifi(handler) {
+      return this.session._subscribe("glasses_wifi" /* GLASSES_WIFI */, handler);
+    }
+    async requestWifiSetup(reason) {
+      await this.session.sendRequest({
+        type: "miniapp_request_wifi_setup" /* REQUEST_WIFI_SETUP */,
+        reason
+      });
+    }
+    async setWifiAdbState(enabled) {
+      await this.session.sendRequest({
+        type: "miniapp_set_wifi_adb_state" /* SET_WIFI_ADB_STATE */,
+        enabled
+      });
+    }
+  }
+
+  // vendor/mentra-miniapp/src/modules/heading.ts
+  class HeadingModule {
+    session;
+    constructor(session) {
+      this.session = session;
+    }
+    get hasPermission() {
+      return this.session._hasManifestPermission("LOCATION");
+    }
+    onUpdate(handler) {
+      return this.session._subscribe("heading_update" /* HEADING_UPDATE */, handler);
+    }
+  }
+
+  // vendor/mentra-miniapp/src/modules/imu.ts
+  class ImuModule {
+    session;
+    constructor(session) {
+      this.session = session;
+    }
+    onHeadPosition(handler) {
+      return this.session._subscribe("head_position" /* HEAD_POSITION */, handler);
+    }
+    onAccel(handler) {
+      return this.session._subscribe("accel_data" /* ACCEL_DATA */, handler);
+    }
+    setEnabled(enabled) {
+      return this.session.sendRequest({
+        type: "miniapp_imu_set_enabled" /* IMU_SET_ENABLED */,
+        enabled
+      });
+    }
+  }
+
+  // vendor/mentra-miniapp/src/modules/input.ts
+  class InputModule {
+    session;
+    constructor(session) {
+      this.session = session;
+    }
+    onButtonPress(handler) {
+      return this.session._subscribe("button_press" /* BUTTON_PRESS */, handler);
+    }
+    onTouch(gestureOrHandler, maybeHandler) {
+      if (typeof gestureOrHandler === "function") {
+        return this.session._subscribe("touch_event" /* TOUCH_EVENT */, gestureOrHandler);
+      }
+      const handler = maybeHandler;
+      const gestures = Array.isArray(gestureOrHandler) ? gestureOrHandler : [gestureOrHandler];
+      if (gestures.length === 0)
+        return () => {};
+      const unsubs = [];
+      for (const g of gestures) {
+        unsubs.push(this.session._subscribe(`${"touch_event" /* TOUCH_EVENT */}:${g}`, handler));
+      }
+      return () => {
+        for (const u of unsubs) {
+          try {
+            u();
+          } catch {}
+        }
+      };
+    }
+  }
+
+  // vendor/mentra-miniapp/src/modules/led.ts
+  class LedModule {
+    session;
+    constructor(session) {
+      this.session = session;
+    }
+    async turnOn(options = {}) {
+      return this.session.sendRequest({
+        type: "miniapp_rgb_led" /* RGB_LED */,
+        action: "on",
+        color: options.color ?? "red",
+        ontime: options.ontime ?? 1000,
+        offtime: options.offtime ?? 0,
+        count: options.count ?? 1
+      });
+    }
+    async turnOff() {
+      return this.session.sendRequest({
+        type: "miniapp_rgb_led" /* RGB_LED */,
+        action: "off"
+      });
+    }
+    async blink(color, ontime, offtime, count) {
+      return this.turnOn({ color, ontime, offtime, count });
+    }
+    async solid(color, duration) {
+      return this.turnOn({ color, ontime: duration, offtime: 0, count: 1 });
+    }
+  }
+
+  // vendor/mentra-miniapp/src/modules/location.ts
+  class LocationModule {
+    session;
+    constructor(session) {
+      this.session = session;
+    }
+    get hasPermission() {
+      return this.session._hasManifestPermission("LOCATION");
+    }
+    onUpdate(handler) {
+      return this.session._subscribe("location_update" /* LOCATION_UPDATE */, handler);
+    }
+    getOnce() {
+      return this.session.sendRequest({
+        type: "miniapp_location_poll" /* LOCATION_POLL */
+      });
+    }
+  }
+
+  // vendor/mentra-miniapp/src/modules/mic.ts
+  class MicModule {
+    session;
+    unsubs = new Set;
+    constructor(session) {
+      this.session = session;
+    }
+    onVoiceActivity(handler) {
+      return this.track(this.session._subscribe("vad" /* VAD */, handler));
+    }
+    onAudioChunk(handler) {
+      return this.track(this.session._subscribe("audio_chunk" /* AUDIO_CHUNK */, handler));
+    }
+    setVoiceActivityDetectionEnabled(enabled) {
+      return this.session.sendRequest({
+        type: "miniapp_mic_set_vad_enabled" /* MIC_SET_VAD_ENABLED */,
+        enabled
+      });
+    }
+    setLoudnessGateEnabled(enabled) {
+      return this.session.sendRequest({
+        type: "miniapp_mic_set_loudness_gate_enabled" /* MIC_SET_LOUDNESS_GATE_ENABLED */,
+        enabled
+      });
+    }
+    async acquire(options) {
+      const result = await this.session.sendRequest({
+        type: "miniapp_mic_acquire" /* MIC_ACQUIRE */,
+        source: options.source,
+        useCase: options.useCase
+      });
+      if (typeof result?.sessionId !== "number") {
+        throw new Error("This version of the Mentra App does not support microphone sessions");
+      }
+      const { sessionId } = result;
+      let released = false;
+      return {
+        sessionId,
+        release: async () => {
+          if (released)
+            return;
+          released = true;
+          await this.session.sendRequest({
+            type: "miniapp_mic_release" /* MIC_RELEASE */,
+            sessionId
+          });
+        }
+      };
+    }
+    stop() {
+      for (const u of this.unsubs) {
+        try {
+          u();
+        } catch {}
+      }
+      this.unsubs.clear();
+    }
+    get hasPermission() {
+      return this.session._hasManifestPermission("MICROPHONE");
+    }
+    track(unsub) {
+      this.unsubs.add(unsub);
+      return () => {
+        this.unsubs.delete(unsub);
+        unsub();
+      };
+    }
+  }
+
+  // vendor/mentra-miniapp/src/modules/pivots/geometry.ts
+  var TURN_THRESHOLD_DEG = 15;
+  var SAME_DIR_MERGE_M = 25;
+  var RDP_EPSILON_M = 5;
+  var MIN_BEND_PER_POINT_DEG = 10;
+  var STRAIGHT_SEGMENT_BREAK_M = 1;
+  var INTERSECTION_CLUSTER_M = 30;
+  function haversineMeters(a, b) {
+    const R = 6371000;
+    const toRad = (d) => d * Math.PI / 180;
+    const dLat = toRad(b.lat - a.lat);
+    const dLng = toRad(b.lng - a.lng);
+    const lat1 = toRad(a.lat);
+    const lat2 = toRad(b.lat);
+    const x = Math.sin(dLat / 2) ** 2 + Math.sin(dLng / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
+    return 2 * R * Math.asin(Math.sqrt(x));
+  }
+  function bearingDeg(a, b) {
+    const toRad = (d) => d * Math.PI / 180;
+    const toDeg = (r) => r * 180 / Math.PI;
+    const lat1 = toRad(a.lat);
+    const lat2 = toRad(b.lat);
+    const dLng = toRad(b.lng - a.lng);
+    const y = Math.sin(dLng) * Math.cos(lat2);
+    const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+    return (toDeg(Math.atan2(y, x)) + 360) % 360;
+  }
+  function signedAngleDiff(target, actual) {
+    return (target - actual + 540) % 360 - 180;
+  }
+  function rdpSimplify(points, epsilonMeters) {
+    if (points.length < 3)
+      return points.map((_, i) => i);
+    const keep = new Array(points.length).fill(false);
+    keep[0] = true;
+    keep[points.length - 1] = true;
+    const stack = [[0, points.length - 1]];
+    while (stack.length) {
+      const [lo, hi] = stack.pop();
+      let maxDist = 0;
+      let maxIdx = -1;
+      for (let i = lo + 1;i < hi; i++) {
+        const d = perpDistMeters(points[i], points[lo], points[hi]);
+        if (d > maxDist) {
+          maxDist = d;
+          maxIdx = i;
+        }
+      }
+      if (maxIdx !== -1 && maxDist > epsilonMeters) {
+        keep[maxIdx] = true;
+        stack.push([lo, maxIdx], [maxIdx, hi]);
+      }
+    }
+    const out = [];
+    for (let i = 0;i < keep.length; i++)
+      if (keep[i])
+        out.push(i);
+    return out;
+  }
+  function perpDistMeters(p, a, b) {
+    const mPerDegLat = 111320;
+    const mPerDegLng = 111320 * Math.cos(a.lat * Math.PI / 180);
+    const bx = (b.lng - a.lng) * mPerDegLng;
+    const by = (b.lat - a.lat) * mPerDegLat;
+    const px = (p.lng - a.lng) * mPerDegLng;
+    const py = (p.lat - a.lat) * mPerDegLat;
+    const dx = bx;
+    const dy = by;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len === 0)
+      return Math.sqrt(px * px + py * py);
+    return Math.abs(dx * -py - -px * dy) / len;
+  }
+  function extractPivots(rawPoints) {
+    if (rawPoints.length < 3)
+      return [];
+    const keptIdx = rdpSimplify(rawPoints, RDP_EPSILON_M);
+    const simplified = keptIdx.map((i) => rawPoints[i]);
+    if (simplified.length < 3)
+      return [];
+    const deltas = [];
+    for (let i = 1;i < simplified.length - 1; i++) {
+      const inBearing = bearingDeg(simplified[i - 1], simplified[i]);
+      const outBearing = bearingDeg(simplified[i], simplified[i + 1]);
+      deltas.push(signedAngleDiff(outBearing, inBearing));
+    }
+    const candidates = [];
+    let runStart = -1;
+    let runSum = 0;
+    let runSign = 0;
+    const flushRun = (endExclusive) => {
+      if (runStart === -1)
+        return;
+      if (Math.abs(runSum) >= TURN_THRESHOLD_DEG) {
+        let bestIdx = runStart;
+        let bestAbs = 0;
+        for (let k = runStart;k < endExclusive; k++) {
+          const a = Math.abs(deltas[k]);
+          if (a > bestAbs) {
+            bestAbs = a;
+            bestIdx = k;
+          }
+        }
+        const simplifiedIdx = bestIdx + 1;
+        candidates.push({
+          lat: simplified[simplifiedIdx].lat,
+          lng: simplified[simplifiedIdx].lng,
+          direction: runSum > 0 ? "right" : "left",
+          simplifiedRouteIndex: simplifiedIdx,
+          rawRouteIndex: keptIdx[simplifiedIdx],
+          headingDelta: runSum
+        });
+      }
+      runStart = -1;
+      runSum = 0;
+      runSign = 0;
+    };
+    let metersSinceLastBend = 0;
+    for (let k = 0;k < deltas.length; k++) {
+      const d = deltas[k];
+      const sign = d > 0 ? 1 : d < 0 ? -1 : 0;
+      const segLen = haversineMeters(simplified[k + 1], simplified[k + 2]);
+      if (sign === 0 || Math.abs(d) < MIN_BEND_PER_POINT_DEG) {
+        if (runStart !== -1) {
+          if (sign === runSign || sign === 0)
+            runSum += d;
+          metersSinceLastBend += segLen;
+          if (metersSinceLastBend >= STRAIGHT_SEGMENT_BREAK_M) {
+            flushRun(k + 1);
+          }
+        }
+        continue;
+      }
+      if (runStart === -1) {
+        runStart = k;
+        runSum = d;
+        runSign = sign;
+        metersSinceLastBend = segLen;
+      } else if (sign === runSign) {
+        if (metersSinceLastBend >= STRAIGHT_SEGMENT_BREAK_M) {
+          flushRun(k);
+          runStart = k;
+          runSum = d;
+          runSign = sign;
+        } else {
+          runSum += d;
+        }
+        metersSinceLastBend = segLen;
+      } else {
+        flushRun(k);
+        runStart = k;
+        runSum = d;
+        runSign = sign;
+        metersSinceLastBend = segLen;
+      }
+    }
+    flushRun(deltas.length);
+    const merged = [];
+    for (const p of candidates) {
+      const last = merged[merged.length - 1];
+      if (last && last.direction === p.direction && haversineMeters({ lat: last.lat, lng: last.lng }, { lat: p.lat, lng: p.lng }) < SAME_DIR_MERGE_M) {
+        if (Math.abs(p.headingDelta) > Math.abs(last.headingDelta)) {
+          merged[merged.length - 1] = p;
+        }
+        continue;
+      }
+      merged.push(p);
+    }
+    const clustered = [];
+    for (const p of merged) {
+      const last = clustered[clustered.length - 1];
+      if (last && haversineMeters({ lat: last.lat, lng: last.lng }, { lat: p.lat, lng: p.lng }) < INTERSECTION_CLUSTER_M) {
+        const netDelta = last.headingDelta + p.headingDelta;
+        const anchor = Math.abs(p.headingDelta) > Math.abs(last.headingDelta) ? p : last;
+        clustered[clustered.length - 1] = {
+          ...anchor,
+          direction: netDelta > 0 ? "right" : "left",
+          headingDelta: netDelta
+        };
+        continue;
+      }
+      clustered.push(p);
+    }
+    return clustered.filter((p) => Math.abs(p.headingDelta) >= TURN_THRESHOLD_DEG);
+  }
+  function cumulativeDistances(points) {
+    const out = new Array(points.length);
+    out[0] = 0;
+    for (let i = 1;i < points.length; i++) {
+      out[i] = out[i - 1] + haversineMeters(points[i - 1], points[i]);
+    }
+    return out;
+  }
+
+  // vendor/mentra-miniapp/src/modules/pivots/instructions.ts
+  var DIRECTION_WORDS = new Set(["right", "left", "the right", "the left", "north", "south", "east", "west"]);
+  var MANEUVER_VERBS = /\b(turn|slight|sharp|continue|head|merge|exit|uturn|u-turn|then|keep)\b/i;
+  function roadNameFromInstruction(instruction) {
+    if (!instruction)
+      return null;
+    const firstLine = instruction.split(`
+`)[0] ?? "";
+    const m = firstLine.match(/\bonto\s+(.+)$/i);
+    let raw = (m ? m[1] : "").trim();
+    if (!raw)
+      return null;
+    if (raw.includes(","))
+      return null;
+    raw = raw.split(/\s+(?:toward|towards|to|and|then|for)\b/i)[0]?.trim() ?? "";
+    raw = raw.replace(/\s+#.*$/, "").trim();
+    if (!raw)
+      return null;
+    if (DIRECTION_WORDS.has(raw.toLowerCase()))
+      return null;
+    if (MANEUVER_VERBS.test(raw))
+      return null;
+    return raw;
+  }
+  var ROAD_SUFFIXES = /\b(st|street|ave|avenue|blvd|boulevard|rd|road|dr|drive|ln|lane|way|ct|court|pl|place|ter|terrace|hwy|highway)\b\.?/g;
+  function normalizeRoad(road) {
+    return road.toLowerCase().replace(ROAD_SUFFIXES, "").replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
+  }
+  function sameRoad(a, b) {
+    return normalizeRoad(a) === normalizeRoad(b);
+  }
+  function turnDirection(maneuver) {
+    if (!maneuver)
+      return null;
+    const m = maneuver.toUpperCase();
+    if (m.includes("LEFT"))
+      return "left";
+    if (m.includes("RIGHT"))
+      return "right";
+    return null;
+  }
+  var PROBE_METERS = 22;
+  function signedBendAt(points, junction) {
+    if (points.length < 3)
+      return null;
+    let mid = 0;
+    let bestDist = Infinity;
+    for (let i = 0;i < points.length; i++) {
+      const d = haversineMeters(points[i], junction);
+      if (d < bestDist) {
+        bestDist = d;
+        mid = i;
+      }
+    }
+    let before = mid;
+    while (before > 0 && haversineMeters(points[before], points[mid]) < PROBE_METERS)
+      before--;
+    let after = mid;
+    while (after < points.length - 1 && haversineMeters(points[after], points[mid]) < PROBE_METERS)
+      after++;
+    if (before === mid || after === mid)
+      return null;
+    const incoming = bearingDeg(points[before], points[mid]);
+    const outgoing = bearingDeg(points[mid], points[after]);
+    return signedAngleDiff(outgoing, incoming);
+  }
+  var MIN_TURN_ANGLE_DEG = 30;
+  function extractPivotsFromComputedSteps(steps, polyline) {
+    if (!steps || steps.length < 2)
+      return [];
+    const initial = steps.map((s, i) => ({
+      stepIdx: i,
+      name: s.road ?? roadNameFromInstruction(s.instruction)
+    }));
+    let annotated = initial;
+    for (let pass = 0;pass < 4; pass++) {
+      const collapsed = [];
+      for (let i = 0;i < annotated.length; i++) {
+        const prev = collapsed[collapsed.length - 1];
+        const here = annotated[i];
+        const next = annotated[i + 1];
+        if (prev?.name && next?.name && here.name && !sameRoad(prev.name, here.name) && sameRoad(prev.name, next.name)) {
+          continue;
+        }
+        collapsed.push(here);
+      }
+      if (collapsed.length === annotated.length)
+        break;
+      annotated = collapsed;
+    }
+    const out = [];
+    for (let i = 0;i < annotated.length - 1; i++) {
+      const here = annotated[i];
+      const nextAnn = annotated[i + 1];
+      const s = steps[here.stepIdx];
+      const next = steps[nextAnn.stepIdx];
+      const fromRoad = here.name;
+      const toRoad = nextAnn.name;
+      if (!fromRoad)
+        continue;
+      if (toRoad && sameRoad(fromRoad, toRoad))
+        continue;
+      if (!Number.isFinite(s.endLat) || !Number.isFinite(s.endLng))
+        continue;
+      const junction = { lat: s.endLat, lng: s.endLng };
+      const signedBend = signedBendAt(polyline, junction);
+      if (signedBend != null && Math.abs(signedBend) < MIN_TURN_ANGLE_DEG)
+        continue;
+      const geomDir = signedBend == null ? null : signedBend > 0 ? "right" : "left";
+      const direction = geomDir ?? turnDirection(next.maneuver);
+      out.push({
+        lat: s.endLat,
+        lng: s.endLng,
+        fromRoad,
+        toRoad,
+        direction,
+        maneuver: next.maneuver ?? (direction === "left" ? "TURN_LEFT" : "TURN_RIGHT")
+      });
+    }
+    return out;
+  }
+
+  // vendor/mentra-miniapp/src/modules/pivots/engine.ts
+  var RADIUS_DEFAULTS_M = {
+    walking: 7,
+    cycling: 15,
+    driving: 40,
+    two_wheeler: 25
+  };
+  var APPROACH_DEFAULTS_M = {
+    walking: 100,
+    cycling: 300,
+    driving: 800,
+    two_wheeler: 500
+  };
+  var NON_TURN_MANEUVERS = new Set(["STRAIGHT", "NAME_CHANGE", "DEPART", "ARRIVE"]);
+  var STEP_MATCH_MAX_INDEX_DELTA = 8;
+  var ON_ROUTE_PERP_TOLERANCE_M = 50;
+
+  class PivotEngine {
+    opts;
+    pivots = [];
+    states = [];
+    cursor = 0;
+    activePivotIndex = null;
+    points = [];
+    cumulative = [];
+    roadNameResolver = null;
+    routeGeneration = 0;
+    subscribers = new Set;
+    constructor(mode, opts) {
+      this.opts = resolveOptions(mode, opts);
+    }
+    updateOptions(mode, opts) {
+      this.opts = resolveOptions(mode, opts);
+      for (const p of this.pivots) {
+        p.radiusMeters = this.opts.radiusMeters;
+      }
+    }
+    setRoadNameResolver(resolver) {
+      this.roadNameResolver = resolver;
+    }
+    reset() {
+      if (this.activePivotIndex !== null) {
+        const active = this.pivots[this.activePivotIndex];
+        if (active)
+          this.emit({ kind: "exited", pivot: active });
+      }
+      this.pivots = [];
+      this.states = [];
+      this.cursor = 0;
+      this.activePivotIndex = null;
+      this.points = [];
+      this.cumulative = [];
+    }
+    setRouteFromComputedSteps(route, computedSteps) {
+      const points = route.points ?? [];
+      if (this.activePivotIndex !== null) {
+        const active = this.pivots[this.activePivotIndex];
+        if (active)
+          this.emit({ kind: "exited", pivot: active });
+      }
+      if (points.length < 3 || !computedSteps || computedSteps.length < 2) {
+        this.setRoute(route, null);
+        return;
+      }
+      const cumulative = cumulativeDistances(points);
+      const instructionPivots = extractPivotsFromComputedSteps(computedSteps, points);
+      console.log(`[PivotEngine] setRouteFromComputedSteps: steps=${computedSteps.length} instructionPivots=${instructionPivots.length}` + (instructionPivots.length > 0 ? `
+` + instructionPivots.map((p, i) => `  pivot[${i}] ${p.fromRoad ?? "—"} → ${p.toRoad ?? "—"} dir=${p.direction} @ (${p.lat.toFixed(5)}, ${p.lng.toFixed(5)})`).join(`
+`) : ""));
+      if (instructionPivots.length === 0) {
+        console.log(`[PivotEngine] falling back to setRoute (geometry) — input steps:
+` + computedSteps.map((s, i) => `  step[${i}] road=${s.road ?? "—"} maneuver=${s.maneuver ?? "—"} @ (${s.lat.toFixed(5)}, ${s.lng.toFixed(5)}) → (${s.endLat.toFixed(5)}, ${s.endLng.toFixed(5)})`).join(`
+`));
+        this.setRoute(route, null);
+        return;
+      }
+      const pivots = instructionPivots.map((p, i) => ({
+        index: i,
+        lat: p.lat,
+        lng: p.lng,
+        direction: p.direction === "left" ? "left" : "right",
+        fromRoad: p.fromRoad,
+        toRoad: p.toRoad,
+        maneuver: p.maneuver,
+        distanceAlongRouteMeters: alongRouteAtCoord(points, cumulative, { lat: p.lat, lng: p.lng }),
+        radiusMeters: this.opts.radiusMeters
+      }));
+      pivots.sort((a, b) => a.distanceAlongRouteMeters - b.distanceAlongRouteMeters);
+      for (let i = 0;i < pivots.length; i++)
+        pivots[i].index = i;
+      this.pivots = pivots;
+      this.states = pivots.map(() => ({ approachingFired: false, entered: false, exited: false }));
+      this.cursor = 0;
+      this.activePivotIndex = null;
+      this.points = points;
+      this.cumulative = cumulative;
+      this.routeGeneration++;
+      this._resolveMissingRoadNames(this.routeGeneration);
+    }
+    setRoute(route, _userPosition) {
+      const points = route.points ?? [];
+      const steps = route.steps ?? [];
+      if (this.activePivotIndex !== null) {
+        const active = this.pivots[this.activePivotIndex];
+        if (active)
+          this.emit({ kind: "exited", pivot: active });
+      }
+      if (points.length < 3) {
+        this.pivots = [];
+        this.states = [];
+        this.cursor = 0;
+        this.activePivotIndex = null;
+        this.points = [];
+        this.cumulative = [];
+        return;
+      }
+      const cumulative = cumulativeDistances(points);
+      const raw = extractPivots(points);
+      const stepIndex = buildStepIndex(steps);
+      const pivots = [];
+      for (let i = 0;i < raw.length; i++) {
+        const r = raw[i];
+        const matched = matchStep(r, stepIndex);
+        if (matched && NON_TURN_MANEUVERS.has(matched.maneuver)) {
+          continue;
+        }
+        pivots.push({
+          index: pivots.length,
+          lat: r.lat,
+          lng: r.lng,
+          direction: r.direction,
+          fromRoad: matched?.fromRoad ?? null,
+          toRoad: matched?.toRoad ?? null,
+          maneuver: matched?.maneuver ?? (r.direction === "left" ? "TURN_LEFT" : "TURN_RIGHT"),
+          distanceAlongRouteMeters: distanceAtIndex(cumulative, r.rawRouteIndex),
+          radiusMeters: this.opts.radiusMeters
+        });
+      }
+      pivots.sort((a, b) => a.distanceAlongRouteMeters - b.distanceAlongRouteMeters);
+      for (let i = 0;i < pivots.length; i++)
+        pivots[i].index = i;
+      this.pivots = pivots;
+      this.states = pivots.map(() => ({ approachingFired: false, entered: false, exited: false }));
+      this.cursor = 0;
+      this.activePivotIndex = null;
+      this.points = points;
+      this.cumulative = cumulative;
+      this.routeGeneration++;
+      this._resolveMissingRoadNames(this.routeGeneration);
+    }
+    async _resolveMissingRoadNames(generation) {
+      const pivots = this.pivots;
+      if (pivots.length === 0)
+        return;
+      for (let i = 0;i < pivots.length - 1; i++) {
+        const here = pivots[i];
+        const next = pivots[i + 1];
+        if (!here.toRoad && next.fromRoad)
+          here.toRoad = next.fromRoad;
+        if (!next.fromRoad && here.toRoad)
+          next.fromRoad = here.toRoad;
+      }
+      for (let i = pivots.length - 1;i > 0; i--) {
+        const here = pivots[i];
+        const prev = pivots[i - 1];
+        if (!prev.toRoad && here.fromRoad)
+          prev.toRoad = here.fromRoad;
+        if (!here.fromRoad && prev.toRoad)
+          here.fromRoad = prev.toRoad;
+      }
+      const resolver = this.roadNameResolver;
+      if (!resolver)
+        return;
+      if (this.points.length < 2)
+        return;
+      const SAMPLE_OFFSETS_M = [18, 30, 50, 80];
+      const points = this.points;
+      const cumulative = this.cumulative;
+      const geocodeWithExpansion = async (pivotAlong, direction) => {
+        for (const offset of SAMPLE_OFFSETS_M) {
+          const sample = sampleAlongRoute(points, cumulative, pivotAlong + direction * offset);
+          if (!sample)
+            continue;
+          try {
+            const road = await resolver(sample);
+            if (generation !== this.routeGeneration)
+              return null;
+            if (road)
+              return road;
+          } catch {}
+        }
+        return null;
+      };
+      const tasks = [];
+      for (const pivot of pivots) {
+        if (pivot.fromRoad && pivot.toRoad)
+          continue;
+        const along = pivot.distanceAlongRouteMeters;
+        if (!pivot.fromRoad) {
+          tasks.push(geocodeWithExpansion(along, -1).then((road) => {
+            if (generation !== this.routeGeneration)
+              return;
+            if (road && !pivot.fromRoad)
+              pivot.fromRoad = road;
+          }));
+        }
+        if (!pivot.toRoad) {
+          tasks.push(geocodeWithExpansion(along, 1).then((road) => {
+            if (generation !== this.routeGeneration)
+              return;
+            if (road && !pivot.toRoad)
+              pivot.toRoad = road;
+          }));
+        }
+      }
+      await Promise.all(tasks);
+      if (generation !== this.routeGeneration)
+        return;
+      for (let i = 0;i < pivots.length - 1; i++) {
+        const here = pivots[i];
+        const next = pivots[i + 1];
+        if (!here.toRoad && next.fromRoad)
+          here.toRoad = next.fromRoad;
+        if (!next.fromRoad && here.toRoad)
+          next.fromRoad = here.toRoad;
+      }
+    }
+    onLocationUpdate(coords) {
+      if (this.pivots.length === 0)
+        return;
+      const projection = projectOntoPolyline(this.points, this.cumulative, coords);
+      const useAlongPath = projection !== null && projection.perpMeters <= ON_ROUTE_PERP_TOLERANCE_M;
+      const userAlong = projection?.alongMeters ?? 0;
+      for (let i = this.cursor;i < this.pivots.length; i++) {
+        const pivot = this.pivots[i];
+        const state = this.states[i];
+        if (state.exited)
+          continue;
+        const aheadDelta = pivot.distanceAlongRouteMeters - userAlong;
+        const distanceToPivot = useAlongPath ? Math.abs(aheadDelta) : haversineMeters(coords, { lat: pivot.lat, lng: pivot.lng });
+        const approaching = !state.approachingFired && distanceToPivot <= this.opts.approachThresholdMeters && (!useAlongPath || aheadDelta >= -this.opts.radiusMeters);
+        if (approaching) {
+          state.approachingFired = true;
+          this.emit({ kind: "approaching", pivot, distanceMeters: distanceToPivot });
+        }
+        if (!state.entered && distanceToPivot <= pivot.radiusMeters) {
+          state.entered = true;
+          this.activePivotIndex = i;
+          this.emit({ kind: "entered", pivot });
+        }
+        const movedPastOnPath = useAlongPath && aheadDelta < -pivot.radiusMeters;
+        if ((state.entered && distanceToPivot > pivot.radiusMeters || !state.entered && movedPastOnPath) && !state.exited) {
+          if (!state.entered) {
+            state.entered = true;
+            this.activePivotIndex = i;
+            this.emit({ kind: "entered", pivot });
+          }
+          state.exited = true;
+          if (this.activePivotIndex === i)
+            this.activePivotIndex = null;
+          this.emit({ kind: "exited", pivot });
+          if (this.cursor <= i)
+            this.cursor = i + 1;
+        }
+        if (!state.approachingFired && distanceToPivot > this.opts.approachThresholdMeters * 2) {
+          break;
+        }
+      }
+    }
+    subscribe(fn) {
+      this.subscribers.add(fn);
+      return () => {
+        this.subscribers.delete(fn);
+      };
+    }
+    getPivots() {
+      return this.pivots.slice();
+    }
+    getActivePivot() {
+      if (this.activePivotIndex === null)
+        return null;
+      return this.pivots[this.activePivotIndex] ?? null;
+    }
+    getUpcomingPivot() {
+      for (let i = this.cursor;i < this.pivots.length; i++) {
+        if (!this.states[i].exited)
+          return this.pivots[i];
+      }
+      return null;
+    }
+    emit(event) {
+      for (const fn of this.subscribers) {
+        try {
+          fn(event);
+        } catch (err) {
+          console.error("[PivotEngine] subscriber threw:", err);
+        }
+      }
+    }
+  }
+  function resolveOptions(mode, opts) {
+    return {
+      radiusMeters: opts?.radiusMeters ?? RADIUS_DEFAULTS_M[mode] ?? RADIUS_DEFAULTS_M.walking,
+      approachThresholdMeters: opts?.approachThresholdMeters ?? APPROACH_DEFAULTS_M[mode] ?? APPROACH_DEFAULTS_M.walking
+    };
+  }
+  function projectOntoPolyline(points, cumulative, user) {
+    if (points.length < 2 || cumulative.length !== points.length)
+      return null;
+    const mPerDegLat = 111320;
+    const mPerDegLng = 111320 * Math.cos(user.lat * Math.PI / 180);
+    const ux = user.lng * mPerDegLng;
+    const uy = user.lat * mPerDegLat;
+    let bestPerp = Number.POSITIVE_INFINITY;
+    let bestAlong = 0;
+    for (let i = 0;i < points.length - 1; i++) {
+      const a = points[i];
+      const b = points[i + 1];
+      const ax = a.lng * mPerDegLng;
+      const ay = a.lat * mPerDegLat;
+      const bx = b.lng * mPerDegLng;
+      const by = b.lat * mPerDegLat;
+      const dx = bx - ax;
+      const dy = by - ay;
+      const segLen2 = dx * dx + dy * dy;
+      const t = segLen2 > 0 ? Math.max(0, Math.min(1, ((ux - ax) * dx + (uy - ay) * dy) / segLen2)) : 0;
+      const px = ax + t * dx;
+      const py = ay + t * dy;
+      const perp = Math.hypot(ux - px, uy - py);
+      if (perp < bestPerp) {
+        bestPerp = perp;
+        const segLen = Math.sqrt(segLen2);
+        bestAlong = cumulative[i] + t * segLen;
+      }
+    }
+    if (!Number.isFinite(bestPerp))
+      return null;
+    return { perpMeters: bestPerp, alongMeters: bestAlong };
+  }
+  function alongRouteAtCoord(points, cumulative, coord) {
+    const projection = projectOntoPolyline(points, cumulative, coord);
+    return projection?.alongMeters ?? 0;
+  }
+  function sampleAlongRoute(points, cumulative, targetMeters) {
+    if (points.length < 2 || cumulative.length !== points.length)
+      return null;
+    const total = cumulative[cumulative.length - 1];
+    if (!Number.isFinite(targetMeters))
+      return null;
+    if (targetMeters <= 0)
+      return { lat: points[0].lat, lng: points[0].lng };
+    if (targetMeters >= total) {
+      const last = points[points.length - 1];
+      return { lat: last.lat, lng: last.lng };
+    }
+    let lo = 0;
+    let hi = cumulative.length - 1;
+    while (lo + 1 < hi) {
+      const mid = lo + hi >>> 1;
+      if (cumulative[mid] <= targetMeters)
+        lo = mid;
+      else
+        hi = mid;
+    }
+    const segStart = cumulative[lo];
+    const segEnd = cumulative[hi];
+    const segLen = segEnd - segStart;
+    const t = segLen > 0 ? (targetMeters - segStart) / segLen : 0;
+    const a = points[lo];
+    const b = points[hi];
+    return { lat: a.lat + (b.lat - a.lat) * t, lng: a.lng + (b.lng - a.lng) * t };
+  }
+  function distanceAtIndex(cumulative, idx) {
+    if (cumulative.length === 0)
+      return 0;
+    if (idx < 0)
+      return 0;
+    if (idx >= cumulative.length)
+      return cumulative[cumulative.length - 1];
+    return cumulative[idx];
+  }
+  function buildStepIndex(steps) {
+    if (!steps.length)
+      return [];
+    return steps.slice().sort((a, b) => a.routeIndex - b.routeIndex);
+  }
+  function matchStep(raw, stepIndex) {
+    if (stepIndex.length < 2)
+      return null;
+    let bestJ = -1;
+    let bestDelta = Number.POSITIVE_INFINITY;
+    for (let i = 1;i < stepIndex.length; i++) {
+      const delta = Math.abs(stepIndex[i].routeIndex - raw.rawRouteIndex);
+      if (delta <= bestDelta) {
+        bestDelta = delta;
+        bestJ = i;
+      }
+    }
+    if (bestJ < 1)
+      return null;
+    if (bestDelta > STEP_MATCH_MAX_INDEX_DELTA)
+      return null;
+    const SHORT_TRANSIT_METERS = 25;
+    const finalIndex = stepIndex.length - 1;
+    let j = bestJ;
+    while (j < finalIndex - 1 && stepIndex[j].distanceMeters > 0 && stepIndex[j].distanceMeters < SHORT_TRANSIT_METERS) {
+      j++;
+    }
+    if (j >= finalIndex)
+      j = finalIndex - 1;
+    const fromStep = stepIndex[bestJ - 1];
+    const toStep = stepIndex[j];
+    return {
+      fromRoad: fromStep.road ?? null,
+      toRoad: toStep.road ?? null,
+      maneuver: fromStep.maneuver
+    };
+  }
+
+  // vendor/mentra-miniapp/src/modules/navigation.ts
+  class NavigationModule {
+    session;
+    _pivots = new PivotEngine("walking", undefined);
+    _tripUnsubs = [];
+    _tripStops = null;
+    _tripMode = "walking";
+    _tripAvoid = undefined;
+    _computeRouteSeq = 0;
+    _lastUserPosition = null;
+    constructor(session) {
+      this.session = session;
+      this._pivots.setRoadNameResolver(async (coord) => {
+        try {
+          const result = await this.reverseGeocodeRoad(coord);
+          if (!result.ok)
+            return null;
+          return result.road ?? null;
+        } catch {
+          return null;
+        }
+      });
+    }
+    get hasPermission() {
+      return this.session._hasManifestPermission("LOCATION");
+    }
+    requestPermission() {
+      if (!this.hasPermission) {
+        return Promise.resolve({
+          ok: false,
+          accepted: false,
+          error: "LOCATION permission not declared in miniapp.json (required for navigation.requestPermission)."
+        });
+      }
+      return this.session.sendRequest({
+        type: "miniapp_navigation_request_permission" /* NAVIGATION_REQUEST_PERMISSION */
+      });
+    }
+    async start(opts) {
+      if (!this.hasPermission) {
+        return {
+          ok: false,
+          error: "LOCATION permission not declared in miniapp.json (required for navigation.start)."
+        };
+      }
+      const stops = normalizeStops(opts);
+      const mode = opts.mode ?? "driving";
+      this._tripStops = stops.length > 0 ? stops : null;
+      this._tripMode = mode;
+      this._tripAvoid = opts.avoid;
+      this._attachPivotTrackingForTrip(mode, opts.pivots);
+      const failStart = (error) => {
+        this._detachPivotTracking();
+        return { ok: false, error };
+      };
+      if (stops.length === 0) {
+        return failStart("navigation.start: no stops");
+      }
+      let origin = this._lastUserPosition;
+      if (!origin) {
+        try {
+          const fix = await this.session.location.getOnce();
+          origin = { lat: fix.lat, lng: fix.lng };
+          this._lastUserPosition = origin;
+        } catch (err) {
+          return failStart(`navigation.start: no GPS fix (${err instanceof Error ? err.message : String(err)})`);
+        }
+      }
+      const restResult = await this.computeRoute({ origin, stops, mode, avoid: opts.avoid });
+      if (!restResult.ok || !restResult.routes || restResult.routes.length === 0) {
+        return failStart(restResult.error ?? "computeRoute failed");
+      }
+      const restRoute = restResult.routes[0];
+      const nativeResult = await this.session.sendRequest({
+        type: "miniapp_navigation_start" /* NAVIGATION_START */,
+        lat: stops[0]?.lat,
+        lng: stops[0]?.lng,
+        stops,
+        mode,
+        avoid: opts.avoid,
+        simulate: opts.simulate ?? false,
+        speedMultiplier: opts.speedMultiplier ?? 1,
+        missedTurnRerouteMeters: opts.missedTurnRerouteMeters
+      });
+      if (!nativeResult.ok) {
+        this._detachPivotTracking();
+        return nativeResult;
+      }
+      const syntheticRoute = buildNavRouteFromComputed(restRoute);
+      this.session.events._forwardEvent("navigation_route" /* NAVIGATION_ROUTE */, syntheticRoute);
+      return nativeResult;
+    }
+    stop() {
+      this._detachPivotTracking();
+      this.session.sendOneShot({ type: "miniapp_navigation_stop" /* NAVIGATION_STOP */ });
+    }
+    get dev() {
+      return {
+        deviate: (offsetMeters = 20) => {
+          this.session.sendOneShot({ type: "miniapp_navigation_deviate" /* NAVIGATION_DEVIATE */, offsetMeters });
+        },
+        setWrongSidewalkOffset: (enabled) => {
+          this.session.sendOneShot({ type: "miniapp_navigation_set_wrong_sidewalk" /* NAVIGATION_SET_WRONG_SIDEWALK */, enabled });
+        },
+        setSkipCrossings: (enabled) => {
+          this.session.sendOneShot({ type: "miniapp_navigation_set_skip_crossings" /* NAVIGATION_SET_SKIP_CROSSINGS */, enabled });
+        }
+      };
+    }
+    onUpdate(handler) {
+      return this.session._subscribe("navigation_update" /* NAVIGATION_UPDATE */, handler);
+    }
+    onRoute(handler) {
+      return this.session._subscribe("navigation_route" /* NAVIGATION_ROUTE */, handler);
+    }
+    async getState() {
+      const result = await this.session.sendRequest({
+        type: "miniapp_navigation_get_state" /* NAVIGATION_GET_STATE */
+      });
+      return result.ok ? result.state ?? null : null;
+    }
+    computeRoute(opts) {
+      if (!this.hasPermission) {
+        return Promise.resolve({
+          ok: false,
+          error: "LOCATION permission not declared in miniapp.json (required for navigation.computeRoute)."
+        });
+      }
+      return this.session.sendRequest({
+        type: "miniapp_navigation_compute_route" /* NAVIGATION_COMPUTE_ROUTE */,
+        origin: opts.origin,
+        stops: opts.stops,
+        mode: opts.mode ?? "driving",
+        avoid: opts.avoid,
+        alternatives: opts.alternatives ?? 1
+      });
+    }
+    reverseGeocodeRoad(coord) {
+      if (!this.hasPermission) {
+        return Promise.resolve({
+          ok: false,
+          error: "LOCATION permission not declared in miniapp.json (required for reverseGeocodeRoad)."
+        });
+      }
+      return this.session.sendRequest({
+        type: "miniapp_navigation_reverse_geocode" /* NAVIGATION_REVERSE_GEOCODE */,
+        lat: coord.lat,
+        lng: coord.lng
+      });
+    }
+    placeAutocomplete(opts) {
+      return this.session.sendRequest({
+        type: "miniapp_navigation_place_autocomplete" /* NAVIGATION_PLACE_AUTOCOMPLETE */,
+        query: opts.query,
+        near: opts.near ?? null,
+        sessionToken: opts.sessionToken
+      });
+    }
+    placeDetails(opts) {
+      return this.session.sendRequest({
+        type: "miniapp_navigation_place_details" /* NAVIGATION_PLACE_DETAILS */,
+        placeId: opts.placeId,
+        sessionToken: opts.sessionToken
+      });
+    }
+    onPivot(handler) {
+      return this._pivots.subscribe(handler);
+    }
+    getPivots() {
+      return this._pivots.getPivots();
+    }
+    getActivePivot() {
+      return this._pivots.getActivePivot();
+    }
+    getUpcomingPivot() {
+      return this._pivots.getUpcomingPivot();
+    }
+    _attachPivotTrackingForTrip(mode, opts) {
+      this._detachPivotTracking();
+      this._pivots.reset();
+      this._pivots.updateOptions(mode, opts);
+      this._tripUnsubs.push(this.onRoute((route) => {
+        if (route.steps && route.steps.length > 0) {
+          const tail = route.points[route.points.length - 1];
+          const computedSteps = route.steps.map((s, i) => {
+            const next = route.steps?.[i + 1];
+            const endLat = next ? next.lat : tail?.lat ?? s.lat;
+            const endLng = next ? next.lng : tail?.lng ?? s.lng;
+            return {
+              lat: s.lat,
+              lng: s.lng,
+              endLat,
+              endLng,
+              distanceMeters: s.distanceMeters,
+              maneuver: s.maneuver,
+              road: s.road ?? undefined
+            };
+          });
+          this._pivots.setRouteFromComputedSteps(route, computedSteps);
+          return;
+        }
+        this._pivots.setRoute(route, null);
+        const seq = ++this._computeRouteSeq;
+        this._issueComputeRouteForTrip(route).then((result) => {
+          if (seq !== this._computeRouteSeq)
+            return;
+          const computedSteps = result?.routes?.[0]?.steps;
+          if (computedSteps && computedSteps.length > 0) {
+            this._pivots.setRouteFromComputedSteps(route, computedSteps);
+          }
+        }).catch((err) => {
+          console.warn("[NavigationModule] computeRoute for pivots failed:", err);
+        });
+      }));
+      this._tripUnsubs.push(this.onUpdate((update) => {
+        if (update.kind === "arrived") {
+          this._pivots.reset();
+          return;
+        }
+      }));
+      this._tripUnsubs.push(this.session.location.onUpdate((loc) => {
+        this._lastUserPosition = { lat: loc.lat, lng: loc.lng };
+        this._pivots.onLocationUpdate({ lat: loc.lat, lng: loc.lng });
+      }));
+    }
+    async _issueComputeRouteForTrip(route) {
+      if (!this._tripStops || this._tripStops.length === 0)
+        return null;
+      const origin = this._lastUserPosition ?? (route?.points && route.points[0] ? { lat: route.points[0].lat, lng: route.points[0].lng } : null);
+      if (!origin)
+        return null;
+      return this.computeRoute({
+        origin,
+        stops: this._tripStops,
+        mode: this._tripMode,
+        avoid: this._tripAvoid
+      });
+    }
+    _detachPivotTracking() {
+      for (const unsub of this._tripUnsubs) {
+        try {
+          unsub();
+        } catch (err) {
+          console.warn("[NavigationModule] pivot-tracking unsubscribe threw:", err);
+        }
+      }
+      this._tripUnsubs = [];
+      this._pivots.reset();
+      this._tripStops = null;
+      this._tripAvoid = undefined;
+      this._computeRouteSeq++;
+      this._lastUserPosition = null;
+    }
+  }
+  function normalizeStops(opts) {
+    if (opts.stops && opts.stops.length > 0) {
+      return opts.stops;
+    }
+    if (typeof opts.lat === "number" && typeof opts.lng === "number") {
+      return [{ lat: opts.lat, lng: opts.lng }];
+    }
+    return [];
+  }
+  function buildNavRouteFromComputed(computed) {
+    const points = computed.points ?? [];
+    const steps = (computed.steps ?? []).map((s) => {
+      let routeIndex = 0;
+      let best = Infinity;
+      for (let i = 0;i < points.length; i++) {
+        const dLat = points[i].lat - s.lat;
+        const dLng = points[i].lng - s.lng;
+        const d = dLat * dLat + dLng * dLng;
+        if (d < best) {
+          best = d;
+          routeIndex = i;
+        }
+      }
+      return {
+        lat: s.lat,
+        lng: s.lng,
+        routeIndex,
+        road: s.road ?? null,
+        maneuver: s.maneuver ?? "STRAIGHT",
+        distanceMeters: s.distanceMeters
+      };
+    });
+    return {
+      points,
+      totalDistanceMeters: computed.totalDistanceMeters,
+      totalDurationSeconds: computed.totalDurationSeconds,
+      steps: steps.length > 0 ? steps : undefined
+    };
+  }
+
+  // vendor/mentra-miniapp/src/modules/permissions.ts
+  class PermissionsModule {
+    session;
+    constructor(session) {
+      this.session = session;
+    }
+    has(type) {
+      return this.session._getPermissions()[type] === true;
+    }
+    getAll() {
+      return this.session._getPermissions();
+    }
+    onUpdate(handler) {
+      return this.session.on("permissions", handler);
+    }
+    onPermissionError(handler) {
+      return this.session.on("error", (e) => {
+        const maybe = e;
+        if (maybe?.code === "PERMISSION_NOT_DECLARED" /* PERMISSION_NOT_DECLARED */) {
+          handler({
+            code: String(maybe.code),
+            message: String(maybe.message ?? ""),
+            permission: maybe.permission,
+            subscription: maybe.subscription,
+            operation: maybe.operation
+          });
+        }
+      });
+    }
+  }
+
+  // vendor/mentra-miniapp/src/modules/phone.ts
+  class TrackedSubs {
+    unsubs = new Set;
+    track(unsub) {
+      this.unsubs.add(unsub);
+      return () => {
+        this.unsubs.delete(unsub);
+        unsub();
+      };
+    }
+    stop() {
+      for (const u of this.unsubs) {
+        try {
+          u();
+        } catch {}
+      }
+      this.unsubs.clear();
+    }
+  }
+
+  class PhoneNotificationsModule extends TrackedSubs {
+    session;
+    constructor(session) {
+      super();
+      this.session = session;
+    }
+    on(handler) {
+      return this.track(this.session._subscribe("phone_notification" /* PHONE_NOTIFICATION */, handler));
+    }
+    onDismissed(handler) {
+      return this.track(this.session._subscribe("phone_notification_dismissed" /* PHONE_NOTIFICATION_DISMISSED */, handler));
+    }
+    get hasPermission() {
+      return this.session._hasManifestPermission("READ_NOTIFICATIONS");
+    }
+  }
+
+  class PhoneCalendarModule {
+    session;
+    constructor(session) {
+      this.session = session;
+    }
+    listEvents(options) {
+      const startsAt = normalizeCalendarDate(options?.startsAt, "startsAt");
+      const endsAt = normalizeCalendarDate(options?.endsAt, "endsAt");
+      return this.session.sendRequest({
+        type: "miniapp_calendar_list_events" /* CALENDAR_LIST_EVENTS */,
+        startsAt,
+        endsAt,
+        ...options.limit === undefined ? {} : { limit: options.limit }
+      });
+    }
+    get hasPermission() {
+      return this.session._hasManifestPermission("CALENDAR");
+    }
+  }
+  function normalizeCalendarDate(value, field) {
+    const date = value instanceof Date ? value : new Date(value ?? "");
+    if (Number.isNaN(date.getTime()))
+      throw new TypeError(`${field} must be a valid Date or ISO 8601 string`);
+    return date.toISOString();
+  }
+
+  class PhoneModule {
+    session;
+    notifications;
+    calendar;
+    constructor(session) {
+      this.session = session;
+      this.notifications = new PhoneNotificationsModule(session);
+      this.calendar = new PhoneCalendarModule(session);
+    }
+    isWifiEnabled() {
+      return this.session.sendRequest({ type: "miniapp_phone_is_wifi_enabled" /* PHONE_IS_WIFI_ENABLED */ });
+    }
+    requestWifiEnable(reason) {
+      return this.session.sendRequest({ type: "miniapp_phone_request_wifi_enable" /* PHONE_REQUEST_WIFI_ENABLE */, reason }, { timeoutMs: 0 });
+    }
+    onBattery(handler) {
+      return this.session._subscribe("phone_battery" /* PHONE_BATTERY */, handler);
+    }
+  }
+
+  // vendor/mentra-cloud-protocol/src/languages.ts
+  var CANONICAL_TAG_BY_CODE = {
+    af: "af-ZA",
+    am: "am-ET",
+    ar: "ar-AE",
+    az: "az-AZ",
+    be: "be-BY",
+    bg: "bg-BG",
+    bn: "bn-IN",
+    bs: "bs-BA",
+    ca: "ca-ES",
+    cs: "cs-CZ",
+    cy: "cy-GB",
+    da: "da-DK",
+    de: "de-DE",
+    el: "el-GR",
+    en: "en-US",
+    es: "es-ES",
+    et: "et-EE",
+    eu: "eu-ES",
+    fa: "fa-IR",
+    fi: "fi-FI",
+    fr: "fr-FR",
+    gl: "gl-ES",
+    gu: "gu-IN",
+    he: "he-IL",
+    hi: "hi-IN",
+    hr: "hr-HR",
+    hu: "hu-HU",
+    hy: "hy-AM",
+    id: "id-ID",
+    it: "it-IT",
+    ja: "ja-JP",
+    ka: "ka-GE",
+    kk: "kk-KZ",
+    kn: "kn-IN",
+    ko: "ko-KR",
+    lt: "lt-LT",
+    lv: "lv-LV",
+    mk: "mk-MK",
+    ml: "ml-IN",
+    mr: "mr-IN",
+    ms: "ms-MY",
+    nb: "nb-NO",
+    ne: "ne-NP",
+    nl: "nl-NL",
+    no: "nb-NO",
+    pa: "pa-IN",
+    pl: "pl-PL",
+    pt: "pt-BR",
+    ro: "ro-RO",
+    ru: "ru-RU",
+    sk: "sk-SK",
+    sl: "sl-SI",
+    sq: "sq-AL",
+    sr: "sr-RS",
+    sv: "sv-SE",
+    sw: "sw-KE",
+    ta: "ta-IN",
+    te: "te-IN",
+    th: "th-TH",
+    tl: "fil-PH",
+    tr: "tr-TR",
+    uk: "uk-UA",
+    ur: "ur-IN",
+    vi: "vi-VN",
+    zh: "zh-CN"
+  };
+  var EXTRA_REGIONAL_TAGS = [
+    "ar-EG",
+    "ar-SA",
+    "de-AT",
+    "de-CH",
+    "en-AU",
+    "en-CA",
+    "en-GB",
+    "en-IN",
+    "es-419",
+    "es-MX",
+    "es-US",
+    "fr-CA",
+    "nl-BE",
+    "pt-PT",
+    "zh-HK",
+    "zh-TW"
+  ];
+  var SUPPORTED_LANGUAGE_HINTS = Object.freeze([...new Set(Object.keys(CANONICAL_TAG_BY_CODE))].sort());
+  var SUPPORTED_TRANSCRIPTION_LANGUAGES = Object.freeze([
+    ...new Set([
+      ...Object.values(CANONICAL_TAG_BY_CODE),
+      ...EXTRA_REGIONAL_TAGS
+    ])
+  ].sort());
+  var TAG_SET = new Set(SUPPORTED_TRANSCRIPTION_LANGUAGES);
+  var HINT_SET = new Set(SUPPORTED_LANGUAGE_HINTS);
+  function toTranscriptionLanguage(value) {
+    if (TAG_SET.has(value))
+      return value;
+    const canonical = CANONICAL_TAG_BY_CODE[value.toLowerCase()];
+    return canonical ?? null;
+  }
+  function toLanguageHint(value) {
+    const primary = value.split("-")[0].toLowerCase();
+    return HINT_SET.has(primary) ? primary : null;
+  }
+  function suggestTranscriptionLanguage(value) {
+    const normalized = value.replace(/_/g, "-");
+    const parts = normalized.split("-");
+    const recased = parts.length >= 2 ? `${parts[0].toLowerCase()}-${parts[1].toUpperCase()}` : normalized.toLowerCase();
+    return toTranscriptionLanguage(recased);
+  }
+
+  // vendor/mentra-miniapp/src/modules/languages.ts
+  class MiniappValidationError extends Error {
+    constructor(message) {
+      super(message);
+      this.name = "MiniappValidationError";
+    }
+  }
+  function requireTranscriptionLanguage(value, param) {
+    const canonical = toTranscriptionLanguage(value);
+    if (canonical)
+      return canonical;
+    const suggestion = suggestTranscriptionLanguage(value);
+    throw new MiniappValidationError(`${param}: unknown language ${JSON.stringify(value)}` + (suggestion ? ` — did you mean ${JSON.stringify(suggestion)}?` : "") + ` Supported values are BCP-47 tags from SUPPORTED_TRANSCRIPTION_LANGUAGES (e.g. "en-US", "fr-FR").`);
+  }
+  function requireLanguageHint(value, param) {
+    const hint = toLanguageHint(value);
+    if (hint)
+      return hint;
+    throw new MiniappValidationError(`${param}: unknown language hint ${JSON.stringify(value)}. ` + `Hints are bare ISO 639-1 codes from SUPPORTED_LANGUAGE_HINTS (e.g. "en", "fr").`);
+  }
+
+  // vendor/mentra-miniapp/src/modules/transcription.ts
+  class TranscriptionModule {
+    session;
+    unsubs = new Set;
+    currentConfig = null;
+    constructor(session) {
+      this.session = session;
+    }
+    on(handler, options = {}) {
+      return this.track(this.session._subscribe(`${"transcription" /* TRANSCRIPTION */}:auto`, handler, options));
+    }
+    forLanguage(language, handler, options = {}) {
+      const langs = (Array.isArray(language) ? language : [language]).map((lang) => requireTranscriptionLanguage(lang, "transcription.forLanguage(language)"));
+      if (langs.length === 0)
+        return () => {};
+      const unsubs = [];
+      for (const lang of langs) {
+        unsubs.push(this.session._subscribe(`${"transcription" /* TRANSCRIPTION */}:${lang}`, handler, options));
+      }
+      const combined = () => {
+        for (const u of unsubs) {
+          try {
+            u();
+          } catch {}
+        }
+      };
+      return this.track(combined);
+    }
+    configure(config) {
+      const normalized = {
+        ...config,
+        languageHints: config.languageHints?.map((hint) => requireLanguageHint(hint, "transcription.configure(languageHints)"))
+      };
+      this.currentConfig = { ...normalized };
+      return this.session.sendRequest({
+        type: "miniapp_transcription_config" /* TRANSCRIPTION_CONFIG */,
+        config: { ...normalized }
+      }).then(() => {
+        return;
+      });
+    }
+    stop() {
+      for (const u of this.unsubs) {
+        try {
+          u();
+        } catch {}
+      }
+      this.unsubs.clear();
+    }
+    get hasPermission() {
+      return this.session._hasManifestPermission("MICROPHONE");
+    }
+    _getConfig() {
+      return this.currentConfig ? { ...this.currentConfig } : null;
+    }
+    track(unsub) {
+      this.unsubs.add(unsub);
+      return () => {
+        this.unsubs.delete(unsub);
+        unsub();
+      };
+    }
+  }
+
+  // vendor/mentra-miniapp/src/modules/translation.ts
+  class TranslationModule {
+    session;
+    unsubs = new Set;
+    constructor(session) {
+      this.session = session;
+    }
+    on(handler) {
+      return this.track(this.session._subscribe(`${"translation" /* TRANSLATION */}:*:*`, handler));
+    }
+    to(target, handler) {
+      const targets = (Array.isArray(target) ? target : [target]).map((t) => requireTranscriptionLanguage(t, "translation.to(target)"));
+      if (targets.length === 0)
+        return () => {};
+      const unsubs = [];
+      for (const t of targets) {
+        unsubs.push(this.session._subscribe(`${"translation" /* TRANSLATION */}:*:${t}`, handler));
+      }
+      const composite = () => {
+        for (const u of unsubs) {
+          try {
+            u();
+          } catch {}
+        }
+      };
+      return this.track(composite);
+    }
+    fromTo(source, target, handler) {
+      const validSource = source === "auto" ? "auto" : requireTranscriptionLanguage(source, "translation.fromTo(source)");
+      const targets = (Array.isArray(target) ? target : [target]).map((t) => requireTranscriptionLanguage(t, "translation.fromTo(target)"));
+      if (targets.length === 0)
+        return () => {};
+      const unsubs = [];
+      for (const t of targets) {
+        unsubs.push(this.session._subscribe(`${"translation" /* TRANSLATION */}:${validSource}:${t}`, handler));
+      }
+      const composite = () => {
+        for (const u of unsubs) {
+          try {
+            u();
+          } catch {}
+        }
+      };
+      return this.track(composite);
+    }
+    forLanguagePair(fromLang, toLang, handler) {
+      return this.fromTo(fromLang, toLang, handler);
+    }
+    stop() {
+      for (const u of this.unsubs) {
+        try {
+          u();
+        } catch {}
+      }
+      this.unsubs.clear();
+    }
+    get hasPermission() {
+      return this.session._hasManifestPermission("MICROPHONE");
+    }
+    track(unsub) {
+      this.unsubs.add(unsub);
+      return () => {
+        this.unsubs.delete(unsub);
+        unsub();
+      };
+    }
+  }
+
+  // vendor/mentra-miniapp/src/modules/ui.ts
+  function rpcErrorFromUnknown(e) {
+    if (e instanceof Error) {
+      const own = e;
+      const cause = own.cause;
+      return compactEnvelope({
+        message: e.message,
+        code: own.code ?? cause?.code,
+        stage: own.stage,
+        transport: own.transport
+      });
+    }
+    if (e && typeof e === "object") {
+      const o = e;
+      return compactEnvelope({
+        message: typeof o.message === "string" ? o.message : JSON.stringify(e),
+        code: typeof o.code === "string" ? o.code : undefined,
+        stage: typeof o.stage === "string" ? o.stage : undefined,
+        transport: typeof o.transport === "string" ? o.transport : undefined
+      });
+    }
+    return { message: String(e) };
+  }
+  function compactEnvelope(env) {
+    const out = { message: env.message };
+    if (env.code)
+      out.code = env.code;
+    if (env.stage)
+      out.stage = env.stage;
+    if (env.transport)
+      out.transport = env.transport;
+    return out;
+  }
+
+  class UIModuleImpl {
+    session;
+    bound = false;
+    nextSeq = 1;
+    openHandlers = new Set;
+    closeHandlers = new Set;
+    channelHandlers = new Map;
+    rpcHandlers = new Map;
+    inflightRpc = new Map;
+    constructor(session) {
+      this.session = session;
+      this.session._subscribe("_ui", (env) => this.handleInbound(env));
+    }
+    isOpen = () => {
+      return this.bound;
+    };
+    onOpen = (cb) => {
+      this.openHandlers.add(cb);
+      if (this.bound) {
+        if (this.session.ready) {
+          try {
+            cb();
+          } catch (e) {
+            console.warn("session.ui.onOpen late-fire threw:", e);
+          }
+        }
+      }
+      return () => {
+        this.openHandlers.delete(cb);
+      };
+    };
+    onClose = (cb) => {
+      this.closeHandlers.add(cb);
+      return () => {
+        this.closeHandlers.delete(cb);
+      };
+    };
+    send = (channel, payload) => {
+      if (!this.bound) {
+        return;
+      }
+      const seq = this.nextSeq++;
+      const envelope = { type: "UI_SEND", channel, payload, seq };
+      this.session.sendOneShot(envelope);
+    };
+    on = (channel, cb) => {
+      let set = this.channelHandlers.get(channel);
+      if (!set) {
+        set = new Set;
+        this.channelHandlers.set(channel, set);
+      }
+      set.add(cb);
+      return () => {
+        set.delete(cb);
+      };
+    };
+    handle = (channel, handler) => {
+      const key = channel;
+      if (this.rpcHandlers.has(key)) {
+        throw new Error(`session.ui.handle: a handler is already registered for "${key}"`);
+      }
+      this.rpcHandlers.set(key, handler);
+      return () => {
+        this.rpcHandlers.delete(key);
+      };
+    };
+    fireOpenHandlers() {
+      for (const h of this.openHandlers) {
+        try {
+          h();
+        } catch (e) {
+          console.warn("session.ui.onOpen handler threw", e);
+        }
+      }
+    }
+    handleInbound(env) {
+      if (env.type === "UI_OPEN") {
+        this.bound = true;
+        this.nextSeq = 1;
+        if (this.session.ready) {
+          this.fireOpenHandlers();
+        } else {
+          const off = this.session.on("ready", () => {
+            off();
+            if (this.bound)
+              this.fireOpenHandlers();
+          });
+        }
+        return;
+      }
+      if (env.type === "UI_CLOSE") {
+        this.bound = false;
+        for (const h of this.closeHandlers) {
+          try {
+            h();
+          } catch (e) {
+            console.warn("session.ui.onClose handler threw", e);
+          }
+        }
+        return;
+      }
+      if (env.type === "UI_MESSAGE") {
+        if (typeof env.requestId === "string") {
+          this.dispatchRpcCall(env.channel, env.payload, env.requestId);
+          return;
+        }
+        const set = this.channelHandlers.get(env.channel);
+        if (!set || set.size === 0)
+          return;
+        for (const h of set) {
+          try {
+            h(env.payload);
+          } catch (e) {
+            console.warn(`session.ui.on(${env.channel}) threw`, e);
+          }
+        }
+        return;
+      }
+      if (env.type === "UI_CANCEL") {
+        const ctrl = this.inflightRpc.get(env.requestId);
+        if (ctrl) {
+          try {
+            ctrl.abort();
+          } catch {}
+        }
+        return;
+      }
+    }
+    dispatchRpcCall(channel, payload, requestId) {
+      const handler = this.rpcHandlers.get(channel);
+      if (!handler) {
+        this.sendRpcReply(channel, requestId, {
+          ok: false,
+          error: { message: `no handler registered for "${channel}"` }
+        });
+        return;
+      }
+      const ctrl = new AbortController;
+      this.inflightRpc.set(requestId, ctrl);
+      const ctx = { signal: ctrl.signal };
+      const finish = (envelope) => {
+        this.inflightRpc.delete(requestId);
+        if (ctrl.signal.aborted)
+          return;
+        this.sendRpcReply(channel, requestId, envelope);
+      };
+      let result;
+      try {
+        result = handler(payload, ctx);
+      } catch (e) {
+        finish({ ok: false, error: rpcErrorFromUnknown(e) });
+        return;
+      }
+      if (result && typeof result.then === "function") {
+        result.then((v) => finish({ ok: true, result: v }), (e) => finish({ ok: false, error: rpcErrorFromUnknown(e) }));
+      } else {
+        finish({ ok: true, result });
+      }
+    }
+    sendRpcReply(channel, requestId, payload) {
+      if (!this.bound)
+        return;
+      const seq = this.nextSeq++;
+      const envelope = { type: "UI_SEND", channel, payload, seq, requestId };
+      this.session.sendOneShot(envelope);
+    }
+  }
+
+  // vendor/mentra-miniapp/src/modules/storage.ts
+  class SimpleStorage {
+    session;
+    constructor(session) {
+      this.session = session;
+    }
+    async get(key) {
+      const result = await this.session.sendRequest({
+        type: "miniapp_storage_get" /* STORAGE_GET */,
+        key
+      });
+      return result?.value ?? null;
+    }
+    async set(key, value) {
+      await this.session.sendRequest({
+        type: "miniapp_storage_set" /* STORAGE_SET */,
+        key,
+        value
+      });
+    }
+    async delete(key) {
+      await this.session.sendRequest({
+        type: "miniapp_storage_delete" /* STORAGE_DELETE */,
+        key
+      });
+    }
+    async keys() {
+      const result = await this.session.sendRequest({
+        type: "miniapp_storage_list" /* STORAGE_LIST */
+      });
+      return result?.keys ?? [];
+    }
+    async list() {
+      return this.keys();
+    }
+    async clear() {
+      await this.session.sendRequest({
+        type: "miniapp_storage_clear" /* STORAGE_CLEAR */
+      });
+    }
+    async has(key) {
+      const result = await this.session.sendRequest({
+        type: "miniapp_storage_has" /* STORAGE_HAS */,
+        key
+      });
+      return !!result?.has;
+    }
+    async getAll() {
+      const result = await this.session.sendRequest({
+        type: "miniapp_storage_get_all" /* STORAGE_GET_ALL */
+      });
+      return result?.values ?? {};
+    }
+    async setMultiple(values) {
+      await this.session.sendRequest({
+        type: "miniapp_storage_set_multiple" /* STORAGE_SET_MULTIPLE */,
+        values
+      });
+    }
+    async flush() {
+      await this.session.sendRequest({
+        type: "miniapp_storage_flush" /* STORAGE_FLUSH */
+      });
+    }
+  }
+
+  // vendor/mentra-miniapp/src/modules/base64.ts
+  var ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  var LOOKUP = (() => {
+    const t = new Int16Array(256).fill(-1);
+    for (let i = 0;i < ALPHABET.length; i++)
+      t[ALPHABET.charCodeAt(i)] = i;
+    t[61] = 0;
+    return t;
+  })();
+  function toUint8Array(input) {
+    if (input instanceof Uint8Array)
+      return input;
+    if (input instanceof ArrayBuffer)
+      return new Uint8Array(input);
+    return new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
+  }
+  function bytesToBase64(input) {
+    const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+    const len = bytes.length;
+    let out = "";
+    let i = 0;
+    for (;i + 2 < len; i += 3) {
+      const n = bytes[i] << 16 | bytes[i + 1] << 8 | bytes[i + 2];
+      out += ALPHABET[n >> 18 & 63] + ALPHABET[n >> 12 & 63] + ALPHABET[n >> 6 & 63] + ALPHABET[n & 63];
+    }
+    const rem = len - i;
+    if (rem === 1) {
+      const n = bytes[i] << 16;
+      out += ALPHABET[n >> 18 & 63] + ALPHABET[n >> 12 & 63] + "==";
+    } else if (rem === 2) {
+      const n = bytes[i] << 16 | bytes[i + 1] << 8;
+      out += ALPHABET[n >> 18 & 63] + ALPHABET[n >> 12 & 63] + ALPHABET[n >> 6 & 63] + "=";
+    }
+    return out;
+  }
+  function base64ToBytes(b64) {
+    let validChars = 0;
+    let pad = 0;
+    for (let i = 0;i < b64.length; i++) {
+      const c = b64.charCodeAt(i);
+      if (c === 61) {
+        pad++;
+        validChars++;
+      } else if (LOOKUP[c] !== -1) {
+        validChars++;
+      }
+    }
+    const fullGroups = Math.floor(validChars / 4);
+    const remChars = validChars - fullGroups * 4;
+    let outLen = fullGroups * 3 - (pad > 0 && remChars === 0 ? pad : 0);
+    if (remChars === 2)
+      outLen += 1;
+    else if (remChars === 3)
+      outLen += 2;
+    if (outLen < 0)
+      outLen = 0;
+    const out = new Uint8Array(outLen);
+    let acc = 0;
+    let bits = 0;
+    let o = 0;
+    for (let i = 0;i < b64.length && o < outLen; i++) {
+      const c = b64.charCodeAt(i);
+      if (c === 61)
+        break;
+      const v = LOOKUP[c];
+      if (v === -1)
+        continue;
+      acc = acc << 6 | v;
+      bits += 6;
+      if (bits >= 8) {
+        bits -= 8;
+        out[o++] = acc >> bits & 255;
+      }
+    }
+    return out;
+  }
+
+  // vendor/mentra-miniapp/src/modules/speaker.ts
+  var SPEAKER_WRITE_CHUNK_BYTES = 256 * 1024;
+  var SPEAKER_WRITE_CHUNK_B64 = Math.floor(SPEAKER_WRITE_CHUNK_BYTES / 6) * 8;
+  class SpeakerStreamWriter {
+    session;
+    streamId;
+    settled = false;
+    writeChain = Promise.resolve();
+    constructor(session, streamId) {
+      this.session = session;
+      this.streamId = streamId;
+    }
+    async write(chunk) {
+      this.assertOpen();
+      const bytes = toUint8Array(chunk);
+      if (bytes.byteLength === 0)
+        throw new Error("PCM chunk cannot be empty");
+      if (bytes.byteLength % 2 !== 0)
+        throw new Error("PCM chunk must contain complete 16-bit samples");
+      return this.enqueueWrite(async () => {
+        let last = { bufferedMs: 0 };
+        for (let off = 0;off < bytes.length; off += SPEAKER_WRITE_CHUNK_BYTES) {
+          last = await this.send(bytesToBase64(bytes.subarray(off, off + SPEAKER_WRITE_CHUNK_BYTES)));
+        }
+        return last;
+      });
+    }
+    async writeBase64(b64) {
+      this.assertOpen();
+      if (b64.length === 0 || b64.length % 4 !== 0)
+        throw new Error("PCM base64 must be non-empty and padded");
+      const padding = b64.endsWith("==") ? 2 : b64.endsWith("=") ? 1 : 0;
+      const decodedBytes = b64.length / 4 * 3 - padding;
+      if (decodedBytes % 2 !== 0)
+        throw new Error("PCM base64 must contain complete 16-bit samples");
+      return this.enqueueWrite(async () => {
+        let last = { bufferedMs: 0 };
+        for (let off = 0;off < b64.length; off += SPEAKER_WRITE_CHUNK_B64) {
+          last = await this.send(b64.slice(off, off + SPEAKER_WRITE_CHUNK_B64));
+        }
+        return last;
+      });
+    }
+    async close() {
+      this.assertOpen();
+      this.settled = true;
+      await this.writeChain;
+      const res = await this.session.sendRequest({ type: "miniapp_speaker_stream_close" /* SPEAKER_STREAM_CLOSE */, streamId: this.streamId }, { timeoutMs: 0 });
+      return res ?? {};
+    }
+    async abort() {
+      if (this.settled)
+        return;
+      this.settled = true;
+      await this.session.sendRequest({
+        type: "miniapp_speaker_stream_abort" /* SPEAKER_STREAM_ABORT */,
+        streamId: this.streamId
+      });
+    }
+    assertOpen() {
+      if (this.settled)
+        throw new Error("SpeakerStreamWriter is already closed/aborted");
+    }
+    async send(base64) {
+      const res = await this.session.sendRequest({
+        type: "miniapp_speaker_stream_write" /* SPEAKER_STREAM_WRITE */,
+        streamId: this.streamId,
+        base64
+      });
+      return res ?? { bufferedMs: 0 };
+    }
+    enqueueWrite(operation) {
+      const result = this.writeChain.then(operation);
+      this.writeChain = result.then(() => {
+        return;
+      }, () => {
+        return;
+      });
+      return result;
+    }
+  }
+
+  class SpeakerModule {
+    session;
+    _state = "idle";
+    _lastEvent = { state: "idle" };
+    constructor(session) {
+      this.session = session;
+    }
+    get state() {
+      return this._state;
+    }
+    get isPlaying() {
+      return this._state === "playing";
+    }
+    async play(options) {
+      if (options.startPositionMs !== undefined && (!Number.isFinite(options.startPositionMs) || options.startPositionMs < 0)) {
+        throw new RangeError("startPositionMs must be a finite, non-negative number");
+      }
+      await this.session.sendRequest({
+        type: "miniapp_play_audio" /* PLAY_AUDIO */,
+        audioUrl: options.audioUrl,
+        ...options.startPositionMs !== undefined ? { startPositionMs: options.startPositionMs } : {},
+        volume: options.volume,
+        stopOtherAudio: options.stopOtherAudio ?? false
+      }, { timeoutMs: 0 });
+    }
+    async speak(text, options = {}) {
+      const normalized = Array.isArray(text) ? text.map((sentence) => sentence.trim()).filter(Boolean) : text.trim();
+      if (Array.isArray(normalized) && normalized.length === 0 || normalized === "") {
+        throw { code: "INTERNAL" /* INTERNAL */, message: "speak requires at least one non-empty sentence" };
+      }
+      try {
+        const result = await this.session.sendRequest({
+          type: "miniapp_speak" /* SPEAK */,
+          text: normalized,
+          voice_id: options.voice_id,
+          voice_settings: options.voice_settings,
+          volume: options.volume,
+          stopOtherAudio: options.stopOtherAudio ?? false,
+          enableSanitization: options.enableSanitization ?? true,
+          forceLocal: options.forceLocal ?? false
+        }, { timeoutMs: 0 });
+        return result ?? { completed: true };
+      } catch (err) {
+        if (err && typeof err === "object" && "code" in err) {
+          throw err;
+        }
+        throw { code: "INTERNAL" /* INTERNAL */, message: String(err) };
+      }
+    }
+    async createStream(options = {}) {
+      if (options.volume !== undefined && (!Number.isFinite(options.volume) || options.volume < 0 || options.volume > 1)) {
+        throw new RangeError("speaker stream volume must be between 0 and 1");
+      }
+      const res = await this.session.sendRequest({
+        type: "miniapp_speaker_stream_open" /* SPEAKER_STREAM_OPEN */,
+        sampleRate: options.sampleRate ?? 16000,
+        channels: options.channels ?? 1,
+        volume: options.volume,
+        stopOtherAudio: options.stopOtherAudio ?? true
+      });
+      return new SpeakerStreamWriter(this.session, res.streamId);
+    }
+    stop() {
+      this.session.sendOneShot({ type: "miniapp_stop_audio" /* STOP_AUDIO */ });
+    }
+    onStateChange(handler) {
+      return this.session.on("speakerState", handler);
+    }
+    _applyState(event) {
+      if (event.state === this._state && event.state !== "error")
+        return;
+      this._state = event.state;
+      this._lastEvent = event;
+    }
+    _getLastEvent() {
+      return { ...this._lastEvent };
+    }
+  }
+
+  // vendor/mentra-miniapp/src/modules/stream.ts
+  class PreviewError extends Error {
+    code;
+    constructor(code, message) {
+      super(message ?? code);
+      this.name = "PreviewError";
+      this.code = code;
+    }
+  }
+  function toPreviewError(error) {
+    if (error instanceof PreviewError)
+      return error;
+    const value = error ?? {};
+    const code = typeof value.code === "string" ? value.code : "unsupported";
+    const message = typeof value.message === "string" ? value.message : undefined;
+    return new PreviewError(code, message);
+  }
+
+  class PreviewHandleImpl {
+    source;
+    handleId;
+    previewTraceId;
+    release;
+    state = "held";
+    listeners = new Set;
+    constructor(source, handleId, previewTraceId, release) {
+      this.source = source;
+      this.handleId = handleId;
+      this.previewTraceId = previewTraceId;
+      this.release = release;
+    }
+    async stop() {
+      if (this.state === "ended")
+        return;
+      this.end("stopped");
+      await this.release(this);
+    }
+    onStatus(cb) {
+      this.listeners.add(cb);
+      return () => this.listeners.delete(cb);
+    }
+    end(reason) {
+      if (this.state === "ended")
+        return;
+      this.state = "ended";
+      this.emit({ state: "ended", reason });
+    }
+    emit(status) {
+      for (const listener of [...this.listeners]) {
+        try {
+          listener(status);
+        } catch {}
+      }
+    }
+  }
+
+  class StreamModule {
+    session;
+    previewHandles = new Map;
+    constructor(session) {
+      this.session = session;
+    }
+    async preview(options = {}) {
+      const source = options.source ?? "call";
+      if (source !== "call") {
+        throw new PreviewError("unsupported", `Preview source "${String(source)}" is not supported yet`);
+      }
+      let result;
+      try {
+        result = await this.session.sendRequest({
+          type: "miniapp_stream_preview_start" /* STREAM_PREVIEW_START */,
+          source
+        });
+      } catch (error) {
+        throw toPreviewError(error);
+      }
+      const handle = new PreviewHandleImpl(result.source ?? source, result.handleId, result.previewTraceId, (h) => this.releasePreview(h));
+      this.previewHandles.set(handle.handleId, handle);
+      handle.onStatus((status) => {
+        if (status.state === "ended")
+          this.previewHandles.delete(handle.handleId);
+      });
+      return handle;
+    }
+    async releasePreview(handle) {
+      this.previewHandles.delete(handle.handleId);
+      try {
+        await this.session.sendRequest({
+          type: "miniapp_stream_preview_stop" /* STREAM_PREVIEW_STOP */,
+          handleId: handle.handleId
+        });
+      } catch (error) {
+        throw toPreviewError(error);
+      }
+    }
+    _applyPreviewStatus(payload) {
+      if (typeof payload.handleId !== "string")
+        return;
+      const handle = this.previewHandles.get(payload.handleId);
+      if (!handle)
+        return;
+      if (payload.state === "ended") {
+        handle.end(typeof payload.reason === "string" ? payload.reason : "ended");
+      }
+    }
+    async startStream(options = {}) {
+      if (options.direct !== undefined) {
+        return this.session.sendRequest({
+          type: "miniapp_stream_start" /* STREAM_START */,
+          streamUrl: options.direct,
+          video: options.video,
+          audio: options.audio,
+          sound: options.sound ?? true,
+          ...options.authToken ? { authToken: options.authToken } : {},
+          ...typeof options.captureAudio === "boolean" ? { captureAudio: options.captureAudio } : {}
+        });
+      }
+      return this.session.sendRequest({
+        type: "miniapp_managed_stream_start" /* MANAGED_STREAM_START */,
+        restreamDestinations: options.destinations,
+        video: options.video,
+        audio: options.audio,
+        sound: options.sound ?? true,
+        ingest: options.ingest,
+        ...typeof options.captureAudio === "boolean" ? { captureAudio: options.captureAudio } : {}
+      });
+    }
+    async stop(streamId) {
+      await this.session.sendRequest({
+        type: "miniapp_stream_stop" /* STREAM_STOP */,
+        streamId
+      });
+    }
+  }
+
+  // vendor/mentra-miniapp/src/modules/system.ts
+  class SystemModule {
+    session;
+    constructor(session) {
+      this.session = session;
+    }
+    async share(options) {
+      const result = await this.session.sendRequest({
+        type: "miniapp_share" /* SHARE */,
+        ...options
+      });
+      return result ?? { success: false };
+    }
+    openUrl(url) {
+      this.session.sendOneShot({
+        type: "miniapp_open_url" /* OPEN_URL */,
+        url
+      });
+    }
+    async copyToClipboard(text) {
+      await this.session.sendRequest({
+        type: "miniapp_copy_clipboard" /* COPY_CLIPBOARD */,
+        text
+      });
+    }
+    async download(options) {
+      const result = await this.session.sendRequest({
+        type: "miniapp_download" /* DOWNLOAD */,
+        ...options
+      });
+      return result ?? { success: false };
+    }
+    async scanQr(options = {}) {
+      const result = await this.session.sendRequest({
+        type: "miniapp_scan_qr" /* SCAN_QR */,
+        ...options
+      }, { timeoutMs: 0 });
+      return result ?? { cancelled: true };
+    }
+  }
+
+  // vendor/mentra-miniapp/src/modules/miniapps.ts
+  class MiniappsModule {
+    session;
+    constructor(session) {
+      this.session = session;
+    }
+    async list(opts) {
+      const result = await this.session.sendRequest({
+        type: "miniapp_apps_list" /* MINIAPPS_LIST */,
+        includeIncompatible: opts?.includeIncompatible ?? false
+      });
+      return result ?? [];
+    }
+    async start(packageName) {
+      await this.session.sendRequest({
+        type: "miniapp_apps_start" /* MINIAPPS_START */,
+        packageName
+      });
+    }
+    async stop(packageName) {
+      await this.session.sendRequest({
+        type: "miniapp_apps_stop" /* MINIAPPS_STOP */,
+        packageName
+      });
+    }
+  }
+
+  // vendor/mentra-miniapp/src/modules/actions.ts
+  var HANDLER_WAIT_MS = 5000;
+
+  class ActionsModule {
+    session;
+    handlers = new Map;
+    buffered = new Map;
+    constructor(session) {
+      this.session = session;
+    }
+    invoke(packageName, actionId, params, opts) {
+      return this.session.sendRequest({
+        type: "miniapp_action_invoke" /* ACTION_INVOKE */,
+        targetPackageName: packageName,
+        actionId,
+        params: params ?? {},
+        ...opts?.timeoutMs != null ? { timeoutMs: opts.timeoutMs } : {}
+      });
+    }
+    handle(actionId, handler) {
+      if (this.handlers.has(actionId)) {
+        throw new Error(`session.actions.handle: a handler is already registered for "${actionId}"`);
+      }
+      this.handlers.set(actionId, handler);
+      const waiting = this.buffered.get(actionId);
+      if (waiting) {
+        this.buffered.delete(actionId);
+        for (const call of waiting) {
+          clearTimeout(call.timer);
+          this.dispatch(call.callId, actionId, call.params, call.ctx);
+        }
+      }
+      return () => {
+        if (this.handlers.get(actionId) === handler)
+          this.handlers.delete(actionId);
+      };
+    }
+    _deliver(callId, actionId, params, ctx) {
+      if (this.handlers.has(actionId)) {
+        this.dispatch(callId, actionId, params, ctx);
+        return;
+      }
+      const timer = setTimeout(() => {
+        const arr = this.buffered.get(actionId);
+        if (arr) {
+          const idx = arr.findIndex((c) => c.callId === callId);
+          if (idx >= 0)
+            arr.splice(idx, 1);
+          if (arr.length === 0)
+            this.buffered.delete(actionId);
+        }
+        this.sendResult(callId, false, undefined, {
+          code: "NO_ACTION_HANDLER" /* NO_ACTION_HANDLER */,
+          message: `No handler registered for action "${actionId}"`
+        });
+      }, HANDLER_WAIT_MS);
+      const arr = this.buffered.get(actionId) ?? [];
+      arr.push({ callId, params, ctx, timer });
+      this.buffered.set(actionId, arr);
+    }
+    async dispatch(callId, actionId, params, ctx) {
+      const handler = this.handlers.get(actionId);
+      if (!handler)
+        return;
+      try {
+        const result = await handler(params, ctx);
+        this.sendResult(callId, true, result ?? null);
+      } catch (e) {
+        this.sendResult(callId, false, undefined, {
+          code: "INTERNAL" /* INTERNAL */,
+          message: e?.message ?? "action handler threw"
+        });
+      }
+    }
+    sendResult(callId, ok, result, error) {
+      this.session.sendOneShot({
+        type: "miniapp_action_result" /* ACTION_RESULT */,
+        callId,
+        ok,
+        ...ok ? { result } : { error }
+      });
+    }
+  }
+
+  // vendor/mentra-miniapp/src/modules/blob.ts
+  var BLOB_WRITE_CHUNK_BYTES = 1024 * 1024;
+  var BLOB_WRITE_CHUNK_B64 = Math.floor(BLOB_WRITE_CHUNK_BYTES / 3) * 4;
+  var BLOB_READ_ALL_MAX_BYTES = 32 * 1024 * 1024;
+
+  class BlobWriter {
+    session;
+    key;
+    settled = false;
+    constructor(session, key) {
+      this.session = session;
+      this.key = key;
+    }
+    async write(chunk) {
+      this.assertOpen();
+      const bytes = toUint8Array(chunk);
+      for (let off = 0;off < bytes.length; off += BLOB_WRITE_CHUNK_BYTES) {
+        await this.send(bytesToBase64(bytes.subarray(off, off + BLOB_WRITE_CHUNK_BYTES)));
+      }
+    }
+    async writeBase64(b64) {
+      this.assertOpen();
+      for (let off = 0;off < b64.length; off += BLOB_WRITE_CHUNK_B64) {
+        await this.send(b64.slice(off, off + BLOB_WRITE_CHUNK_B64));
+      }
+    }
+    async writeAt(offset, chunk) {
+      this.assertOpen();
+      await this.session.sendRequest({
+        type: "miniapp_blob_write" /* BLOB_WRITE */,
+        key: this.key,
+        offset,
+        base64: bytesToBase64(toUint8Array(chunk))
+      });
+    }
+    async close(meta) {
+      this.assertOpen();
+      this.settled = true;
+      return this.session.sendRequest({ type: "miniapp_blob_commit" /* BLOB_COMMIT */, key: this.key, meta });
+    }
+    async abort() {
+      if (this.settled)
+        return;
+      this.settled = true;
+      await this.session.sendRequest({ type: "miniapp_blob_abort" /* BLOB_ABORT */, key: this.key });
+    }
+    assertOpen() {
+      if (this.settled)
+        throw new Error("BlobWriter is already closed/aborted");
+    }
+    send(base64) {
+      return this.session.sendRequest({
+        type: "miniapp_blob_write" /* BLOB_WRITE */,
+        key: this.key,
+        base64
+      });
+    }
+  }
+
+  class BlobReader {
+    session;
+    handle;
+    meta;
+    closed = false;
+    constructor(session, handle, meta) {
+      this.session = session;
+      this.handle = handle;
+      this.meta = meta;
+    }
+    async read(maxBytes = BLOB_WRITE_CHUNK_BYTES) {
+      if (this.closed)
+        throw new Error("BlobReader is closed");
+      const res = await this.session.sendRequest({
+        type: "miniapp_blob_read" /* BLOB_READ */,
+        handle: this.handle,
+        maxBytes
+      });
+      return { bytes: base64ToBytes(res?.base64 ?? ""), done: !!res?.done };
+    }
+    async close() {
+      if (this.closed)
+        return;
+      this.closed = true;
+      await this.session.sendRequest({ type: "miniapp_blob_close_read" /* BLOB_CLOSE_READ */, handle: this.handle });
+    }
+  }
+
+  class BlobModule {
+    session;
+    constructor(session) {
+      this.session = session;
+    }
+    async set(key, data, opts = {}) {
+      const writer = await this.createWriteStream(key, opts);
+      try {
+        if (typeof data === "string")
+          await writer.writeBase64(data);
+        else
+          await writer.write(data);
+        return await writer.close();
+      } catch (err) {
+        await writer.abort().catch(() => {});
+        throw err;
+      }
+    }
+    setFromUrl(key, url, opts = {}) {
+      return this.session.sendRequest({
+        type: "miniapp_blob_set_from_url" /* BLOB_SET_FROM_URL */,
+        key,
+        url,
+        mimeType: opts.mimeType,
+        name: opts.name,
+        headers: opts.headers,
+        meta: opts.meta
+      });
+    }
+    importFile(opts = {}) {
+      return this.session.sendRequest({
+        type: "miniapp_blob_import" /* BLOB_IMPORT */,
+        key: opts.key,
+        mimeType: opts.mimeType,
+        meta: opts.meta
+      });
+    }
+    async createWriteStream(key, opts = {}) {
+      const res = await this.session.sendRequest({
+        type: "miniapp_blob_create" /* BLOB_CREATE */,
+        key,
+        mimeType: opts.mimeType,
+        name: opts.name,
+        meta: opts.meta
+      });
+      return new BlobWriter(this.session, res.key);
+    }
+    get(key) {
+      return this.session.sendRequest({ type: "miniapp_blob_get" /* BLOB_GET */, key });
+    }
+    stat(key) {
+      return this.get(key);
+    }
+    async has(key) {
+      return await this.get(key) !== null;
+    }
+    async keys() {
+      return (await this.list()).map((m) => m.key);
+    }
+    async list() {
+      const res = await this.session.sendRequest({ type: "miniapp_blob_list" /* BLOB_LIST */ });
+      return res?.blobs ?? [];
+    }
+    async createReadStream(key) {
+      const res = await this.session.sendRequest({
+        type: "miniapp_blob_open_read" /* BLOB_OPEN_READ */,
+        key
+      });
+      return new BlobReader(this.session, res.handle, res.meta);
+    }
+    async bytes(key) {
+      let reader;
+      try {
+        reader = await this.createReadStream(key);
+      } catch {
+        return null;
+      }
+      const parts = [];
+      let total = 0;
+      try {
+        for (;; ) {
+          const { bytes, done } = await reader.read();
+          if (bytes.length) {
+            total += bytes.length;
+            if (total > BLOB_READ_ALL_MAX_BYTES) {
+              throw new Error(`Blob "${key}" exceeds the in-memory read cap — stream it with createReadStream()`);
+            }
+            parts.push(bytes);
+          }
+          if (done)
+            break;
+        }
+      } finally {
+        await reader.close().catch(() => {});
+      }
+      const out = new Uint8Array(total);
+      let at = 0;
+      for (const p of parts) {
+        out.set(p, at);
+        at += p.length;
+      }
+      return out;
+    }
+    usage() {
+      return this.session.sendRequest({
+        type: "miniapp_blob_usage" /* BLOB_USAGE */
+      });
+    }
+    async delete(key) {
+      await this.session.sendRequest({ type: "miniapp_blob_delete" /* BLOB_DELETE */, key });
+    }
+    async clear() {
+      await this.session.sendRequest({ type: "miniapp_blob_clear" /* BLOB_CLEAR */ });
+    }
+    async share(key) {
+      const res = await this.session.sendRequest({
+        type: "miniapp_blob_share" /* BLOB_SHARE */,
+        key
+      });
+      return res ?? { success: false };
+    }
+  }
+
+  // vendor/mentra-miniapp/src/modules/meeting.ts
+  var MEETING_HOST_UPDATE_MESSAGE = "Update the Mentra App to use Teams calling";
+  function validateMeetingVideoSource(source) {
+    const value = source ?? {};
+    if (value.type === "whep") {
+      const url = typeof value.url === "string" ? value.url.trim() : "";
+      if (!url) {
+        throw { code: "INVALID_ARGUMENT" /* INVALID_ARGUMENT */, message: "videoSource.url is required for a WHEP source" };
+      }
+      return { type: "whep", url };
+    }
+    if (value.type === "softap") {
+      const ssid = typeof value.ssid === "string" ? value.ssid.trim() : "";
+      const passphrase = typeof value.passphrase === "string" ? value.passphrase : "";
+      if (Boolean(ssid) !== Boolean(passphrase)) {
+        throw {
+          code: "INVALID_ARGUMENT" /* INVALID_ARGUMENT */,
+          message: "videoSource.ssid and videoSource.passphrase must be provided together"
+        };
+      }
+      return ssid ? { type: "softap", ssid, passphrase } : { type: "softap" };
+    }
+    throw {
+      code: "INVALID_ARGUMENT" /* INVALID_ARGUMENT */,
+      message: `videoSource must be {type: "whep", url} or {type: "softap"}`
+    };
+  }
+  function parseMeetingEndReason(raw) {
+    if (!raw || typeof raw !== "object")
+      return;
+    const value = raw;
+    const number = (field) => typeof field === "number" && Number.isFinite(field) ? field : undefined;
+    const code = number(value.code);
+    const subcode = number(value.subcode);
+    const message = typeof value.message === "string" && value.message ? value.message : undefined;
+    if (code === undefined && subcode === undefined && message === undefined)
+      return;
+    return {
+      ...code !== undefined ? { code } : {},
+      ...subcode !== undefined ? { subcode } : {},
+      ...message !== undefined ? { message } : {}
+    };
+  }
+  function parseMeetingCapabilities(raw) {
+    if (!raw || typeof raw !== "object")
+      return;
+    const value = raw.hangUpForEveryone;
+    if (!value || typeof value !== "object")
+      return;
+    const capability = value;
+    const rawLobby = raw.manageLobby;
+    const lobby = rawLobby && typeof rawLobby === "object" ? rawLobby : undefined;
+    return {
+      ...lobby ? {
+        manageLobby: {
+          allowed: typeof lobby.allowed === "boolean" ? lobby.allowed : null,
+          reason: typeof lobby.reason === "string" && lobby.reason ? lobby.reason : null
+        }
+      } : {},
+      hangUpForEveryone: {
+        allowed: typeof capability.allowed === "boolean" ? capability.allowed : null,
+        reason: typeof capability.reason === "string" && capability.reason ? capability.reason : null
+      }
+    };
+  }
+  var SOFTAP_STEPS = new Set(["hotspot", "scopedJoin", "acsJoin", "publish", "live"]);
+  var SOFTAP_STEP_STATUSES = new Set(["pending", "running", "done", "failed"]);
+  var SOFTAP_PHASES = new Set(["idle", "starting", "recovering", "live", "stopping", "failed"]);
+  function parseMeetingSoftApProgress(raw) {
+    if (!raw || typeof raw !== "object")
+      return;
+    const value = raw;
+    if (!SOFTAP_PHASES.has(String(value.phase)) || !Array.isArray(value.steps))
+      return;
+    const steps = [];
+    for (const entry of value.steps) {
+      if (!entry || typeof entry !== "object")
+        continue;
+      const step = entry;
+      if (!SOFTAP_STEPS.has(String(step.step)) || !SOFTAP_STEP_STATUSES.has(String(step.status)))
+        continue;
+      steps.push({
+        step: step.step,
+        status: step.status,
+        detail: typeof step.detail === "string" && step.detail ? step.detail : undefined,
+        error: typeof step.error === "string" && step.error ? step.error : undefined,
+        durationMs: typeof step.durationMs === "number" && Number.isFinite(step.durationMs) ? step.durationMs : undefined
+      });
+    }
+    return {
+      traceId: typeof value.traceId === "string" && value.traceId ? value.traceId : undefined,
+      phase: value.phase,
+      steps,
+      elapsedMs: typeof value.elapsedMs === "number" && Number.isFinite(value.elapsedMs) ? value.elapsedMs : 0
+    };
+  }
+  function parseMeetingRecovery(raw) {
+    if (!raw || typeof raw !== "object")
+      return;
+    const value = raw;
+    if (typeof value.active !== "boolean")
+      return;
+    const generation = typeof value.generation === "number" && Number.isFinite(value.generation) ? value.generation : undefined;
+    const deadlineAt = typeof value.deadlineAt === "number" && Number.isFinite(value.deadlineAt) ? value.deadlineAt : undefined;
+    const phase = typeof value.phase === "string" && value.phase ? value.phase : undefined;
+    return {
+      active: value.active,
+      ...generation !== undefined ? { generation } : {},
+      ...deadlineAt !== undefined ? { deadlineAt } : {},
+      ...phase ? { phase } : {}
+    };
+  }
+  var PARTICIPANT_STATES = new Set([
+    "idle",
+    "connecting",
+    "connected",
+    "lobby",
+    "hold",
+    "disconnected"
+  ]);
+  var MEDIA_SOURCES = new Set(["idle", "connecting", "live", "failed"]);
+  function parseMeetingMediaSource(raw) {
+    return MEDIA_SOURCES.has(String(raw)) ? raw : undefined;
+  }
+  function parseMeetingParticipants(raw) {
+    if (!Array.isArray(raw))
+      return;
+    const result = [];
+    for (const entry of raw) {
+      if (!entry || typeof entry !== "object")
+        continue;
+      const value = entry;
+      if (typeof value.id !== "string" || !value.id)
+        continue;
+      result.push({
+        id: value.id,
+        displayName: typeof value.displayName === "string" && value.displayName ? value.displayName : null,
+        state: PARTICIPANT_STATES.has(String(value.state)) ? value.state : "idle",
+        isMuted: Boolean(value.isMuted),
+        isSpeaking: Boolean(value.isSpeaking)
+      });
+    }
+    return result;
+  }
+  function isMiniappRequestError(error) {
+    return Boolean(error && typeof error === "object" && "code" in error);
+  }
+  function mapHostError(error) {
+    if (isMiniappRequestError(error) && error.code === "NOT_IMPLEMENTED" /* NOT_IMPLEMENTED */) {
+      throw { code: "NOT_IMPLEMENTED" /* NOT_IMPLEMENTED */, message: MEETING_HOST_UPDATE_MESSAGE };
+    }
+    throw error;
+  }
+
+  class MeetingModule {
+    session;
+    _state = { state: "idle", muted: false };
+    constructor(session) {
+      this.session = session;
+    }
+    get state() {
+      return { ...this._state };
+    }
+    async join(options) {
+      if (options.provider !== "acs-teams") {
+        throw { code: "INVALID_ARGUMENT" /* INVALID_ARGUMENT */, message: `Unsupported meeting provider: ${options.provider}` };
+      }
+      if (!options.meetingUrl?.trim()) {
+        throw { code: "INVALID_ARGUMENT" /* INVALID_ARGUMENT */, message: "meetingUrl is required" };
+      }
+      const videoSource = validateMeetingVideoSource(options.videoSource);
+      try {
+        const result = await this.session.sendRequest({
+          type: "miniapp_meeting_join" /* MEETING_JOIN */,
+          provider: options.provider,
+          meetingUrl: options.meetingUrl,
+          videoSource,
+          ...options.token ? { token: options.token } : {},
+          displayName: options.displayName,
+          ...options.origin ? { origin: options.origin } : {},
+          ...options.video ? { video: options.video } : {}
+        }, { timeoutMs: 0 });
+        if (result)
+          this._applyState(result);
+        return this.state;
+      } catch (error) {
+        mapHostError(error);
+      }
+    }
+    async getConfiguration() {
+      return this.session.sendRequest({ type: "miniapp_meeting_get_configuration" /* MEETING_GET_CONFIGURATION */ });
+    }
+    async getIdentity() {
+      try {
+        return await this.session.sendRequest({ type: "miniapp_meeting_get_identity" /* MEETING_GET_IDENTITY */ }, { timeoutMs: 30000 });
+      } catch (error) {
+        mapHostError(error);
+      }
+    }
+    async create(options) {
+      if (options.provider !== "acs-teams") {
+        throw { code: "INVALID_ARGUMENT" /* INVALID_ARGUMENT */, message: "Unsupported meeting provider" };
+      }
+      try {
+        return await this.session.sendRequest({
+          type: "miniapp_meeting_create" /* MEETING_CREATE */,
+          provider: options.provider,
+          subject: options.subject,
+          durationMinutes: options.durationMinutes
+        }, { timeoutMs: 0 });
+      } catch (error) {
+        mapHostError(error);
+      }
+    }
+    async retire(meetingRef) {
+      try {
+        await this.session.sendRequest({ type: "miniapp_meeting_retire" /* MEETING_RETIRE */, meetingRef }, { timeoutMs: 0 });
+      } catch (error) {
+        mapHostError(error);
+      }
+    }
+    async leave() {
+      try {
+        await this.session.sendRequest({ type: "miniapp_meeting_leave" /* MEETING_LEAVE */ });
+      } catch (error) {
+        mapHostError(error);
+      }
+    }
+    async end() {
+      try {
+        await this.session.sendRequest({ type: "miniapp_meeting_end" /* MEETING_END */ }, { timeoutMs: 0 });
+      } catch (error) {
+        mapHostError(error);
+      }
+    }
+    async admit(participantId) {
+      if (!participantId.trim())
+        throw new Error("A participant ID is required");
+      try {
+        await this.session.sendRequest({ type: "miniapp_meeting_admit" /* MEETING_ADMIT */, participantId });
+      } catch (error) {
+        mapHostError(error);
+      }
+    }
+    async setMuted(muted) {
+      try {
+        const result = await this.session.sendRequest({
+          type: "miniapp_meeting_set_muted" /* MEETING_SET_MUTED */,
+          muted
+        });
+        if (result)
+          this._applyState(result);
+      } catch (error) {
+        mapHostError(error);
+      }
+    }
+    async setVideoEnabled(enabled) {
+      try {
+        const result = await this.session.sendRequest({
+          type: "miniapp_meeting_set_video_enabled" /* MEETING_SET_VIDEO_ENABLED */,
+          enabled
+        });
+        if (result)
+          this._applyState(result);
+      } catch (error) {
+        mapHostError(error);
+      }
+    }
+    async updateVideoSource(source) {
+      const validated = validateMeetingVideoSource(source);
+      if (validated.type !== "whep") {
+        throw {
+          code: "INVALID_ARGUMENT" /* INVALID_ARGUMENT */,
+          message: "updateVideoSource accepts a WHEP source; a SoftAP call recovers by rejoining"
+        };
+      }
+      try {
+        await this.session.sendRequest({
+          type: "miniapp_meeting_update_video_source" /* MEETING_UPDATE_VIDEO_SOURCE */,
+          videoSource: validated
+        });
+      } catch (error) {
+        mapHostError(error);
+      }
+    }
+    async getState() {
+      try {
+        const result = await this.session.sendRequest({
+          type: "miniapp_meeting_get_state" /* MEETING_GET_STATE */
+        });
+        if (result)
+          this._applyState(result);
+        return this.state;
+      } catch (error) {
+        mapHostError(error);
+      }
+    }
+    onState(handler) {
+      return this.session.on("meetingState", handler);
+    }
+    _applyState(event) {
+      this._state = {
+        identityMode: event.identityMode === "guest" || event.identityMode === "teams-user" ? event.identityMode : undefined,
+        guestReason: event.identityMode === "guest" ? event.guestReason : undefined,
+        state: event.state,
+        muted: Boolean(event.muted),
+        videoEnabled: typeof event.videoEnabled === "boolean" ? event.videoEnabled : undefined,
+        error: event.error,
+        endReason: parseMeetingEndReason(event.endReason),
+        meetingUrl: event.meetingUrl,
+        provider: event.provider,
+        audioSource: event.audioSource,
+        audioSourceReason: event.audioSourceReason,
+        activeStream: event.activeStream,
+        audioSafety: event.audioSafety,
+        mediaSource: parseMeetingMediaSource(event.mediaSource),
+        participants: parseMeetingParticipants(event.participants),
+        capabilities: parseMeetingCapabilities(event.capabilities) ?? this._state.capabilities,
+        softap: parseMeetingSoftApProgress(event.softap),
+        recovery: parseMeetingRecovery(event.recovery) ?? this._state.recovery
+      };
+    }
+  }
+
+  // vendor/mentra-miniapp/src/session.ts
+  var ALL_PERMISSION_TYPES = [
+    "location",
+    "microphone",
+    "camera",
+    "notifications",
+    "calendar"
+  ];
+
+  class NotConnectedError extends Error {
+    code = "NOT_CONNECTED" /* NOT_CONNECTED */;
+    constructor(message = "MiniappSession is not connected") {
+      super(message);
+      this.name = "NotConnectedError";
+    }
+  }
+  var DEFAULT_CONNECT_TIMEOUT_MS = 1e4;
+  var DEFAULT_REQUEST_TIMEOUT_MS = 60000;
+
+  class MiniappSession {
+    auth;
+    configuration;
+    display;
+    events;
+    speaker;
+    meeting;
+    camera;
+    cloud;
+    dashboard;
+    glasses;
+    heading;
+    imu;
+    input;
+    led;
+    location;
+    mic;
+    navigation;
+    permissions;
+    phone;
+    storage;
+    blob;
+    stream;
+    system;
+    transcription;
+    translation;
+    ui;
+    miniapps;
+    actions;
+    capabilities = null;
+    hostFeatures = null;
+    userId = "";
+    packageName = "";
+    visibility = "foreground";
+    colorScheme = "light";
+    ready = false;
+    transport;
+    connectTimeoutMs;
+    emitter = new import__.default;
+    authState = null;
+    configurationState = {};
+    authWaiters = new Set;
+    authRefreshPromise = null;
+    outboundQueue = [];
+    pendingRequests = new Map;
+    connectPromise = null;
+    disposed = false;
+    _permissions = {
+      location: false,
+      microphone: false,
+      camera: false,
+      notifications: false,
+      calendar: false
+    };
+    constructor(options = {}) {
+      this.transport = createTransport(options);
+      this.connectTimeoutMs = options.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS;
+      const injected = getMentraOSGlobals();
+      this.packageName = options.packageName ?? injected.packageName ?? "";
+      if (injected.colorScheme === "light" || injected.colorScheme === "dark") {
+        this.colorScheme = injected.colorScheme;
+      }
+      this.auth = new AuthModule(this);
+      this.configuration = new ConfigurationModule(this);
+      this.events = new EventManager(this);
+      this.speaker = new SpeakerModule(this);
+      this.meeting = new MeetingModule(this);
+      this.camera = new CameraModule(this);
+      this.cloud = new CloudModule(this);
+      this.dashboard = new DashboardAPI(this);
+      this.display = new DisplayManager(this);
+      this.glasses = new GlassesModule(this);
+      this.heading = new HeadingModule(this);
+      this.imu = new ImuModule(this);
+      this.input = new InputModule(this);
+      this.led = new LedModule(this);
+      this.location = new LocationModule(this);
+      this.mic = new MicModule(this);
+      this.navigation = new NavigationModule(this);
+      this.permissions = new PermissionsModule(this);
+      this.phone = new PhoneModule(this);
+      this.storage = new SimpleStorage(this);
+      this.blob = new BlobModule(this);
+      this.stream = new StreamModule(this);
+      this.system = new SystemModule(this);
+      this.transcription = new TranscriptionModule(this);
+      this.translation = new TranslationModule(this);
+      this.ui = new UIModuleImpl(this);
+      this.miniapps = new MiniappsModule(this);
+      this.actions = new ActionsModule(this);
+    }
+    _hasManifestPermission(manifestKey) {
+      const canonical = manifestKeyToCanonical(manifestKey);
+      if (!canonical)
+        return false;
+      return this._permissions[canonical] === true;
+    }
+    _getPermissions() {
+      return { ...this._permissions };
+    }
+    _getAuth() {
+      return this.authState ? { ...this.authState } : null;
+    }
+    _getConfiguration() {
+      return { ...this.configurationState };
+    }
+    _waitForAuth(minTtlMs, timeoutMs = 1e4) {
+      const current = this.authState;
+      if (current && this.authHasTtl(current, minTtlMs)) {
+        return Promise.resolve({ ...current });
+      }
+      this.requestAuthRefresh(minTtlMs);
+      return new Promise((resolve, reject) => {
+        const waiter = {
+          minTtlMs,
+          resolve,
+          reject,
+          timer: setTimeout(() => {
+            this.authWaiters.delete(waiter);
+            reject(new NotConnectedError("Miniapp auth token is not available"));
+          }, timeoutMs)
+        };
+        this.authWaiters.add(waiter);
+      });
+    }
+    _subscribe(streamType, handler, options = {}) {
+      return this.events.subscribe(streamType, handler, options);
+    }
+    connect() {
+      if (this.disposed) {
+        return Promise.reject(new NotConnectedError("MiniappSession was disposed"));
+      }
+      if (this.connectPromise)
+        return this.connectPromise;
+      const readyPromise = new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          const err = new Error("MiniappSession: CONNECT_ACK timeout");
+          this.failAllPending({ code: "NOT_CONNECTED" /* NOT_CONNECTED */, message: err.message });
+          this.emitter.emit("error", err);
+          reject(err);
+        }, this.connectTimeoutMs);
+        this.emitter.once("ready", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+        this.emitter.once("error", (err) => {
+          clearTimeout(timer);
+          reject(err);
+        });
+      });
+      this.connectPromise = (async () => {
+        this.transport.onMessage((raw) => this.handleIncoming(raw));
+        this.transport.onDisconnect((reason) => this.handleTransportDisconnect(reason));
+        await this.transport.open();
+        const requestId = makeRequestId();
+        const connectPayload = {
+          type: "miniapp_connect" /* CONNECT */,
+          packageName: this.packageName
+        };
+        this.transport.send(serializeEnvelope({ payload: connectPayload, requestId }));
+        await readyPromise;
+      })();
+      return this.connectPromise;
+    }
+    waitForReady() {
+      if (this.ready)
+        return Promise.resolve();
+      return this.connect();
+    }
+    isConnected() {
+      return this.ready && this.transport.isOpen();
+    }
+    disconnect() {
+      if (this.disposed)
+        return;
+      this.disposed = true;
+      try {
+        this.emitter.emit("beforeDisconnect", "disconnect called");
+      } catch (err) {
+        console.warn("[MiniappSession] beforeDisconnect handler threw:", err);
+      }
+      this.failAllPending({ code: "REQUEST_ABORTED" /* REQUEST_ABORTED */, message: "Session disconnected" });
+      try {
+        this.transport.close();
+      } catch {}
+      this.ready = false;
+      this.emitter.emit("disconnect", "disconnect called");
+    }
+    sendOneShot(payload) {
+      const envelope = { payload };
+      this.enqueueOrSend(serializeEnvelope(envelope));
+    }
+    sendRequest(payload, opts) {
+      if (this.disposed) {
+        return Promise.reject(new NotConnectedError);
+      }
+      const requestId = makeRequestId();
+      const envelope = { payload, requestId };
+      const timeoutMs = opts?.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+      return new Promise((resolve, reject) => {
+        const timer = timeoutMs > 0 ? setTimeout(() => {
+          const pending = this.pendingRequests.get(requestId);
+          if (!pending)
+            return;
+          this.pendingRequests.delete(requestId);
+          pending.reject({
+            code: "ACTION_TIMEOUT" /* ACTION_TIMEOUT */,
+            message: "Request timed out waiting for a response from the host"
+          });
+        }, timeoutMs) : undefined;
+        this.pendingRequests.set(requestId, {
+          requestId,
+          resolve,
+          reject,
+          timer
+        });
+        this.enqueueOrSend(serializeEnvelope(envelope));
+      });
+    }
+    on(event, handler) {
+      this.emitter.on(event, handler);
+      return () => this.emitter.off(event, handler);
+    }
+    off(event, handler) {
+      this.emitter.off(event, handler);
+    }
+    onBeforeDisconnect(handler) {
+      return this.on("beforeDisconnect", handler);
+    }
+    onVisibilityChange(handler) {
+      return this.on("visibility", handler);
+    }
+    onCapabilitiesChange(handler) {
+      return this.on("capabilities", handler);
+    }
+    onColorSchemeChange(handler) {
+      return this.on("colorScheme", handler);
+    }
+    enqueueOrSend(raw) {
+      if (this.ready) {
+        try {
+          this.transport.send(raw);
+        } catch (err) {
+          this.emitter.emit("error", err);
+        }
+        return;
+      }
+      this.outboundQueue.push(raw);
+    }
+    flushQueue() {
+      const queue = this.outboundQueue.splice(0);
+      for (const raw of queue) {
+        try {
+          this.transport.send(raw);
+        } catch (err) {
+          this.emitter.emit("error", err);
+        }
+      }
+    }
+    handleIncoming(raw) {
+      const envelope = parseEnvelope(raw);
+      if (!envelope)
+        return;
+      const payload = envelope.payload;
+      const type = payload?.type;
+      switch (type) {
+        case "miniapp_connect_ack" /* CONNECT_ACK */: {
+          const ack = payload;
+          this.userId = ack.userId ?? "";
+          if (ack.packageName)
+            this.packageName = ack.packageName;
+          this.capabilities = ack.capabilities ?? null;
+          this.hostFeatures = ack.hostFeatures ?? null;
+          if (ack.visibility)
+            this.visibility = ack.visibility;
+          if (ack.colorScheme === "light" || ack.colorScheme === "dark") {
+            this.colorScheme = ack.colorScheme;
+          }
+          if (ack.auth) {
+            this.applyAuth(ack.auth);
+            if (!this.userId)
+              this.userId = ack.auth.mentraUserId;
+          }
+          this.configurationState = Object.freeze({ ...ack.configuration });
+          if (ack.permissions)
+            this.applyPermissions(ack.permissions);
+          this.ready = true;
+          this.flushQueue();
+          this.emitter.emit("ready");
+          return;
+        }
+        case "miniapp_auth_update" /* AUTH_UPDATE */: {
+          const next = payload.auth;
+          if (next) {
+            this.applyAuth(next);
+            if (!this.userId)
+              this.userId = next.mentraUserId;
+          }
+          return;
+        }
+        case "miniapp_permissions_update" /* PERMISSIONS_UPDATE */: {
+          const next = payload.permissions;
+          if (next)
+            this.applyPermissions(next);
+          return;
+        }
+        case "miniapp_speaker_state" /* SPEAKER_STATE */: {
+          const state = payload.state;
+          if (!state)
+            return;
+          const event = {
+            state,
+            errorCode: payload.errorCode,
+            errorMessage: payload.errorMessage,
+            durationMs: payload.durationMs
+          };
+          this.speaker._applyState(event);
+          this.emitter.emit("speakerState", event);
+          return;
+        }
+        case "miniapp_meeting_state" /* MEETING_STATE */: {
+          const state = payload.state;
+          if (!state)
+            return;
+          const event = {
+            state,
+            muted: Boolean(payload.muted),
+            videoEnabled: typeof payload.videoEnabled === "boolean" ? payload.videoEnabled : undefined,
+            error: payload.error,
+            meetingUrl: payload.meetingUrl,
+            provider: payload.provider,
+            audioSource: payload.audioSource,
+            audioSourceReason: payload.audioSourceReason,
+            activeStream: payload.activeStream,
+            audioSafety: payload.audioSafety,
+            mediaSource: parseMeetingMediaSource(payload.mediaSource),
+            endReason: parseMeetingEndReason(payload.endReason),
+            participants: parseMeetingParticipants(payload.participants),
+            capabilities: parseMeetingCapabilities(payload.capabilities),
+            softap: parseMeetingSoftApProgress(payload.softap),
+            recovery: parseMeetingRecovery(payload.recovery)
+          };
+          this.meeting._applyState(event);
+          this.emitter.emit("meetingState", event);
+          return;
+        }
+        case "miniapp_stream_preview_status" /* STREAM_PREVIEW_STATUS */: {
+          this.stream._applyPreviewStatus(payload);
+          return;
+        }
+        case "miniapp_ping" /* PING */: {
+          const pong = { type: "miniapp_pong" /* PONG */ };
+          const env = {
+            payload: pong,
+            ...envelope.requestId ? { requestId: envelope.requestId } : {}
+          };
+          try {
+            this.transport.send(serializeEnvelope(env));
+          } catch {}
+          return;
+        }
+        case "miniapp_event" /* EVENT */: {
+          const streamType = payload.streamType;
+          if (!streamType)
+            return;
+          this.events._forwardEvent(streamType, payload.data, payload.transcriptionRoute);
+          return;
+        }
+        case "miniapp_action_call" /* ACTION_CALL */: {
+          const callId = payload.callId;
+          const actionId = payload.actionId;
+          if (!callId || !actionId)
+            return;
+          const params = payload.params ?? {};
+          const callerPackageName = payload.callerPackageName ?? "";
+          this.actions._deliver(callId, actionId, params, { callerPackageName });
+          return;
+        }
+        case "miniapp_capabilities_update" /* CAPABILITIES_UPDATE */: {
+          const cap = payload.capabilities ?? null;
+          this.capabilities = cap;
+          this.emitter.emit("capabilities", cap);
+          return;
+        }
+        case "miniapp_visibility_change" /* VISIBILITY_CHANGE */: {
+          const next = payload.visibility;
+          if (next === "foreground" || next === "background") {
+            this.visibility = next;
+            this.emitter.emit("visibility", next);
+          }
+          return;
+        }
+        case "miniapp_color_scheme_change" /* COLOR_SCHEME_CHANGE */: {
+          const next = payload.colorScheme;
+          if (next === "light" || next === "dark") {
+            this.colorScheme = next;
+            this.emitter.emit("colorScheme", next);
+          }
+          return;
+        }
+        case "miniapp_request_result" /* REQUEST_RESULT */: {
+          const requestId = envelope.requestId;
+          if (!requestId)
+            return;
+          const pending = this.pendingRequests.get(requestId);
+          if (!pending)
+            return;
+          this.pendingRequests.delete(requestId);
+          if (pending.timer)
+            clearTimeout(pending.timer);
+          if (payload.ok === false) {
+            const err = payload.error ?? {
+              code: "INTERNAL" /* INTERNAL */,
+              message: "Unknown error"
+            };
+            pending.reject(err);
+          } else {
+            pending.resolve(payload.data ?? null);
+          }
+          return;
+        }
+        case "miniapp_will_disconnect" /* WILL_DISCONNECT */: {
+          const reason = payload.reason ?? "phone unregistering";
+          try {
+            this.emitter.emit("beforeDisconnect", reason);
+          } catch (err) {
+            console.warn("[MiniappSession] beforeDisconnect handler threw:", err);
+          }
+          return;
+        }
+        case "miniapp_error" /* ERROR */: {
+          const err = new Error(payload.message ?? "MiniappSession error");
+          this.emitter.emit("error", err);
+          return;
+        }
+        default:
+          return;
+      }
+    }
+    handleTransportDisconnect(reason) {
+      this.ready = false;
+      this.failAllPending({ code: "NOT_CONNECTED" /* NOT_CONNECTED */, message: `Transport disconnected: ${reason}` });
+      this.emitter.emit("disconnect", reason);
+    }
+    failAllPending(error) {
+      for (const pending of this.pendingRequests.values()) {
+        if (pending.timer)
+          clearTimeout(pending.timer);
+        pending.reject(error);
+      }
+      this.pendingRequests.clear();
+      for (const waiter of Array.from(this.authWaiters)) {
+        clearTimeout(waiter.timer);
+        this.authWaiters.delete(waiter);
+        waiter.reject(new NotConnectedError(error.message));
+      }
+    }
+    authHasTtl(auth, minTtlMs) {
+      return auth.expiresAt - Date.now() > minTtlMs;
+    }
+    requestAuthRefresh(minTtlMs) {
+      if (this.authRefreshPromise)
+        return this.authRefreshPromise;
+      if (!this.ready || !this.transport.isOpen())
+        return Promise.resolve(null);
+      this.authRefreshPromise = this.sendRequest({
+        type: "miniapp_auth_refresh" /* AUTH_REFRESH */,
+        minTtlMs
+      }).then((result) => {
+        const auth = result?.auth;
+        if (auth)
+          this.applyAuth(auth);
+        return auth ?? null;
+      }).catch((err) => {
+        console.warn("[MiniappSession] auth refresh failed:", err);
+        return null;
+      }).finally(() => {
+        this.authRefreshPromise = null;
+      });
+      return this.authRefreshPromise;
+    }
+    applyAuth(next) {
+      this.authState = { ...next };
+      for (const waiter of Array.from(this.authWaiters)) {
+        if (!this.authHasTtl(next, waiter.minTtlMs))
+          continue;
+        clearTimeout(waiter.timer);
+        this.authWaiters.delete(waiter);
+        waiter.resolve({ ...next });
+      }
+      this.emitter.emit("auth", { ...next });
+    }
+    applyPermissions(next) {
+      let changed = false;
+      const updated = { ...this._permissions };
+      for (const k of ALL_PERMISSION_TYPES) {
+        const v = next[k] === true;
+        if (updated[k] !== v) {
+          updated[k] = v;
+          changed = true;
+        }
+      }
+      if (changed) {
+        this._permissions = updated;
+        this.emitter.emit("permissions", { ...updated });
+      }
+    }
+  }
+  function manifestKeyToCanonical(manifestKey) {
+    switch (manifestKey.toUpperCase()) {
+      case "MICROPHONE":
+        return "microphone";
+      case "CAMERA":
+        return "camera";
+      case "LOCATION":
+      case "BACKGROUND_LOCATION":
+        return "location";
+      case "READ_NOTIFICATIONS":
+      case "POST_NOTIFICATIONS":
+        return "notifications";
+      case "CALENDAR":
+        return "calendar";
+      default:
+        return null;
+    }
+  }
+
+  // vendor/mentra-miniapp/src/background/register.ts
+  function registerMiniapp(handler, options = {}) {
+    const g = globalThis;
+    g.__mentraInitCallback = (_sessionId) => {
+      const session = new MiniappSession(options);
+      try {
+        const result = handler(session);
+        if (result && typeof result.then === "function") {
+          result.catch((err) => {
+            console.error("[mentra-miniapp] registerMiniapp handler rejected:", err);
+          });
+        }
+      } catch (err) {
+        console.error("[mentra-miniapp] registerMiniapp handler threw:", err);
+      }
+      session.connect().catch((err) => {
+        console.error("[mentra-miniapp] session.connect() rejected:", err);
+        try {
+          const message = err instanceof Error ? err.message : String(err);
+          const stack = err instanceof Error && err.stack ? err.stack : "";
+          g.__hostError?.(JSON.stringify({ message: `session.connect() failed: ${message}`, stack }));
+        } catch {}
+      });
+    };
+  }
+  // src/background/glyphs.ts
+  var G1_GLYPH_PX = { " ": 6, "!": 4, '"': 6, "#": 14, $: 12, "%": 14, "&": 16, "'": 4, "(": 6, ")": 6, "*": 8, "+": 10, ",": 4, "-": 10, ".": 4, "/": 8, "0": 12, "1": 8, "2": 12, "3": 12, "4": 12, "5": 12, "6": 12, "7": 12, "8": 12, "9": 12, ":": 4, ";": 4, "<": 10, "=": 10, ">": 10, "?": 12, "@": 16, A: 14, B: 12, C: 12, D: 12, E: 10, F: 10, G: 12, H: 12, I: 6, J: 8, K: 12, L: 10, M: 16, N: 12, O: 12, P: 12, Q: 12, R: 12, S: 12, T: 12, U: 12, V: 14, W: 16, X: 14, Y: 14, Z: 12, "[": 6, "\\": 8, "]": 6, "^": 10, _: 8, "`": 6, a: 12, b: 10, c: 10, d: 10, e: 10, f: 10, g: 10, h: 10, i: 4, j: 6, k: 10, l: 4, m: 16, n: 10, o: 10, p: 10, q: 10, r: 8, s: 10, t: 8, u: 12, v: 12, w: 16, x: 12, y: 12, z: 10, "{": 8, "|": 4, "}": 8, "~": 16, "À": 16, "Â": 16, "Ç": 16, "È": 16, "É": 16, "Ê": 16, "Ë": 16, "Î": 16, "Ï": 16, "Ô": 16, "Ù": 16, "Û": 16, "Ü": 16, "à": 16, "ç": 16, "è": 16, "é": 16, "ê": 16, "ë": 16, "î": 16, "ï": 16, "ô": 16, "ù": 16, "û": 16, "ü": 16, "ÿ": 16, "Ÿ": 16, "Ä": 16, "ä": 16, "Ö": 16, "ö": 16, "ß": 16, "ẞ": 16, "â": 16, "Á": 16, "á": 16, "Í": 16, "í": 16, "Ñ": 16, "ñ": 16, "ú": 16, "Ó": 16, "ó": 16, "Ú": 16, "…": 16, "·": 16, "•": 16, "–": 16, "—": 16, "“": 16, "”": 16, "‘": 16, "’": 16, "‹": 16, "›": 16, "⁄": 16, "½": 16, "¼": 16, "¾": 16, "⅛": 16, "⅜": 16, "⅝": 16, "⅞": 16, "₀": 16, "₁": 16, "₂": 16, "₃": 16, "₄": 16, "₅": 16, "₆": 16, "₇": 16, "₈": 16, "₉": 16, "⁰": 16, "ⁱ": 16, "⁲": 16, "⁳": 16, "⁴": 16, "⁵": 16, "⁶": 16, "⁷": 16, "⁸": 16, "⁹": 16, "¿": 16, "‚": 16, "„": 16, "«": 16, "»": 16, "฿": 16, "¶": 16, "§": 16, "©": 18, "®": 16, "™": 16, "°": 16, "¦": 16, "†": 16, "‡": 16, "€": 16, "₿": 16, "¢": 16, "£": 16, "¥": 16, "−": 16, "×": 16, "÷": 16, "≠": 16, "≥": 16, "≤": 16, "±": 16, "≈": 16, "¬": 16, "∞": 18, "∫": 16, "∏": 16, "∑": 16, "√": 16, "∂": 16, "‰": 16, "↑": 16, "↗": 16, "→": 16, "↘": 16, "↓": 16, "↙": 16, "←": 16, "↖": 16, "↔": 18, "↕": 16, "◌": 20, "◊": 16, "¨": 16, "˙": 16, "´": 16, "˝": 16, "ˆ": 16, "ˇ": 16, "˘": 16, "˚": 16, "˜": 16, "¯": 16, "¸": 16, "˛": 16, "Ĳ": 16, "ĳ": 16, "Š": 16, "š": 16, "Ž": 16, "ž": 16, "Ã": 16, "Å": 16, "Æ": 18, "Ì": 16, "Ð": 16, "Ò": 16, "Õ": 16, "Ø": 16, "Ý": 16, "Þ": 16, "ã": 16, "å": 16, "æ": 18, "ì": 16, "ð": 16, "ò": 16, "õ": 16, "ø": 16, "ý": 16, "þ": 16, "Ą": 16, "ą": 16, "Ć": 16, "ć": 16, "Č": 16, "č": 16, "Ď": 16, "ď": 16, "Ę": 16, "ę": 16, "Ě": 16, "ě": 16, "Ğ": 16, "ğ": 16, "Ł": 16, "ł": 16, "Ń": 16, "ń": 16, "Ň": 16, "ň": 16, "Ř": 16, "ř": 16, "Ś": 16, "ś": 16, "Ş": 16, "ş": 16, "Ť": 16, "ť": 16, "Ů": 16, "ů": 16, "Ź": 16, "ź": 16, "Ż": 16, "ż": 16, "☐": 24, "✓": 24, "Ă": 16, "ă": 16, "ı": 16, "Ș": 16, "ș": 16, "Ț": 16, "ț": 16, "А": 18, "Б": 18, "В": 18, "Г": 18, "Ѓ": 18, "Ґ": 18, "Д": 18, "Е": 18, "Ё": 18, "Ж": 18, "З": 18, "И": 18, "Й": 18, "К": 18, "Ќ": 18, "Л": 18, "М": 18, "Н": 18, "О": 18, "П": 18, "Р": 18, "С": 18, "Т": 18, "У": 18, "Ў": 18, "Ф": 18, "Х": 18, "Ч": 18, "Ц": 18, "Ш": 18, "Щ": 20, "Џ": 18, "Ь": 18, "Ы": 18, "Ъ": 18, "Љ": 26, "Њ": 22, "Ѕ": 18, "Є": 18, "Э": 18, "І": 18, "Ї": 18, "Ј": 18, "Ћ": 18, "Ю": 18, "Я": 18, "Ђ": 18, "а": 18, "б": 18, "в": 18, "г": 18, "ѓ": 18, "ґ": 18, "д": 18, "е": 18, "ё": 18, "ж": 18, "з": 18, "и": 18, "й": 18, "к": 18, "ќ": 18, "л": 18, "м": 18, "н": 18, "о": 18, "п": 18, "р": 18, "с": 18, "т": 18, "у": 18, "ў": 18, "ф": 18, "х": 18, "ч": 18, "ц": 18, "ш": 18, "щ": 18, "џ": 18, "ь": 18, "ы": 18, "ъ": 18, "љ": 20, "њ": 18, "ѕ": 18, "є": 18, "э": 18, "і": 18, "ї": 18, "ј": 18, "ћ": 18, "ю": 18, "я": 18, "ђ": 18, "ǖ": 16, "ǘ": 16, "ǚ": 16, "ǜ": 16, "ǎ": 16, "ǐ": 16, "ǒ": 16, "ǔ": 16, "Ő": 16, "ő": 16, "Ű": 16, "ű": 16 };
+
+  // src/background/g1text.ts
+  var G1_LINE_PX = 556;
+  var G1_LINES = 5;
+  var UNKNOWN_PX = 18;
+  function charPx(ch) {
+    return G1_GLYPH_PX[ch] ?? UNKNOWN_PX;
+  }
+  function textPx(s) {
+    let w = 0;
+    for (const ch of s)
+      w += charPx(ch);
+    return w;
+  }
+  var REPLACE = {
+    "№": "No",
+    " ": " ",
+    " ": " ",
+    " ": " ",
+    "\t": " ",
+    "‑": "-",
+    "‐": "-",
+    "−": "-",
+    "×": "x",
+    "✓": "+",
+    "✔": "+",
+    "✗": "x",
+    "★": "*",
+    "➜": "→",
+    "⇒": "→",
+    "⟶": "→",
+    "´": "'",
+    "`": "'"
+  };
+  function sanitizeForG1(input) {
+    let t = String(input ?? "").replace(/\r\n?/g, `
+`);
+    t = t.replace(/```[^\n]*\n?/g, "");
+    t = t.replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1");
+    t = t.replace(/\[([^\]]+)\]\((?:[^()]|\([^)]*\))*\)/g, "$1");
+    t = t.replace(/https?:\/\/(?:www\.)?([^\s/)]+)[^\s)]*/g, "$1");
+    t = t.replace(/^[ \t]{0,3}#{1,6}[ \t]+/gm, "");
+    t = t.replace(/^[ \t]{0,3}>[ \t]?/gm, "");
+    t = t.replace(/^[ \t]*([-*_])([ \t]*\1){2,}[ \t]*$/gm, "");
+    t = t.replace(/^[ \t]*\|?([ \t]*:?-{2,}:?[ \t]*\|)+[ \t]*:?-*:?[ \t]*$/gm, "");
+    t = t.replace(/^[ \t]*\|(.*)\|[ \t]*$/gm, (_m, inner) => inner.split("|").map((c) => c.trim()).filter(Boolean).join(" · "));
+    t = t.replace(/^[ \t]*[-*+•▪●◦][ \t]+/gm, "• ");
+    t = t.replace(/(\*\*|__)(.+?)\1/g, "$2");
+    t = t.replace(/(^|[\s(«"])[*_]([^*_\n]+)[*_](?=[\s).,!?:;»"]|$)/g, "$1$2");
+    t = t.replace(/`([^`]*)`/g, "$1");
+    t = t.replace(/【[^】]*】/g, "");
+    t = t.replace(/\s?\[\d+(?:,\s*\d+)*\]/g, "");
+    let out = "";
+    for (const ch of t) {
+      const r = REPLACE[ch];
+      if (r !== undefined) {
+        out += r;
+      } else if (ch === `
+` || G1_GLYPH_PX[ch] !== undefined) {
+        out += ch;
+      }
+    }
+    return out.split(`
+`).map((l) => l.replace(/ {2,}/g, " ").trim()).filter((l) => l.length > 0).join(`
+`);
+  }
+  function splitLongWord(word, maxPx) {
+    const parts = [];
+    let cur = "";
+    let w = 0;
+    const hyphen = charPx("-");
+    for (const ch of word) {
+      const cw = charPx(ch);
+      if (cur && w + cw + hyphen > maxPx) {
+        parts.push(cur + "-");
+        cur = "";
+        w = 0;
+      }
+      cur += ch;
+      w += cw;
+    }
+    if (cur)
+      parts.push(cur);
+    return parts;
+  }
+  function wrapLines(text, maxPx = G1_LINE_PX) {
+    const lines = [];
+    const space = charPx(" ");
+    for (const para of text.split(`
+`)) {
+      const words = para.split(" ").filter(Boolean);
+      let cur = "";
+      let w = 0;
+      for (const word of words) {
+        const pieces = textPx(word) > maxPx ? splitLongWord(word, maxPx) : [word];
+        for (const piece of pieces) {
+          const pw = textPx(piece);
+          if (!cur) {
+            cur = piece;
+            w = pw;
+          } else if (w + space + pw <= maxPx) {
+            cur += " " + piece;
+            w += space + pw;
+          } else {
+            lines.push(cur);
+            cur = piece;
+            w = pw;
+          }
+        }
+      }
+      if (cur)
+        lines.push(cur);
+    }
+    return lines;
+  }
+  function paginate(text, opts = {}) {
+    const linesPerScreen = opts.linesPerScreen ?? G1_LINES;
+    const maxPx = opts.maxPx ?? G1_LINE_PX;
+    const lines = wrapLines(text, maxPx);
+    if (lines.length === 0)
+      return [];
+    if (lines.length <= linesPerScreen)
+      return [lines.join(`
+`)];
+    const perPage = linesPerScreen - 1;
+    const total = Math.ceil(lines.length / perPage);
+    const pages = [];
+    for (let i = 0;i < total; i++) {
+      const chunk = lines.slice(i * perPage, (i + 1) * perPage);
+      const hint = i === total - 1 ? total > 1 ? "назад · сначала" : "" : "дальше";
+      const footer = `${i + 1}/${total} · ${hint}`;
+      pages.push([...chunk, footer].join(`
+`));
+    }
+    return pages;
+  }
+  function fitScreen(text, maxLines = G1_LINES) {
+    const lines = wrapLines(sanitizeForG1(text));
+    if (lines.length <= maxLines)
+      return lines.join(`
+`);
+    const kept = lines.slice(0, maxLines);
+    kept[maxLines - 1] = kept[maxLines - 1].replace(/\s*\S*$/, "") + "…";
+    return kept.join(`
+`);
+  }
+
+  // src/background/openai.ts
+  var OPENAI_URL = "https://api.openai.com/v1/responses";
+  function pad(n) {
+    return n < 10 ? "0" + n : String(n);
+  }
+  function localDateTime(d = new Date) {
+    const days = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
+    const off = -d.getTimezoneOffset();
+    const sign = off >= 0 ? "+" : "-";
+    const tz = `UTC${sign}${pad(Math.floor(Math.abs(off) / 60))}:${pad(Math.abs(off) % 60)}`;
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())} (${days[d.getDay()]}, ${tz})`;
+  }
+  function buildInstructions(s, now = new Date) {
+    const parts = [
+      "Ты — голосовой помощник. Твои ответы показываются на крошечном дисплее умных очков Even Realities G1: 5 строк примерно по 30 символов, монохромный текст. Пользователь не видит телефон.",
+      "Отвечай по-русски, если пользователь явно не попросил другой язык.",
+      "Пиши обычным текстом без Markdown: без заголовков, звёздочек, таблиц, ссылок, эмодзи и блоков кода.",
+      `Начинай сразу с сути, без вступлений и повторения вопроса. По умолчанию уложись примерно в ${s.answerWords} слов. Если пользователь просит подробнее или вопрос этого требует — можно длиннее, короткими абзацами.`,
+      "Списки оформляй короткими строками, каждая начинается с «• ». Числа пиши цифрами.",
+      "Вопрос получен через распознавание речи и может содержать ошибки — угадывай смысл по контексту. Если запрос совсем непонятен, коротко переспроси.",
+      "Учитывай предыдущие реплики разговора: пользователь может задавать уточняющие вопросы.",
+      `Текущие дата и время у пользователя: ${localDateTime(now)}.`
+    ];
+    if (s.aboutMe.trim())
+      parts.push(`Что известно о пользователе (учитывай, когда уместно):
+${s.aboutMe.trim()}`);
+    if (s.instructions.trim())
+      parts.push(`Дополнительные пожелания пользователя:
+${s.instructions.trim()}`);
+    return parts.join(`
+
+`);
+  }
+  function effortFor(s) {
+    if (s.effort !== "auto")
+      return s.effort;
+    const m = s.model.toLowerCase();
+    if (m.includes("terra") || m.includes("luna"))
+      return "none";
+    if (m.includes("sol") || m.includes("astra"))
+      return "low";
+    return null;
+  }
+  function buildRequestBody(s, history, question, opts = {}) {
+    const recent = s.historyMessages > 0 ? history.slice(-s.historyMessages) : [];
+    const input = [
+      ...recent.map((m) => ({ role: m.role, content: m.content })),
+      { role: "user", content: question }
+    ];
+    const body = {
+      model: s.model,
+      instructions: buildInstructions(s, opts.now),
+      input,
+      store: false,
+      max_output_tokens: Math.min(8000, Math.max(600, s.answerWords * 12))
+    };
+    const effort = effortFor(s);
+    if (effort && opts.includeReasoning !== false)
+      body.reasoning = { effort };
+    if (s.webSearch)
+      body.tools = [{ type: "web_search" }];
+    return body;
+  }
+  function extractText(data) {
+    if (data && typeof data.output_text === "string" && data.output_text.trim())
+      return data.output_text.trim();
+    const out = [];
+    for (const item of Array.isArray(data?.output) ? data.output : []) {
+      if (item?.type !== "message")
+        continue;
+      for (const c of Array.isArray(item.content) ? item.content : []) {
+        if ((c?.type === "output_text" || c?.type === "text") && typeof c.text === "string")
+          out.push(c.text);
+      }
+    }
+    return out.join(`
+`).trim();
+  }
+
+  class OpenAIError extends Error {
+    status;
+    code;
+    raw;
+    constructor(message, status, code, raw) {
+      super(message);
+      this.status = status;
+      this.code = code;
+      this.raw = raw;
+      this.name = "OpenAIError";
+    }
+  }
+  function explainError(status, code, message) {
+    const m = (message || "").toLowerCase();
+    if (status === 0)
+      return "Нет связи с OpenAI. Проверьте интернет на телефоне.";
+    if (status === 401)
+      return "Ключ OpenAI не принят. Проверьте ключ в настройках.";
+    if (code === "insufficient_quota" || m.includes("quota") || m.includes("billing"))
+      return "На счёте OpenAI API нет средств. Пополните баланс на platform.openai.com.";
+    if (status === 429)
+      return "OpenAI просит подождать (лимит запросов). Повторите через минуту.";
+    if (status === 404 || code === "model_not_found")
+      return "Модель недоступна для вашего ключа. Выберите другую в настройках.";
+    if (status === 403)
+      return "Доступ запрещён: проверьте права ключа и проекта OpenAI.";
+    if (status >= 500)
+      return "Сбой на стороне OpenAI. Повторите вопрос.";
+    return `Ошибка OpenAI ${status}${code ? " (" + code + ")" : ""}.`;
+  }
+  function parseError(status, raw) {
+    let code = "";
+    let message = raw.slice(0, 300);
+    try {
+      const j = JSON.parse(raw);
+      code = String(j?.error?.code ?? j?.error?.type ?? "");
+      message = String(j?.error?.message ?? message);
+    } catch {}
+    return new OpenAIError(message, status, code, raw.slice(0, 1000));
+  }
+  function withTimeout(p, ms, setTimer) {
+    return new Promise((resolve, reject) => {
+      const t = setTimer(() => reject(new OpenAIError("timeout", 0, "timeout", "")), ms);
+      p.then((v) => {
+        clearTimeout(t);
+        resolve(v);
+      }, (e) => {
+        clearTimeout(t);
+        reject(e);
+      });
+    });
+  }
+  async function askOpenAI(fetchFn, s, history, question, opts = {}) {
+    if (!s.apiKey)
+      throw new OpenAIError("no key", 401, "no_key", "");
+    const now = opts.now ?? Date.now;
+    const setTimer = opts.setTimer ?? setTimeout;
+    const started = now();
+    const send = async (includeReasoning) => {
+      const body = JSON.stringify(buildRequestBody(s, history, question, { includeReasoning }));
+      let res;
+      try {
+        res = await withTimeout(fetchFn(OPENAI_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${s.apiKey}` },
+          body
+        }), opts.timeoutMs ?? 60000, setTimer);
+      } catch (e) {
+        if (e instanceof OpenAIError)
+          throw e;
+        throw new OpenAIError(String(e?.message ?? e), 0, "network", "");
+      }
+      const raw = await res.text();
+      return { res, raw };
+    };
+    let { res, raw } = await send(true);
+    if (!res.ok && res.status === 400 && /reasoning|effort/i.test(raw) && effortFor(s)) {
+      ({ res, raw } = await send(false));
+    }
+    if (!res.ok)
+      throw parseError(res.status, raw);
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      throw new OpenAIError("bad json", res.status, "bad_json", raw.slice(0, 300));
+    }
+    const text = extractText(data);
+    if (!text) {
+      const reason = data?.incomplete_details?.reason ?? data?.status ?? "empty";
+      throw new OpenAIError(`empty answer (${reason})`, res.status, "empty", raw.slice(0, 300));
+    }
+    return { text, ms: now() - started, model: String(data?.model ?? s.model), usage: data?.usage };
+  }
+
+  // src/background/store.ts
+  var DEFAULT_SETTINGS = {
+    apiKey: "",
+    model: "gpt-6.1-terra",
+    effort: "auto",
+    aboutMe: "",
+    instructions: "",
+    wakeWords: ["вопрос", "ассистент", "джипити", "чат джипити", "чат gpt", "chat gpt", "chatgpt", "гпт"],
+    listenMode: "wake",
+    sttLanguage: "ru-RU",
+    answerWords: 60,
+    historyMessages: 20,
+    webSearch: false,
+    autoAdvanceSec: 0,
+    clearAfterSec: 90,
+    followUpSec: 0
+  };
+  var SETTINGS_KEY = "g1gpt.settings.v1";
+  var HISTORY_KEY = "g1gpt.history.v1";
+  function clampInt(v, min, max, dflt) {
+    const n = typeof v === "number" ? v : parseInt(String(v), 10);
+    if (!Number.isFinite(n))
+      return dflt;
+    return Math.min(max, Math.max(min, Math.round(n)));
+  }
+  function normalizeSettings(raw, base = DEFAULT_SETTINGS) {
+    const r = raw ?? {};
+    const pick = (k) => r[k] !== undefined ? r[k] : base[k];
+    const wake = pick("wakeWords");
+    const wakeWords = (Array.isArray(wake) ? wake : String(wake).split(",")).map((w) => String(w).trim()).filter(Boolean).slice(0, 20);
+    const listenMode = pick("listenMode");
+    const effort = pick("effort");
+    const stt = pick("sttLanguage");
+    return {
+      apiKey: String(pick("apiKey") ?? "").trim(),
+      model: String(pick("model") || DEFAULT_SETTINGS.model).trim(),
+      effort: ["auto", "none", "low", "medium", "high"].includes(effort) ? effort : "auto",
+      aboutMe: String(pick("aboutMe") ?? "").slice(0, 4000),
+      instructions: String(pick("instructions") ?? "").slice(0, 4000),
+      wakeWords: wakeWords.length ? wakeWords : DEFAULT_SETTINGS.wakeWords,
+      listenMode: ["wake", "always", "off"].includes(listenMode) ? listenMode : "wake",
+      sttLanguage: stt === "auto" ? "auto" : "ru-RU",
+      answerWords: clampInt(pick("answerWords"), 15, 400, DEFAULT_SETTINGS.answerWords),
+      historyMessages: clampInt(pick("historyMessages"), 0, 60, DEFAULT_SETTINGS.historyMessages),
+      webSearch: Boolean(pick("webSearch")),
+      autoAdvanceSec: clampInt(pick("autoAdvanceSec"), 0, 60, 0),
+      clearAfterSec: clampInt(pick("clearAfterSec"), 0, 3600, DEFAULT_SETTINGS.clearAfterSec),
+      followUpSec: clampInt(pick("followUpSec"), 0, 120, 0)
+    };
+  }
+
+  class Store {
+    kv;
+    constructor(kv) {
+      this.kv = kv;
+    }
+    read(key) {
+      try {
+        const s = this.kv?.getItem(key);
+        return s ? JSON.parse(s) : null;
+      } catch {
+        return null;
+      }
+    }
+    write(key, value) {
+      try {
+        this.kv?.setItem(key, JSON.stringify(value));
+      } catch {}
+    }
+    loadSettings() {
+      return normalizeSettings(this.read(SETTINGS_KEY));
+    }
+    saveSettings(s) {
+      this.write(SETTINGS_KEY, s);
+    }
+    loadHistory() {
+      const h = this.read(HISTORY_KEY);
+      return Array.isArray(h) ? h.filter((m) => m && typeof m.content === "string") : [];
+    }
+    saveHistory(h) {
+      this.write(HISTORY_KEY, h.slice(-200));
+    }
+  }
+
+  // src/background/voice.ts
+  function normalize(s) {
+    return String(s ?? "").toLowerCase().replace(/ё/g, "е").replace(/[^\p{L}\p{N}\s-]/gu, " ").replace(/-/g, " ").replace(/\s+/g, " ").trim();
+  }
+  var LEAD_INS = new Set(["эй", "ну", "окей", "ок", "хей", "алло", "так", "слушай", "hey", "ok", "okay"]);
+  function tokenize(text) {
+    return String(text ?? "").split(/\s+/).filter(Boolean).map((orig) => ({ orig, norm: normalize(orig) })).flatMap((t) => {
+      const parts = t.norm.split(" ").filter(Boolean);
+      if (parts.length <= 1)
+        return [{ orig: t.orig, norm: t.norm }];
+      return parts.map((p, i) => ({ orig: i === parts.length - 1 ? t.orig : "", norm: p }));
+    }).filter((t) => t.norm.length > 0);
+  }
+  function detectWake(text, wakePhrases) {
+    const tokens = tokenize(text);
+    const phrases = wakePhrases.map((p) => normalize(p).split(" ").filter(Boolean)).filter((p) => p.length > 0).sort((a, b) => b.length - a.length);
+    let start = 0;
+    while (start < tokens.length && start < 2 && LEAD_INS.has(tokens[start].norm))
+      start++;
+    for (let offset = start;offset <= Math.min(start + 1, tokens.length - 1); offset++) {
+      for (const phrase of phrases) {
+        if (offset + phrase.length > tokens.length)
+          continue;
+        let ok = true;
+        for (let j = 0;j < phrase.length; j++) {
+          if (tokens[offset + j].norm !== phrase[j]) {
+            ok = false;
+            break;
+          }
+        }
+        if (ok) {
+          const rest = tokens.slice(offset + phrase.length).map((t) => t.orig).filter(Boolean).join(" ").replace(/^[\s,.:;!?—–-]+/, "").trim();
+          return { matched: true, rest };
+        }
+      }
+      if (offset > start)
+        break;
+    }
+    return { matched: false, rest: "" };
+  }
+  var COMMANDS = [
+    ["next", ["дальше", "далее", "следующая", "следующий", "следующая страница", "листай", "вперед", "еще", "продолжай", "next"]],
+    ["prev", ["назад", "предыдущая", "предыдущий", "предыдущая страница", "обратно", "back"]],
+    ["first", ["сначала", "с начала", "в начало", "первая страница", "к началу"]],
+    ["repeat", ["повтори", "покажи снова", "покажи еще раз", "покажи ответ", "еще раз"]],
+    ["hide", ["скрой", "скрыть", "убери", "убрать", "закрой", "закрыть", "спрячь", "очисти", "хватит", "достаточно"]],
+    ["cancel", ["стоп", "отмена", "отмени", "отменить", "не надо"]],
+    ["reset", ["новый разговор", "новый чат", "начни заново", "забудь разговор", "сбрось контекст", "очисти историю", "новая тема"]]
+  ];
+  var COMMAND_LOOKUP = new Map;
+  for (const [cmd, phrases] of COMMANDS)
+    for (const p of phrases)
+      COMMAND_LOOKUP.set(normalize(p), cmd);
+  function parseCommand(text) {
+    let n = normalize(text);
+    if (!n)
+      return null;
+    n = n.replace(/^(пожалуйста|ну|так|давай|а)\s+/, "").replace(/\s+(пожалуйста|давай)$/, "");
+    const words = n.split(" ");
+    if (words.length > 4)
+      return null;
+    return COMMAND_LOOKUP.get(n) ?? null;
+  }
+  function isMeaningful(text) {
+    const n = normalize(text);
+    return n.replace(/\s/g, "").length >= 3;
+  }
+
+  // src/background/assistant.ts
+  var SILENCE_MS = 1600;
+  var WAKE_WAIT_MS = 9000;
+  var INTERIM_THROTTLE_MS = 450;
+  var LOG_MAX = 80;
+
+  class Assistant {
+    deps;
+    settings;
+    history;
+    phase = "idle";
+    pages = [];
+    page = 0;
+    lastTranscript = "";
+    lastQuestion = "";
+    lastAnswer = "";
+    lastError = "";
+    glassesConnected = null;
+    log = [];
+    committed = [];
+    interim = "";
+    silenceTimer = null;
+    wakeTimer = null;
+    pageTimer = null;
+    clearTimer_ = null;
+    lastInterimShow = 0;
+    requestSeq = 0;
+    followUpUntil = 0;
+    displayChecked = false;
+    now;
+    setTimer;
+    clearTimerFn;
+    constructor(deps) {
+      this.deps = deps;
+      this.now = deps.now ?? Date.now;
+      this.setTimer = deps.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
+      this.clearTimerFn = deps.clearTimer ?? ((id) => clearTimeout(id));
+      this.settings = deps.store.loadSettings();
+      this.history = deps.store.loadHistory();
+    }
+    addLog(kind, msg) {
+      this.log.push({ t: this.now(), kind, msg: msg.slice(0, 400) });
+      if (this.log.length > LOG_MAX)
+        this.log.splice(0, this.log.length - LOG_MAX);
+      this.changed();
+    }
+    changed() {
+      try {
+        this.deps.onChange?.();
+      } catch {}
+    }
+    show(text) {
+      let r;
+      try {
+        r = this.deps.show(text);
+      } catch (e) {
+        this.addLog("error", `Дисплей: ${String(e?.message ?? e)}`);
+        return;
+      }
+      if (r && typeof r.then === "function") {
+        r.then((res) => {
+          if (!res)
+            return;
+          if (res.status === "blocked") {
+            this.addLog("display", `Дисплей занят другим приложением${res.reason ? ": " + res.reason : ""}`);
+          } else if (!this.displayChecked && res.status) {
+            this.displayChecked = true;
+            this.addLog("display", `Дисплей: ${res.status}${res.degraded ? " (текстовый режим G1)" : ""}`);
+          }
+        }, () => {});
+      }
+    }
+    clearDisplay() {
+      try {
+        this.deps.clear();
+      } catch {}
+    }
+    cancelTimer(name) {
+      if (this[name] != null) {
+        this.clearTimerFn(this[name]);
+        this[name] = null;
+      }
+    }
+    updateSettings(patch) {
+      const merged = normalizeSettings({ ...this.settings, ...patch });
+      if (patch.apiKey === undefined || patch.apiKey === null)
+        merged.apiKey = this.settings.apiKey;
+      this.settings = merged;
+      this.deps.store.saveSettings(merged);
+      this.addLog("info", "Настройки сохранены");
+      return merged;
+    }
+    resetConversation(announce = true) {
+      this.history = [];
+      this.deps.store.saveHistory(this.history);
+      this.pages = [];
+      this.page = 0;
+      this.lastAnswer = "";
+      this.followUpUntil = 0;
+      this.addLog("cmd", "Новый разговор: контекст очищен");
+      if (announce)
+        this.flash(`Новый разговор.
+Контекст очищен.`, 2500);
+    }
+    flash(text, ms) {
+      this.cancelTimer("clearTimer_");
+      this.show(fitScreen(text));
+      this.clearTimer_ = this.setTimer(() => {
+        this.clearTimer_ = null;
+        if (this.phase === "idle")
+          this.clearDisplay();
+        else if (this.phase === "answering")
+          this.showPage(this.page);
+      }, ms);
+    }
+    onTranscript(text, isFinal) {
+      if (this.settings.listenMode === "off")
+        return;
+      const t = String(text ?? "").trim();
+      if (!t)
+        return;
+      if (isFinal) {
+        this.lastTranscript = t;
+        this.addLog("stt", t);
+      }
+      if (this.phase === "capturing") {
+        this.captureText(t, isFinal);
+        return;
+      }
+      if (!isFinal) {
+        if (this.settings.listenMode === "wake" && detectWake(t, this.settings.wakeWords).matched) {
+          this.startCapture(true);
+          this.captureText(t, false);
+        }
+        return;
+      }
+      const wake = detectWake(t, this.settings.wakeWords);
+      const body = wake.matched ? wake.rest : t;
+      const cmd = parseCommand(body);
+      if (cmd && (wake.matched || this.commandRelevant(cmd))) {
+        this.command(cmd, "voice");
+        return;
+      }
+      const followUp = this.now() < this.followUpUntil;
+      const accept = wake.matched || this.settings.listenMode === "always" || followUp && this.phase !== "thinking";
+      if (!accept)
+        return;
+      if (wake.matched)
+        this.addLog("wake", wake.rest ? `Фраза-активатор, вопрос: «${wake.rest}»` : "Фраза-активатор");
+      else if (followUp)
+        this.addLog("wake", "Уточнение без активатора");
+      if (!body || !isMeaningful(body)) {
+        if (wake.matched) {
+          this.startCapture(false);
+        }
+        return;
+      }
+      this.startCapture(false);
+      this.captureText(body, true);
+    }
+    commandRelevant(cmd) {
+      if (cmd === "reset")
+        return true;
+      if (cmd === "cancel")
+        return this.phase === "thinking" || this.phase === "answering";
+      if (cmd === "hide")
+        return this.phase === "answering";
+      return this.pages.length > 0 && (this.phase === "answering" || cmd === "repeat");
+    }
+    onTouch(kind) {
+      this.addLog("touch", kind);
+      if (kind === "single_tap" || kind === "swipe_down") {
+        if (this.pages.length)
+          this.command("next", "touch");
+      } else if (kind === "double_tap" || kind === "swipe_up") {
+        if (this.pages.length)
+          this.command("prev", "touch");
+      } else if (kind === "long_press" || kind === "triple_tap") {
+        if (this.phase !== "capturing")
+          this.startCapture(false);
+      }
+    }
+    startCapture(fromInterim) {
+      if (this.phase === "thinking")
+        this.requestSeq++;
+      this.phase = "capturing";
+      this.committed = [];
+      this.interim = "";
+      this.cancelTimer("pageTimer");
+      this.cancelTimer("clearTimer_");
+      this.cancelTimer("silenceTimer");
+      this.cancelTimer("wakeTimer");
+      this.wakeTimer = this.setTimer(() => {
+        this.wakeTimer = null;
+        if (this.phase === "capturing" && !this.captured()) {
+          this.addLog("info", "Вопрос не прозвучал — жду активатор снова");
+          this.phase = "idle";
+          this.clearDisplay();
+          this.changed();
+        }
+      }, WAKE_WAIT_MS);
+      this.show("Слушаю…");
+      if (!fromInterim)
+        this.addLog("info", "Слушаю вопрос");
+      this.changed();
+    }
+    stripWake(t) {
+      const w = detectWake(t, this.settings.wakeWords);
+      return w.matched ? w.rest : t;
+    }
+    captured() {
+      return [...this.committed, this.interim].map((s) => s.trim()).filter(Boolean).join(" ").trim();
+    }
+    captureText(t, isFinal) {
+      const clean = this.stripWake(t);
+      if (isFinal) {
+        const cmd = parseCommand(clean);
+        if (cmd && (this.committed.length === 0 || cmd === "cancel" || cmd === "hide")) {
+          this.cancelTimer("silenceTimer");
+          this.cancelTimer("wakeTimer");
+          this.committed = [];
+          this.interim = "";
+          this.phase = this.pages.length ? "answering" : "idle";
+          this.command(cmd, "voice");
+          return;
+        }
+        if (clean)
+          this.committed.push(clean);
+        this.interim = "";
+      } else {
+        this.interim = clean;
+      }
+      const q = this.captured();
+      if (q) {
+        this.cancelTimer("wakeTimer");
+        const now = this.now();
+        if (isFinal || now - this.lastInterimShow > INTERIM_THROTTLE_MS) {
+          this.lastInterimShow = now;
+          this.show(fitScreen(`» ${q}`));
+        }
+      }
+      this.cancelTimer("silenceTimer");
+      if (q) {
+        this.silenceTimer = this.setTimer(() => {
+          this.silenceTimer = null;
+          this.submitCapture();
+        }, isFinal ? SILENCE_MS : SILENCE_MS + 1200);
+      }
+      this.changed();
+    }
+    submitCapture() {
+      if (this.phase !== "capturing")
+        return;
+      const q = this.captured();
+      this.committed = [];
+      this.interim = "";
+      this.cancelTimer("wakeTimer");
+      if (!isMeaningful(q)) {
+        this.phase = "idle";
+        this.clearDisplay();
+        this.changed();
+        return;
+      }
+      this.ask(q, "voice");
+    }
+    async ask(question, source) {
+      const q = question.trim();
+      if (!q)
+        return;
+      const seq = ++this.requestSeq;
+      this.cancelTimer("silenceTimer");
+      this.cancelTimer("wakeTimer");
+      this.cancelTimer("pageTimer");
+      this.cancelTimer("clearTimer_");
+      this.phase = "thinking";
+      this.lastQuestion = q;
+      this.lastError = "";
+      this.addLog("ask", `${source === "ui" ? "[с телефона] " : ""}${q}`);
+      if (!this.settings.apiKey) {
+        this.fail("Нет ключа OpenAI. Откройте приложение на телефоне и вставьте ключ.", seq);
+        return;
+      }
+      this.show(fitScreen(`» ${q}
+…думаю`));
+      try {
+        const res = await askOpenAI(this.deps.fetch, this.settings, this.history, q, {
+          setTimer: (fn, ms) => this.setTimer(fn, ms),
+          now: this.now
+        });
+        if (seq !== this.requestSeq) {
+          this.addLog("info", "Ответ на отменённый вопрос пропущен");
+          return;
+        }
+        const usage = res.usage ? `, токены ${res.usage.input_tokens ?? "?"}→${res.usage.output_tokens ?? "?"}` : "";
+        this.addLog("openai", `Ответ за ${(res.ms / 1000).toFixed(1)} с (${res.model}${usage})`);
+        const at = this.now();
+        this.history.push({ role: "user", content: q, at }, { role: "assistant", content: res.text, at });
+        this.deps.store.saveHistory(this.history);
+        this.lastAnswer = res.text;
+        const clean = sanitizeForG1(res.text);
+        this.pages = paginate(clean.length ? clean : "(пустой ответ)");
+        this.page = 0;
+        this.phase = "answering";
+        this.followUpUntil = this.settings.followUpSec > 0 ? this.now() + this.settings.followUpSec * 1000 : 0;
+        this.addLog("display", `Ответ: ${this.pages.length} экр.`);
+        this.showPage(0);
+      } catch (e) {
+        if (seq !== this.requestSeq)
+          return;
+        const err = e;
+        const status = typeof err?.status === "number" ? err.status : 0;
+        const code = String(err?.code ?? "");
+        const human = code === "timeout" ? "OpenAI не ответил вовремя. Повторите вопрос." : explainError(status, code, err?.message ?? "");
+        this.addLog("error", `${human} [${status} ${code}] ${String(err?.message ?? "").slice(0, 160)}`);
+        this.fail(human, seq);
+      }
+    }
+    fail(message, seq) {
+      if (seq !== this.requestSeq)
+        return;
+      this.lastError = message;
+      this.phase = "idle";
+      this.pages = [];
+      this.flash(message, 8000);
+      this.changed();
+    }
+    showPage(i) {
+      if (!this.pages.length)
+        return;
+      this.page = Math.max(0, Math.min(this.pages.length - 1, i));
+      this.phase = "answering";
+      this.show(this.pages[this.page]);
+      this.cancelTimer("pageTimer");
+      this.cancelTimer("clearTimer_");
+      const last = this.page >= this.pages.length - 1;
+      if (this.settings.autoAdvanceSec > 0 && !last) {
+        this.pageTimer = this.setTimer(() => {
+          this.pageTimer = null;
+          if (this.phase === "answering")
+            this.showPage(this.page + 1);
+        }, this.settings.autoAdvanceSec * 1000);
+      }
+      if (this.settings.clearAfterSec > 0) {
+        this.clearTimer_ = this.setTimer(() => {
+          this.clearTimer_ = null;
+          if (this.phase === "answering") {
+            this.phase = "idle";
+            this.clearDisplay();
+            this.changed();
+          }
+        }, this.settings.clearAfterSec * 1000 + (last ? 0 : this.settings.autoAdvanceSec * 1000 * (this.pages.length - 1 - this.page)));
+      }
+      this.changed();
+    }
+    command(cmd, source) {
+      this.addLog("cmd", `${cmd} (${source})`);
+      if (!this.pages.length && (cmd === "next" || cmd === "prev" || cmd === "first" || cmd === "repeat")) {
+        if (this.phase === "idle")
+          this.clearDisplay();
+        return;
+      }
+      switch (cmd) {
+        case "next":
+          if (this.pages.length)
+            this.showPage(this.page + 1);
+          break;
+        case "prev":
+          if (this.pages.length)
+            this.showPage(this.page - 1);
+          break;
+        case "first":
+          if (this.pages.length)
+            this.showPage(0);
+          break;
+        case "repeat":
+          if (this.pages.length)
+            this.showPage(this.page);
+          break;
+        case "hide":
+        case "cancel":
+          if (this.phase === "thinking") {
+            this.requestSeq++;
+            this.addLog("info", "Запрос отменён");
+          }
+          this.cancelTimer("silenceTimer");
+          this.cancelTimer("wakeTimer");
+          this.cancelTimer("pageTimer");
+          this.cancelTimer("clearTimer_");
+          this.committed = [];
+          this.interim = "";
+          this.phase = "idle";
+          this.clearDisplay();
+          this.changed();
+          break;
+        case "reset":
+          this.phase = "idle";
+          this.resetConversation(true);
+          break;
+      }
+    }
+    snapshot() {
+      const key = this.settings.apiKey;
+      return {
+        phase: this.phase,
+        page: this.page,
+        pages: this.pages.length,
+        currentScreen: this.pages[this.page] ?? "",
+        lastTranscript: this.lastTranscript,
+        lastQuestion: this.lastQuestion,
+        lastAnswer: this.lastAnswer,
+        lastError: this.lastError,
+        glassesConnected: this.glassesConnected,
+        settings: { ...this.settings, apiKey: "", hasKey: Boolean(key), keyHint: key ? `${key.slice(0, 3)}…${key.slice(-4)}` : "" },
+        historyCount: this.history.length,
+        history: this.history.slice(-10),
+        log: this.log.slice(-60)
+      };
+    }
+  }
+
+  // src/background/index.ts
+  var APP_VERSION = "1.0.0";
+  function getKV() {
+    try {
+      const ls = globalThis.localStorage;
+      if (!ls)
+        return null;
+      ls.getItem("g1gpt.probe");
+      return ls;
+    } catch {
+      return null;
+    }
+  }
+  registerMiniapp((session) => {
+    const store = new Store(getKV());
+    let uiTimer = null;
+    const pushState = () => {
+      if (uiTimer != null)
+        return;
+      uiTimer = setTimeout(() => {
+        uiTimer = null;
+        try {
+          if (session.ui.isOpen())
+            session.ui.send("state", assistant.snapshot());
+        } catch {}
+      }, 250);
+    };
+    const fullBox = () => {
+      const d = session.capabilities?.display;
+      return { x: 0, y: 0, w: d?.width ?? 576, h: d?.height ?? 200 };
+    };
+    const assistant = new Assistant({
+      store,
+      fetch: (url, init) => globalThis.fetch(url, init),
+      show: (text) => session.display.render([{ type: "text", id: "g1gpt", box: fullBox(), text, style: { breakMode: "word" } }]),
+      clear: () => {
+        session.display.render([]);
+      },
+      onChange: pushState
+    });
+    assistant.addLog("info", `Запущено, версия ${APP_VERSION}`);
+    if (!assistant.settings.apiKey)
+      assistant.addLog("info", "Ключ OpenAI не задан — откройте настройки");
+    let unsubscribeStt = null;
+    let sttKey = "";
+    const subscribeStt = (s) => {
+      const key = `${s.listenMode}|${s.sttLanguage}|${s.wakeWords.join(",")}`;
+      if (key === sttKey)
+        return;
+      sttKey = key;
+      if (unsubscribeStt) {
+        try {
+          unsubscribeStt();
+        } catch {}
+        unsubscribeStt = null;
+      }
+      if (s.listenMode === "off") {
+        assistant.addLog("info", "Микрофон выключен в настройках");
+        return;
+      }
+      if (!session.transcription.hasPermission) {
+        assistant.addLog("error", "Нет разрешения MICROPHONE в манифесте");
+      }
+      try {
+        session.transcription.configure({
+          languageHints: s.sttLanguage === "auto" ? ["ru", "en"] : ["ru"],
+          vocabulary: s.wakeWords.slice(0, 10)
+        })?.catch?.(() => {});
+      } catch (e) {
+        assistant.addLog("info", `configure STT пропущен: ${String(e?.message ?? e)}`);
+      }
+      const handler = (data) => assistant.onTranscript(data?.text ?? "", Boolean(data?.isFinal));
+      try {
+        unsubscribeStt = s.sttLanguage === "auto" ? session.transcription.on(handler) : session.transcription.forLanguage("ru-RU", handler);
+        assistant.addLog("info", `Слушаю (${s.sttLanguage === "auto" ? "автоопределение языка" : "русский"})`);
+      } catch (e) {
+        assistant.addLog("error", `Не удалось включить распознавание: ${String(e?.message ?? e)}`);
+      }
+    };
+    subscribeStt(assistant.settings);
+    try {
+      session.input.onTouch((t) => assistant.onTouch(String(t?.kind ?? "")));
+    } catch {}
+    try {
+      session.input.onButtonPress((p) => assistant.onTouch(p?.pressType === "long" ? "long_press" : "single_tap"));
+    } catch {}
+    try {
+      session.glasses.onConnection((c) => {
+        assistant.glassesConnected = Boolean(c?.connected);
+        assistant.addLog("info", c?.connected ? `Очки подключены${c.modelName ? ": " + c.modelName : ""}` : "Очки отключены");
+      });
+    } catch {}
+    try {
+      session.on?.("ready", () => {
+        const d = session.capabilities?.display;
+        if (d)
+          assistant.addLog("info", `Дисплей ${d.width ?? "?"}×${d.height ?? "?"}${d.canPosition === false ? ", текстовый режим" : ""}`);
+      });
+    } catch {}
+    session.ui.handle("getState", () => assistant.snapshot());
+    session.ui.handle("saveSettings", (patch) => {
+      const s = assistant.updateSettings(patch ?? {});
+      subscribeStt(s);
+      return assistant.snapshot();
+    });
+    session.ui.handle("ask", async (p) => {
+      await assistant.ask(String(p?.text ?? ""), "ui");
+      return assistant.snapshot();
+    });
+    session.ui.handle("command", (p) => {
+      const cmd = String(p?.cmd ?? "");
+      if (["next", "prev", "first", "repeat", "hide", "cancel", "reset"].includes(cmd))
+        assistant.command(cmd, "ui");
+      return assistant.snapshot();
+    });
+    session.ui.handle("simulateSpeech", (p) => {
+      assistant.onTranscript(String(p?.text ?? ""), true);
+      return assistant.snapshot();
+    });
+    session.ui.handle("testDisplay", async () => {
+      const text = `Проверка дисплея G1
+Ёжик, йогурт, щука
+«кавычки» — тире, 0123
+Latin text: Hello!
+5-я строка`;
+      let r = null;
+      try {
+        r = await session.display.render([{ type: "text", id: "g1gpt", box: fullBox(), text, style: { breakMode: "word" } }], {
+          durationMs: 1e4
+        });
+      } catch (e) {
+        assistant.addLog("error", `Тест дисплея: ${String(e?.message ?? e)}`);
+      }
+      assistant.addLog("display", `Тест дисплея: ${r?.status ?? "нет ответа"}${r?.degraded ? ", текстовый режим" : ""}${r?.reason ? ", " + r.reason : ""}`);
+      return assistant.snapshot();
+    });
+    session.ui.onOpen(() => pushState());
+  });
+})();

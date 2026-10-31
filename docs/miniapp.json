@@ -1,0 +1,21 @@
+{
+  "packageName": "com.g1gpt.assistant",
+  "version": "1.0.0",
+  "name": "GPT для G1",
+  "description": "Голосовые вопросы к OpenAI, ответы текстом на дисплее очков",
+  "icon": "icon.png",
+  "type": "standard",
+  "sdkVersion": "0.3.0",
+  "minHostVersion": "1.42.0",
+  "entry": {
+    "background": "background/index.js",
+    "ui": "ui/index.html"
+  },
+  "permissions": [
+    {"type": "MICROPHONE", "description": "Распознавать ваши вопросы с микрофона очков."}
+  ],
+  "hardwareRequirements": [
+    {"type": "DISPLAY", "level": "REQUIRED", "description": "Показывает ответы на дисплее очков."},
+    {"type": "MICROPHONE", "level": "REQUIRED", "description": "Слушает вопросы."}
+  ]
+}

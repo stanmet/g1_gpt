@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>GPT для G1</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main id="app">
+      <header class="top">
+        <div>
+          <h1>GPT для G1</h1>
+          <p class="sub" id="sub">Голосовой помощник OpenAI</p>
+        </div>
+      </header>
+
+      <section class="status">
+        <div class="pill" id="phase">…</div>
+        <div class="pill quiet" id="glasses">Очки: ?</div>
+      </section>
+
+      <section class="card hud-card">
+        <div class="card-title">Сейчас на очках</div>
+        <pre class="hud" id="hud">—</pre>
+        <div class="row nav">
+          <button data-cmd="prev" aria-label="Предыдущий экран">‹ Назад</button>
+          <span id="pageinfo" class="muted"></span>
+          <button data-cmd="next" aria-label="Следующий экран">Дальше ›</button>
+        </div>
+        <div class="row">
+          <button data-cmd="hide" class="ghost">Скрыть</button>
+          <button id="testDisplay" class="ghost">Тест дисплея</button>
+        </div>
+      </section>
+
+      <section class="card" id="keyCard">
+        <div class="card-title">Ключ OpenAI API</div>
+        <p class="hint" id="keyState">Ключ не задан.</p>
+        <div class="row">
+          <input id="apiKey" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-…" />
+        </div>
+        <div class="row">
+          <button id="saveKey" class="primary">Сохранить ключ</button>
+          <button id="removeKey" class="ghost danger">Удалить</button>
+        </div>
+        <p class="hint">Ключ хранится только в этом приложении на телефоне и отправляется только в api.openai.com.</p>
+      </section>
+
+      <section class="card">
+        <div class="card-title">Проверка без голоса</div>
+        <label class="field">
+          <span>Спросить текстом (ответ появится на очках)</span>
+          <div class="row">
+            <input id="askText" type="text" placeholder="Например: сколько лететь до Рима?" />
+            <button id="askBtn" class="primary">→</button>
+          </div>
+        </label>
+        <label class="field">
+          <span>Имитировать фразу (проверка активатора и команд)</span>
+          <div class="row">
+            <input id="simText" type="text" placeholder="Вопрос, какая столица Австралии?" />
+            <button id="simBtn">▶</button>
+          </div>
+        </label>
+        <p class="hint" id="lastHeard">Последняя распознанная фраза: —</p>
+      </section>
+
+      <section class="card">
+        <div class="card-title">Как говорить</div>
+        <ul class="howto">
+          <li>Начните фразу с активатора: <b id="wakeExample">«Вопрос, …»</b> — и задайте вопрос. Пауза ~1,5 с = конец вопроса.</li>
+          <li>Листать: <b>«дальше»</b>, <b>«назад»</b>, <b>«сначала»</b>, <b>«повтори»</b>.</li>
+          <li><b>«Скрой»</b> — убрать текст, <b>«стоп»</b> — отменить, <b>«новый разговор»</b> — забыть контекст.</li>
+          <li>Уточнения: снова <b>«Вопрос, а …»</b> — помощник помнит разговор.</li>
+        </ul>
+      </section>
+
+      <form class="card" id="settingsForm">
+        <div class="card-title">Ответы</div>
+        <label class="field">
+          <span>Модель</span>
+          <select name="modelChoice" id="modelChoice">
+            <option value="gpt-6.1-terra">GPT‑6.1 Terra — быстро и недорого (рекомендую)</option>
+            <option value="gpt-6-luna">GPT‑6 Luna — самая дешёвая</option>
+            <option value="gpt-6.1-sol">GPT‑6.1 Sol — умнее, дороже</option>
+            <option value="gpt-6-astra">GPT‑6 Astra — флагман, дорого</option>
+            <option value="custom">Другая (ввести ID)…</option>
+          </select>
+        </label>
+        <label class="field" id="customModelField" hidden>
+          <span>ID модели</span>
+          <input name="customModel" type="text" autocapitalize="off" spellcheck="false" placeholder="например gpt-5.4-mini" />
+        </label>
+        <label class="field">
+          <span>Глубина размышлений</span>
+          <select name="effort">
+            <option value="auto">Авто (быстро)</option>
+            <option value="none">Без размышлений</option>
+            <option value="low">Низкая</option>
+            <option value="medium">Средняя (медленнее)</option>
+            <option value="high">Высокая (медленно)</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Длина ответа по умолчанию, слов</span>
+          <input name="answerWords" type="number" min="15" max="400" inputmode="numeric" />
+        </label>
+        <label class="check">
+          <input name="webSearch" type="checkbox" />
+          <span>Поиск в интернете для свежих фактов (+$0.01 за поиск)</span>
+        </label>
+        <label class="field">
+          <span>Помнить реплик разговора</span>
+          <input name="historyMessages" type="number" min="0" max="60" inputmode="numeric" />
+        </label>
+
+        <div class="card-title spaced">Обо мне</div>
+        <label class="field">
+          <span>Что помощнику знать о вас (имя, город, работа, интересы…)</span>
+          <textarea name="aboutMe" rows="4" placeholder="Меня зовут …, живу в …, работаю …"></textarea>
+        </label>
+        <label class="field">
+          <span>Пожелания к ответам</span>
+          <textarea name="instructions" rows="3" placeholder="Например: обращайся на «ты», цены в евро"></textarea>
+        </label>
+
+        <div class="card-title spaced">Голос</div>
+        <label class="field">
+          <span>Режим микрофона</span>
+          <select name="listenMode">
+            <option value="wake">По фразе‑активатору (рекомендую)</option>
+            <option value="always">Каждая фраза — вопрос</option>
+            <option value="off">Выключен</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Фразы‑активаторы через запятую</span>
+          <input name="wakeWords" type="text" autocapitalize="off" />
+        </label>
+        <label class="field">
+          <span>Язык распознавания</span>
+          <select name="sttLanguage">
+            <option value="ru-RU">Русский</option>
+            <option value="auto">Автоопределение (русский + английский)</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Уточнять без активатора в течение, с (0 — выкл.)</span>
+          <input name="followUpSec" type="number" min="0" max="120" inputmode="numeric" />
+        </label>
+
+        <div class="card-title spaced">Экран</div>
+        <label class="field">
+          <span>Автолистание: секунд на экран (0 — только голосом)</span>
+          <input name="autoAdvanceSec" type="number" min="0" max="60" inputmode="numeric" />
+        </label>
+        <label class="field">
+          <span>Убирать ответ через, с (0 — не убирать)</span>
+          <input name="clearAfterSec" type="number" min="0" max="3600" inputmode="numeric" />
+        </label>
+
+        <button type="submit" class="primary wide" id="saveSettings">Сохранить настройки</button>
+      </form>
+
+      <section class="card">
+        <div class="card-title">Разговор</div>
+        <p class="hint" id="histCount">Сообщений: 0</p>
+        <div id="history" class="history"></div>
+        <button data-cmd="reset" class="ghost danger wide">Новый разговор (забыть контекст)</button>
+      </section>
+
+      <section class="card">
+        <div class="card-title">Журнал проверки</div>
+        <p class="hint">Каждый шаг цепочки: распознавание → активатор → запрос → ответ OpenAI → дисплей. Пришлите скриншот, если что‑то не работает.</p>
+        <div id="log" class="log"></div>
+      </section>
+
+      <p class="foot muted" id="foot"></p>
+    </main>
+    <div id="toast" class="toast" hidden></div>
+    <script type="module" src="./app.ts"></script>
+  </body>
+</html>
