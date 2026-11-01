@@ -66,3 +66,10 @@
 - `ios-app/` — приложение на Flutter. Изменённые файлы: `lib/services/{evenai,openai_service,settings,g1_text}.dart`, `lib/ble_manager.dart`, `lib/views/home_page.dart`, `ios/Runner/{AppDelegate,BluetoothManager,SpeechStreamRecognizer}.swift`.
 - `.github/workflows/ios.yml` — сборка неподписанного IPA на macOS и публикация в Releases.
 - `mentra/` — мини‑приложение для Mentra с собственными тестами (`bun test tests`). Его страница установки лежит в `docs/` (GitHub Pages).
+
+## Установка версии для Mentra (без компьютера)
+
+1. Установите **Mentra** из App Store, войдите и подключите G1.
+2. Mentra → Settings → Miniapp Developer Settings → **Load Miniapp from URL** → вставьте `https://stanmet.github.io/g1_gpt` → Load Miniapp → разрешите микрофон.
+3. Либо откройте https://stanmet.github.io/g1_gpt/ на другом экране и отсканируйте QR через **Scan Miniapp QR Code**.
+4. Откройте плитку «GPT для G1», вставьте ключ OpenAI, нажмите «Тест дисплея», затем скажите в очки: «Вопрос, …».
