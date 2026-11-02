@@ -21,7 +21,7 @@ declare global {
 
 const KNOWN_MODELS = ["gpt-6.1-terra", "gpt-6-luna", "gpt-6.1-sol", "gpt-6-astra"]
 const PHASE_LABEL: Record<string, string> = {
-  idle: "Жду активатор",
+  idle: "Готов — слушаю",
   capturing: "Слушаю вопрос…",
   thinking: "Думаю…",
   answering: "Показываю ответ",
@@ -119,7 +119,14 @@ function render(s: any) {
   const g = $("glasses")
   g.textContent = s.glassesConnected === true ? "Очки подключены" : s.glassesConnected === false ? "Очки не подключены" : "Очки: нет данных"
 
-  $("hud").textContent = s.currentScreen || (s.lastError ? s.lastError : "—")
+  const wakeWord = String((s.settings?.wakeWords ?? [])[0] ?? "вопрос")
+  const wakeCap = wakeWord.charAt(0).toUpperCase() + wakeWord.slice(1)
+  if (s.phase === "idle") {
+    const last = s.currentScreen ? `\n\nПоследний ответ (скрыт):\n${s.currentScreen}` : ""
+    $("hud").textContent = (s.lastError ? s.lastError + "\n\n" : "") + `Экран очков пуст. Скажите: «${wakeCap}, …»` + last
+  } else {
+    $("hud").textContent = s.currentScreen || (s.lastError ? s.lastError : "—")
+  }
   $("pageinfo").textContent = s.pages > 1 ? `${s.page + 1} / ${s.pages}` : ""
   $("lastHeard").textContent = `Последняя распознанная фраза: ${s.lastTranscript || "—"}`
 

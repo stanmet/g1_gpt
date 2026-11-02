@@ -5472,7 +5472,7 @@ ${s.instructions.trim()}`);
   }
 
   // src/background/index.ts
-  var APP_VERSION = "1.0.1";
+  var APP_VERSION = "1.0.2";
   function getKV() {
     try {
       const ls = globalThis.localStorage;
