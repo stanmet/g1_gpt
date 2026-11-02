@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light dark" />
     <title>GPT для G1</title>
     
-  <link rel="stylesheet" crossorigin href="./chunk-5vz6nrsy.css"><script type="module" crossorigin src="./chunk-ca8xqd7x.js"></script></head>
+  <link rel="stylesheet" crossorigin href="./chunk-5vz6nrsy.css"><script type="module" crossorigin src="./chunk-ajemtpyt.js"></script></head>
   <body>
     <!-- ───────────── Очки ───────────── -->
     <section class="screen" id="screen-glasses" aria-labelledby="t-glasses">
@@ -71,7 +71,7 @@
           </div>
           <ol class="notes" id="lectureNotes"></ol>
         </div>
-        <p class="group-footer">Тезисы появляются примерно раз в 40 секунд. Когда лектор спрашивает аудиторию, ответ показывается сразу и держится на очках 45 секунд.</p>
+        <p class="group-footer"><span id="lectureEveryText">Тезисы появляются примерно раз в 15 секунд.</span> Когда лектор спрашивает аудиторию, ответ показывается сразу и держится на очках 30 секунд. Частота — в Настройках.</p>
       </div>
 
       <div class="group ai-pick">
@@ -311,6 +311,18 @@
           </label>
         </div>
         <p class="group-footer">Перевод делает Mentra, ключ для него не нужен. Тезисы лекции пишет выбранная нейросеть — нужен её ключ.</p>
+
+        <h2 class="group-header">Лекция</h2>
+        <div class="group">
+          <div class="cell">
+            <span class="cell-title">Тезисы каждые</span>
+            <span class="cell-value"><output data-out="lectureEverySec"></output></span>
+            <span class="stepper" data-step="lectureEverySec" data-min="10" data-max="60" data-by="5" data-unit="с">
+              <button type="button" data-d="-1" aria-label="Чаще">−</button><button type="button" data-d="1" aria-label="Реже">+</button>
+            </span>
+          </div>
+        </div>
+        <p class="group-footer" id="lectureCost">Чаще — больше запросов к нейросети.</p>
 
         <h2 class="group-header">Экран очков</h2>
         <div class="group">

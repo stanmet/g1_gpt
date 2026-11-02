@@ -35,8 +35,10 @@ export interface Settings {
   headNod: boolean
   /** Seconds after an answer during which a question needs no wake phrase; 0 = off. */
   followUpSec: number
-  /** Live translation ("транслейт") target language. */
+  /** Live translation ("транслейт") target language; also the language of lecture notes. */
   translateTo: TranslateTarget
+  /** Lecture mode: key points about every N seconds. */
+  lectureEverySec: number
   /** Settings schema version, for one-time migrations of stored settings. */
   v: number
 }
@@ -68,6 +70,7 @@ export const DEFAULT_SETTINGS: Settings = {
   headNod: true,
   followUpSec: 0,
   translateTo: "ru-RU",
+  lectureEverySec: 15,
   v: SETTINGS_VERSION,
 }
 
@@ -154,6 +157,7 @@ export function normalizeSettings(raw: Partial<Settings> | null | undefined, bas
     headNod: pick("headNod") !== false,
     followUpSec: clampInt(pick("followUpSec"), 0, 120, 0),
     translateTo: pick("translateTo") === "en-US" ? "en-US" : "ru-RU",
+    lectureEverySec: clampInt(pick("lectureEverySec"), 10, 60, DEFAULT_SETTINGS.lectureEverySec),
     v: SETTINGS_VERSION,
   }
 }

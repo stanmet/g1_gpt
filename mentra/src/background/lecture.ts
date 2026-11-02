@@ -3,8 +3,10 @@
  * points instead of a word-for-word translation. When the lecturer asks the audience a
  * question, a short answer is shown right away.
  *
- *   speech ──▶ buffer ──(≈60+ words and 40 s, or a pause)──▶ AI: 1–3 key points ──▶ glasses
- *      └──▶ question to the audience? ──▶ AI: short answer ──▶ glasses (held ~45 s)
+ *   speech ──▶ buffer ──(every N s — 15 by default — or a pause)──▶ AI: 1–2 key points ──▶ glasses
+ *      └──▶ question to the audience? ──▶ AI: short answer ──▶ glasses (held 30 s)
+ *
+ * The glasses show a rolling feed: the newest points at the bottom («• »), earlier ones above («· »).
  *
  * Independent of Mentra and of the assistant, so it can be tested with fakes.
  */
@@ -25,16 +27,40 @@ export interface LectureRecord {
   notes: LectureNote[]
 }
 
-/** Summarise once this many words have been heard and LECTURE_MIN_INTERVAL_MS has passed… */
-export const LECTURE_MIN_WORDS = 60
-export const LECTURE_MIN_INTERVAL_MS = 40_000
-/** …or right away when the buffer gets this long. */
-export const LECTURE_MAX_WORDS = 220
-/** A pause this long flushes what was said, if it is at least LECTURE_FLUSH_MIN_WORDS long. */
-export const LECTURE_SILENCE_FLUSH_MS = 12_000
-export const LECTURE_FLUSH_MIN_WORDS = 15
+/** How often key points come by default, in seconds (setting «Тезисы каждые»). */
+export const DEFAULT_LECTURE_EVERY_SEC = 15
+export const LECTURE_EVERY_MIN_SEC = 10
+export const LECTURE_EVERY_MAX_SEC = 60
+
+export interface LectureTiming {
+  /** Summarise once minWords have been heard and this much time has passed since the last summary… */
+  intervalMs: number
+  minWords: number
+  /** …or right away when the buffer gets this long. */
+  maxWords: number
+  /** A pause this long flushes what was said, if it is at least flushMinWords long. */
+  flushMs: number
+  flushMinWords: number
+  /** Key points per summary. */
+  maxPoints: number
+}
+
+/** Lecturers speak about 2–2.5 words a second; thresholds follow the chosen interval. */
+export function lectureTiming(everySec: number): LectureTiming {
+  const sec = Math.max(LECTURE_EVERY_MIN_SEC, Math.min(LECTURE_EVERY_MAX_SEC, Math.round(Number(everySec) || DEFAULT_LECTURE_EVERY_SEC)))
+  const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, Math.round(v)))
+  return {
+    intervalMs: sec * 1000,
+    minWords: clamp(sec * 1.2, 10, 70),
+    maxWords: clamp(sec * 4, 50, 240),
+    flushMs: clamp(sec * 500, 4000, 12000),
+    flushMinWords: 8,
+    maxPoints: sec <= 25 ? 2 : 3,
+  }
+}
+
 /** An answer stays on the glasses this long before key points take the screen again. */
-export const LECTURE_ANSWER_HOLD_MS = 45_000
+export const LECTURE_ANSWER_HOLD_MS = 30_000
 /** Words of recent lecture speech given to the AI as context for a question. */
 const CONTEXT_WORDS = 600
 /** Restarting within this time after a stop continues the same notes (e.g. after a quick switch to translation). */
@@ -96,11 +122,11 @@ function langName(lang: Lang): string {
   return lang === "en" ? "английском (English)" : "русском"
 }
 
-export function buildPointsPrompt(prevPoints: string[], chunk: string, lang: Lang): {system: string; user: string} {
+export function buildPointsPrompt(prevPoints: string[], chunk: string, lang: Lang, maxPoints = 2): {system: string; user: string} {
   const system = [
     "Ты помогаешь студенту на лекции. Твой ответ показывается на крошечном дисплее умных очков: 5 строк примерно по 30 символов.",
     "Тебе дают свежий фрагмент речи лектора, распознанный автоматически: возможны ошибки распознавания и обрывки фраз — угадывай смысл по контексту.",
-    `Выдели суть: 1–3 коротких тезиса на ${langName(lang)} языке, каждый с новой строки и начинается с «• », не длиннее 12 слов.`,
+    `Выдели суть: ${maxPoints <= 1 ? "один короткий тезис" : `1–${maxPoints} коротких тезиса (чаще хватает одного)`} на ${langName(lang)} языке, каждый с новой строки и начинается с «• », не длиннее 12 слов.`,
     "Не переводи и не пересказывай дословно — только главное: определения, утверждения, формулы, числа и даты, примеры, выводы. Термины можно оставлять в оригинале.",
     "Не повторяй уже записанные тезисы. Если во фрагменте нет ничего содержательного (приветствие, организационные моменты, шум, повтор), ответь ровно SKIP.",
     "Без Markdown, без вступлений и пояснений.",
@@ -143,6 +169,28 @@ export function parsePoints(text: string): string[] {
     .map((l) => l.replace(/^\s*(?:[•*\-–—]|\d+[.)])\s*/, "").replace(/\*\*/g, "").trim())
     .filter((l) => l && !isSkip(l))
     .slice(0, 3)
+}
+
+/**
+ * Rolling feed for the glasses: the newest points at the bottom marked «• », earlier ones above
+ * marked «· », as many as fit on the screen.
+ */
+export function feedScreen(allPoints: string[], newCount: number): string {
+  const blocks: string[][] = []
+  let used = 0
+  for (let i = allPoints.length - 1; i >= 0; i--) {
+    const isNew = i >= allPoints.length - newCount
+    const lines = wrapLines(sanitizeForG1((isNew ? "• " : "· ") + allPoints[i]))
+    if (used + lines.length > G1_LINES) {
+      if (!blocks.length) blocks.unshift(lines) // the newest point alone is too long: pointsScreen trims it
+      break
+    }
+    blocks.unshift(lines)
+    used += lines.length
+  }
+  const lines = blocks.flat()
+  if (lines.length <= G1_LINES) return lines.join("\n")
+  return pointsScreen(allPoints.slice(-1))
 }
 
 /** {q, a} from "Q: …\nA: …"; null for SKIP. Tolerates a reply without the markers. */
@@ -190,8 +238,10 @@ export interface LectureDeps {
   show(text: string): void
   clear(): void
   log(kind: "lecture" | "error" | "info", msg: string): void
-  /** Language for key points and answers (the «Переводить на» setting). */
+  /** Language for key points and answers (the «Язык перевода и тезисов» setting). */
   lang(): Lang
+  /** How often key points come, in seconds (setting «Тезисы каждые»). */
+  everySec?(): number
   now(): number
   setTimer(fn: () => void, ms: number): unknown
   clearTimer(id: unknown): void
@@ -212,7 +262,9 @@ export class Lecture {
   private answering = false
   private pendingQuestion: {text: string; fromUser: boolean} | null = null
   private holdUntil = 0
-  private pendingPoints: string[] | null = null
+  /** Key points arrived while an answer was held; show the feed when the hold ends. */
+  private pendingFeed = false
+  private lastNewCount = 0
   private flushTimer: unknown = null
   private holdTimer: unknown = null
   private lastErrorShownAt = -Infinity
@@ -233,7 +285,7 @@ export class Lecture {
     this.summarizing = false
     this.answering = false
     this.pendingQuestion = null
-    this.pendingPoints = null
+    this.pendingFeed = false
     this.holdUntil = 0
     this.lastSummaryAt = this.deps.now()
     const prev = this.record
@@ -242,10 +294,11 @@ export class Lecture {
     else this.record = {startedAt: this.deps.now(), notes: []}
     this.deps.save(this.record!)
     const en = this.deps.lang() === "en"
+    const sec = this.timing().intervalMs / 1000
     this.setScreen(
       en
-        ? "Lecture mode\n• key points every ~40 s\n• answers to the lecturer's questions\nStop: «стоп лекция»"
-        : "Режим лекции\n• тезисы примерно раз в 40 с\n• ответы на вопросы лектора\nВыключить: «стоп лекция»",
+        ? `Lecture mode\n• key points every ~${sec} s\n• answers to the lecturer's questions\nStop: «стоп лекция»`
+        : `Режим лекции\n• тезисы примерно раз в ${sec} с\n• ответы на вопросы лектора\nВыключить: «стоп лекция»`,
     )
     this.deps.log("lecture", resume ? "Режим лекции включён — продолжаю прежний конспект" : "Режим лекции включён")
     this.deps.onChange()
@@ -260,7 +313,7 @@ export class Lecture {
     this.stopTimers()
     this.buffer = []
     this.pendingQuestion = null
-    this.pendingPoints = null
+    this.pendingFeed = false
     this.screen = ""
     if (this.record) {
       this.record.endedAt = this.deps.now()
@@ -283,9 +336,10 @@ export class Lecture {
     const q = findAudienceQuestion(t)
     if (q) this.answer(q, false)
 
+    const tm = this.timing()
     const words = wordCount(this.buffer.join(" "))
     const since = this.deps.now() - this.lastSummaryAt
-    if (words >= LECTURE_MAX_WORDS || (words >= LECTURE_MIN_WORDS && since >= LECTURE_MIN_INTERVAL_MS)) this.summarize()
+    if (words >= tm.maxWords || (words >= tm.minWords && since >= tm.intervalMs)) this.summarize()
     this.armFlush()
   }
 
@@ -298,7 +352,7 @@ export class Lecture {
   /** Clear the glasses; key points come back with the next summary. */
   hide(): void {
     this.holdUntil = 0
-    this.pendingPoints = null
+    this.pendingFeed = false
     this.screen = ""
     this.deps.clear()
     this.deps.onChange()
@@ -313,12 +367,21 @@ export class Lecture {
     }
   }
 
+  private timing(): LectureTiming {
+    return lectureTiming(this.deps.everySec?.() ?? DEFAULT_LECTURE_EVERY_SEC)
+  }
+
   private armFlush(): void {
     if (this.flushTimer != null) this.deps.clearTimer(this.flushTimer)
+    const tm = this.timing()
     this.flushTimer = this.deps.setTimer(() => {
       this.flushTimer = null
-      if (this.active && wordCount(this.buffer.join(" ")) >= LECTURE_FLUSH_MIN_WORDS) this.summarize()
-    }, LECTURE_SILENCE_FLUSH_MS)
+      if (this.active && wordCount(this.buffer.join(" ")) >= tm.flushMinWords) this.summarize()
+    }, tm.flushMs)
+  }
+
+  private allPoints(): string[] {
+    return (this.record?.notes ?? []).filter((n) => n.kind === "point").map((n) => n.text)
   }
 
   private async summarize(): Promise<void> {
@@ -328,8 +391,8 @@ export class Lecture {
     this.buffer = []
     this.summarizing = true
     this.lastSummaryAt = this.deps.now()
-    const prev = (this.record?.notes ?? []).filter((n) => n.kind === "point").slice(-PREV_POINTS).map((n) => n.text)
-    const {system, user} = buildPointsPrompt(prev, chunk, this.deps.lang())
+    const prev = this.allPoints().slice(-PREV_POINTS)
+    const {system, user} = buildPointsPrompt(prev, chunk, this.deps.lang(), this.timing().maxPoints)
     try {
       const reply = await this.deps.complete(system, user)
       if (session !== this.session) return
@@ -341,8 +404,9 @@ export class Lecture {
       const t = this.deps.now()
       for (const p of points) this.addNote({t, kind: "point", text: p})
       this.deps.log("lecture", points.map((p) => "• " + p).join(" "))
-      if (this.deps.now() < this.holdUntil) this.pendingPoints = points
-      else this.setScreen(pointsScreen(points))
+      this.lastNewCount = points.length
+      if (this.deps.now() < this.holdUntil) this.pendingFeed = true
+      else this.setScreen(feedScreen(this.allPoints(), points.length))
     } catch (e) {
       if (session !== this.session) return
       this.showError(e)
@@ -350,7 +414,7 @@ export class Lecture {
       if (session === this.session) {
         this.summarizing = false
         // speech kept coming while the AI was busy
-        if (wordCount(this.buffer.join(" ")) >= LECTURE_MAX_WORDS) void this.summarize()
+        if (wordCount(this.buffer.join(" ")) >= this.timing().maxWords) void this.summarize()
       }
     }
   }
@@ -398,9 +462,9 @@ export class Lecture {
       this.holdTimer = null
       this.holdUntil = 0
       if (!this.active) return
-      if (this.pendingPoints) {
-        this.setScreen(pointsScreen(this.pendingPoints))
-        this.pendingPoints = null
+      if (this.pendingFeed) {
+        this.setScreen(feedScreen(this.allPoints(), this.lastNewCount))
+        this.pendingFeed = false
       }
     }, LECTURE_ANSWER_HOLD_MS)
   }

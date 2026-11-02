@@ -6,9 +6,10 @@ import {
   findAudienceQuestion,
   Lecture,
   LECTURE_ANSWER_HOLD_MS,
-  LECTURE_MIN_INTERVAL_MS,
+  DEFAULT_LECTURE_EVERY_SEC,
+  feedScreen,
+  lectureTiming,
   LECTURE_RESUME_MS,
-  LECTURE_SILENCE_FLUSH_MS,
   notesAsText,
   parseAnswer,
   parsePoints,
@@ -17,6 +18,9 @@ import {
 } from "../src/background/lecture"
 import {G1_LINES} from "../src/background/g1text"
 import {parseLectureCommand} from "../src/background/voice"
+
+const T = lectureTiming(DEFAULT_LECTURE_EVERY_SEC)
+const LECTURE_SILENCE_FLUSH_MS = T.flushMs
 
 class Clock {
   t = 1_000_000
@@ -51,7 +55,7 @@ class Clock {
 const SENT =
   "Today we talk about entropy, which measures how many microscopic arrangements correspond to the same macroscopic state of a system."
 
-function setup(replies: ((system: string, user: string) => string)[] = []) {
+function setup(replies: ((system: string, user: string) => string)[] = [], everySec = DEFAULT_LECTURE_EVERY_SEC) {
   const clock = new Clock()
   const shown: string[] = []
   const calls: {system: string; user: string}[] = []
@@ -69,6 +73,7 @@ function setup(replies: ((system: string, user: string) => string)[] = []) {
     clear: () => void shown.push("<clear>"),
     log: (_k, m) => void logs.push(m),
     lang: () => "ru",
+    everySec: () => everySec,
     now: clock.now,
     setTimer: clock.set,
     clearTimer: clock.clear,
@@ -143,22 +148,68 @@ describe("parsing AI replies", () => {
 })
 
 describe("lecture mode flow", () => {
-  test("key points come after enough speech and time, not on every sentence", async () => {
-    const e = setup([() => "• Энтропия — число микросостояний\n• Связана с беспорядком"])
+  const SHORT = "Entropy measures how disordered a system is." // 7 words, said every 3 s
+
+  test("timing follows the setting; 15 s by default", () => {
+    expect(DEFAULT_LECTURE_EVERY_SEC).toBe(15)
+    expect(T).toEqual({intervalMs: 15000, minWords: 18, maxWords: 60, flushMs: 7500, flushMinWords: 8, maxPoints: 2})
+    expect(lectureTiming(60)).toMatchObject({intervalMs: 60000, minWords: 70, maxWords: 240, flushMs: 12000, maxPoints: 3})
+    expect(lectureTiming(3).intervalMs).toBe(10000)
+    expect(lectureTiming(NaN).intervalMs).toBe(15000)
+  })
+
+  test("key points come every ~15 s of continuous speech, not on every sentence", async () => {
+    const e = setup([() => "• Энтропия — число микросостояний\n• Связана с беспорядком", () => "• Второй закон"])
     e.lec.start()
-    expect(e.shown.at(-1)).toContain("Режим лекции")
-    e.lec.onSpeech(SENT)
-    e.lec.onSpeech(SENT)
-    e.lec.onSpeech(SENT)
-    expect(e.calls.length).toBe(0) // ~60 words, but 40 s have not passed
-    await e.clock.advance(LECTURE_MIN_INTERVAL_MS)
-    e.lec.onSpeech(SENT)
+    expect(e.shown.at(-1)).toContain("раз в 15 с")
+    for (let i = 0; i < 5; i++) {
+      e.lec.onSpeech(SHORT)
+      await e.clock.advance(3000)
+    }
+    expect(e.calls.length).toBe(0) // 35 words in 15 s, the last summary trigger was at 12 s
+    e.lec.onSpeech(SHORT)
     await e.clock.advance(10)
     expect(e.calls.length).toBe(1)
-    expect(e.calls[0].user).toContain("entropy")
-    expect(e.shown.at(-1)).toBe(pointsScreen(["Энтропия — число микросостояний", "Связана с беспорядком"]))
+    expect(e.calls[0].system).toContain("1–2 коротких тезиса")
+    expect(e.calls[0].user).toContain("Entropy measures")
+    expect(e.shown.at(-1)).toBe("• Энтропия — число микросостояний\n• Связана с беспорядком")
     expect(e.lec.record!.notes.map((n) => n.kind)).toEqual(["point", "point"])
     expect(e.saved.at(-1)!.notes.length).toBe(2)
+
+    // the next points join the feed: earlier ones stay above, marked «· »
+    for (let i = 0; i < 6; i++) {
+      await e.clock.advance(3000)
+      e.lec.onSpeech(SHORT)
+    }
+    await e.clock.advance(10)
+    expect(e.calls.length).toBe(2)
+    expect(e.shown.at(-1)).toBe("· Энтропия — число микросостояний\n· Связана с беспорядком\n• Второй закон")
+  })
+
+  test("a slower setting waits longer", async () => {
+    const e = setup([() => "• Тезис"], 60)
+    e.lec.start()
+    for (let i = 0; i < 15; i++) {
+      e.lec.onSpeech(SHORT)
+      await e.clock.advance(3000)
+    }
+    expect(e.calls.length).toBe(0) // 45 s, 105 words: not yet
+    for (let i = 0; i < 6; i++) {
+      e.lec.onSpeech(SHORT)
+      await e.clock.advance(3000)
+    }
+    expect(e.calls.length).toBe(1)
+    expect(e.calls[0].system).toContain("1–3 коротких тезиса")
+  })
+
+  test("feed screen keeps the newest points and fits the display", () => {
+    const pts = ["Первый тезис", "Второй тезис", "Третий тезис", "Четвёртый тезис", "Пятый тезис", "Шестой тезис"]
+    const f = feedScreen(pts, 1).split("\n")
+    expect(f.length).toBe(G1_LINES)
+    expect(f.at(-1)).toBe("• Шестой тезис")
+    expect(f[0]).toBe("· Второй тезис")
+    const long = "очень длинный тезис про термодинамику и статистическую физику ".repeat(4)
+    expect(feedScreen(["Короткий", long], 1).split("\n").length).toBeLessThanOrEqual(G1_LINES)
   })
 
   test("a pause flushes what was said", async () => {

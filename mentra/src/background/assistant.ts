@@ -176,6 +176,7 @@ export class Assistant {
         clear: () => this.clearDisplay(),
         log: (kind, msg) => this.addLog(kind, msg),
         lang: () => (this.settings.translateTo === "en-US" ? "en" : "ru"),
+        everySec: () => this.settings.lectureEverySec,
         now: () => this.now(),
         setTimer: (fn, ms) => this.setTimer(fn, ms),
         clearTimer: (id) => this.clearTimerFn(id),

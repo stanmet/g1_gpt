@@ -5471,12 +5471,22 @@ ${s.instructions.trim()}`);
   }
 
   // src/background/lecture.ts
-  var LECTURE_MIN_WORDS = 60;
-  var LECTURE_MIN_INTERVAL_MS = 40000;
-  var LECTURE_MAX_WORDS = 220;
-  var LECTURE_SILENCE_FLUSH_MS = 12000;
-  var LECTURE_FLUSH_MIN_WORDS = 15;
-  var LECTURE_ANSWER_HOLD_MS = 45000;
+  var DEFAULT_LECTURE_EVERY_SEC = 15;
+  var LECTURE_EVERY_MIN_SEC = 10;
+  var LECTURE_EVERY_MAX_SEC = 60;
+  function lectureTiming(everySec) {
+    const sec = Math.max(LECTURE_EVERY_MIN_SEC, Math.min(LECTURE_EVERY_MAX_SEC, Math.round(Number(everySec) || DEFAULT_LECTURE_EVERY_SEC)));
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(v)));
+    return {
+      intervalMs: sec * 1000,
+      minWords: clamp(sec * 1.2, 10, 70),
+      maxWords: clamp(sec * 4, 50, 240),
+      flushMs: clamp(sec * 500, 4000, 12000),
+      flushMinWords: 8,
+      maxPoints: sec <= 25 ? 2 : 3
+    };
+  }
+  var LECTURE_ANSWER_HOLD_MS = 30000;
   var CONTEXT_WORDS = 600;
   var LECTURE_RESUME_MS = 20 * 60000;
   var PREV_POINTS = 8;
@@ -5580,11 +5590,11 @@ ${s.instructions.trim()}`);
   function langName(lang) {
     return lang === "en" ? "английском (English)" : "русском";
   }
-  function buildPointsPrompt(prevPoints, chunk, lang) {
+  function buildPointsPrompt(prevPoints, chunk, lang, maxPoints = 2) {
     const system = [
       "Ты помогаешь студенту на лекции. Твой ответ показывается на крошечном дисплее умных очков: 5 строк примерно по 30 символов.",
       "Тебе дают свежий фрагмент речи лектора, распознанный автоматически: возможны ошибки распознавания и обрывки фраз — угадывай смысл по контексту.",
-      `Выдели суть: 1–3 коротких тезиса на ${langName(lang)} языке, каждый с новой строки и начинается с «• », не длиннее 12 слов.`,
+      `Выдели суть: ${maxPoints <= 1 ? "один короткий тезис" : `1–${maxPoints} коротких тезиса (чаще хватает одного)`} на ${langName(lang)} языке, каждый с новой строки и начинается с «• », не длиннее 12 слов.`,
       "Не переводи и не пересказывай дословно — только главное: определения, утверждения, формулы, числа и даты, примеры, выводы. Термины можно оставлять в оригинале.",
       "Не повторяй уже записанные тезисы. Если во фрагменте нет ничего содержательного (приветствие, организационные моменты, шум, повтор), ответь ровно SKIP.",
       "Без Markdown, без вступлений и пояснений."
@@ -5628,6 +5638,26 @@ A: <ответ>`,
     if (!String(text ?? "").trim() || isSkip(text))
       return [];
     return String(text).split(/\n+/).map((l) => l.replace(/^\s*(?:[•*\-–—]|\d+[.)])\s*/, "").replace(/\*\*/g, "").trim()).filter((l) => l && !isSkip(l)).slice(0, 3);
+  }
+  function feedScreen(allPoints, newCount) {
+    const blocks = [];
+    let used = 0;
+    for (let i = allPoints.length - 1;i >= 0; i--) {
+      const isNew = i >= allPoints.length - newCount;
+      const lines = wrapLines(sanitizeForG1((isNew ? "• " : "· ") + allPoints[i]));
+      if (used + lines.length > G1_LINES) {
+        if (!blocks.length)
+          blocks.unshift(lines);
+        break;
+      }
+      blocks.unshift(lines);
+      used += lines.length;
+    }
+    const lines = blocks.flat();
+    if (lines.length <= G1_LINES)
+      return lines.join(`
+`);
+    return pointsScreen(allPoints.slice(-1));
   }
   function parseAnswer(text, fallbackQ) {
     const t = String(text ?? "").trim();
@@ -5676,7 +5706,8 @@ A: <ответ>`,
     answering = false;
     pendingQuestion = null;
     holdUntil = 0;
-    pendingPoints = null;
+    pendingFeed = false;
+    lastNewCount = 0;
     flushTimer = null;
     holdTimer = null;
     lastErrorShownAt = -Infinity;
@@ -5693,7 +5724,7 @@ A: <ответ>`,
       this.summarizing = false;
       this.answering = false;
       this.pendingQuestion = null;
-      this.pendingPoints = null;
+      this.pendingFeed = false;
       this.holdUntil = 0;
       this.lastSummaryAt = this.deps.now();
       const prev = this.record;
@@ -5704,11 +5735,12 @@ A: <ответ>`,
         this.record = { startedAt: this.deps.now(), notes: [] };
       this.deps.save(this.record);
       const en = this.deps.lang() === "en";
+      const sec = this.timing().intervalMs / 1000;
       this.setScreen(en ? `Lecture mode
-• key points every ~40 s
+• key points every ~${sec} s
 • answers to the lecturer's questions
 Stop: «стоп лекция»` : `Режим лекции
-• тезисы примерно раз в 40 с
+• тезисы примерно раз в ${sec} с
 • ответы на вопросы лектора
 Выключить: «стоп лекция»`);
       this.deps.log("lecture", resume ? "Режим лекции включён — продолжаю прежний конспект" : "Режим лекции включён");
@@ -5724,7 +5756,7 @@ Stop: «стоп лекция»` : `Режим лекции
       this.stopTimers();
       this.buffer = [];
       this.pendingQuestion = null;
-      this.pendingPoints = null;
+      this.pendingFeed = false;
       this.screen = "";
       if (this.record) {
         this.record.endedAt = this.deps.now();
@@ -5746,9 +5778,10 @@ Stop: «стоп лекция»` : `Режим лекции
       const q = findAudienceQuestion(t);
       if (q)
         this.answer(q, false);
+      const tm = this.timing();
       const words = wordCount(this.buffer.join(" "));
       const since = this.deps.now() - this.lastSummaryAt;
-      if (words >= LECTURE_MAX_WORDS || words >= LECTURE_MIN_WORDS && since >= LECTURE_MIN_INTERVAL_MS)
+      if (words >= tm.maxWords || words >= tm.minWords && since >= tm.intervalMs)
         this.summarize();
       this.armFlush();
     }
@@ -5759,7 +5792,7 @@ Stop: «стоп лекция»` : `Режим лекции
     }
     hide() {
       this.holdUntil = 0;
-      this.pendingPoints = null;
+      this.pendingFeed = false;
       this.screen = "";
       this.deps.clear();
       this.deps.onChange();
@@ -5770,14 +5803,21 @@ Stop: «стоп лекция»` : `Режим лекции
         words -= wordCount(this.recent.shift());
       }
     }
+    timing() {
+      return lectureTiming(this.deps.everySec?.() ?? DEFAULT_LECTURE_EVERY_SEC);
+    }
     armFlush() {
       if (this.flushTimer != null)
         this.deps.clearTimer(this.flushTimer);
+      const tm = this.timing();
       this.flushTimer = this.deps.setTimer(() => {
         this.flushTimer = null;
-        if (this.active && wordCount(this.buffer.join(" ")) >= LECTURE_FLUSH_MIN_WORDS)
+        if (this.active && wordCount(this.buffer.join(" ")) >= tm.flushMinWords)
           this.summarize();
-      }, LECTURE_SILENCE_FLUSH_MS);
+      }, tm.flushMs);
+    }
+    allPoints() {
+      return (this.record?.notes ?? []).filter((n) => n.kind === "point").map((n) => n.text);
     }
     async summarize() {
       if (this.summarizing || !this.buffer.length)
@@ -5787,8 +5827,8 @@ Stop: «стоп лекция»` : `Режим лекции
       this.buffer = [];
       this.summarizing = true;
       this.lastSummaryAt = this.deps.now();
-      const prev = (this.record?.notes ?? []).filter((n) => n.kind === "point").slice(-PREV_POINTS).map((n) => n.text);
-      const { system, user } = buildPointsPrompt(prev, chunk, this.deps.lang());
+      const prev = this.allPoints().slice(-PREV_POINTS);
+      const { system, user } = buildPointsPrompt(prev, chunk, this.deps.lang(), this.timing().maxPoints);
       try {
         const reply = await this.deps.complete(system, user);
         if (session !== this.session)
@@ -5802,10 +5842,11 @@ Stop: «стоп лекция»` : `Режим лекции
         for (const p of points)
           this.addNote({ t, kind: "point", text: p });
         this.deps.log("lecture", points.map((p) => "• " + p).join(" "));
+        this.lastNewCount = points.length;
         if (this.deps.now() < this.holdUntil)
-          this.pendingPoints = points;
+          this.pendingFeed = true;
         else
-          this.setScreen(pointsScreen(points));
+          this.setScreen(feedScreen(this.allPoints(), points.length));
       } catch (e) {
         if (session !== this.session)
           return;
@@ -5813,7 +5854,7 @@ Stop: «стоп лекция»` : `Режим лекции
       } finally {
         if (session === this.session) {
           this.summarizing = false;
-          if (wordCount(this.buffer.join(" ")) >= LECTURE_MAX_WORDS)
+          if (wordCount(this.buffer.join(" ")) >= this.timing().maxWords)
             this.summarize();
         }
       }
@@ -5866,9 +5907,9 @@ Stop: «стоп лекция»` : `Режим лекции
         this.holdUntil = 0;
         if (!this.active)
           return;
-        if (this.pendingPoints) {
-          this.setScreen(pointsScreen(this.pendingPoints));
-          this.pendingPoints = null;
+        if (this.pendingFeed) {
+          this.setScreen(feedScreen(this.allPoints(), this.lastNewCount));
+          this.pendingFeed = false;
         }
       }, LECTURE_ANSWER_HOLD_MS);
     }
@@ -5930,6 +5971,7 @@ Stop: «стоп лекция»` : `Режим лекции
     headNod: true,
     followUpSec: 0,
     translateTo: "ru-RU",
+    lectureEverySec: 15,
     v: SETTINGS_VERSION
   };
   function migrateSettings(raw) {
@@ -5989,6 +6031,7 @@ Stop: «стоп лекция»` : `Режим лекции
       headNod: pick("headNod") !== false,
       followUpSec: clampInt(pick("followUpSec"), 0, 120, 0),
       translateTo: pick("translateTo") === "en-US" ? "en-US" : "ru-RU",
+      lectureEverySec: clampInt(pick("lectureEverySec"), 10, 60, DEFAULT_SETTINGS.lectureEverySec),
       v: SETTINGS_VERSION
     };
   }
@@ -6131,6 +6174,7 @@ Stop: «стоп лекция»` : `Режим лекции
         clear: () => this.clearDisplay(),
         log: (kind, msg) => this.addLog(kind, msg),
         lang: () => this.settings.translateTo === "en-US" ? "en" : "ru",
+        everySec: () => this.settings.lectureEverySec,
         now: () => this.now(),
         setTimer: (fn, ms) => this.setTimer(fn, ms),
         clearTimer: (id) => this.clearTimerFn(id),
@@ -6954,7 +6998,7 @@ Notes are in the app.` : `Лекция выключена.
   }
 
   // src/background/index.ts
-  var APP_VERSION = "1.7.0";
+  var APP_VERSION = "1.7.1";
   function getKV() {
     try {
       const ls = globalThis.localStorage;

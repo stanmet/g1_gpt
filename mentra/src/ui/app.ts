@@ -74,6 +74,7 @@ function previewBridge(): Bridge {
       clearAfterSec: 90,
       headNod: true,
       translateTo: "ru-RU",
+      lectureEverySec: 15,
       provider: "anthropic",
       anthropicModel: "claude-haiku-5-5",
       geminiModel: "gemini-3.8-flash",
@@ -392,6 +393,10 @@ function renderSettings(s: any, st: any) {
   setStep("followUpSec", st.followUpSec ?? 0)
   setSelect("translateTo", st.translateTo ?? "ru-RU")
   setStep("autoAdvanceSec", st.autoAdvanceSec ?? 0)
+  const every = st.lectureEverySec ?? 15
+  setStep("lectureEverySec", every)
+  $("lectureCost").textContent = `Чаще — больше запросов к нейросети: до ${Math.round(3600 / every)} в час. Пауза в речи лектора даёт тезис раньше.`
+  $("lectureEveryText").textContent = `Тезисы появляются примерно раз в ${every} секунд.`
   setStep("clearAfterSec", st.clearAfterSec ?? 90)
   const nod = field<HTMLInputElement>("headNod")
   if (document.activeElement !== nod) nod.checked = st.headNod !== false
