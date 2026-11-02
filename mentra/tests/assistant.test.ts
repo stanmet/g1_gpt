@@ -255,6 +255,71 @@ describe("voice → OpenAI → glasses, with context", () => {
   })
 })
 
+describe("counter-question from the assistant", () => {
+  test("reply without wake phrase is accepted and sent with context", async () => {
+    const e = setup(["Из какого города вы вылетаете?", "Из Дублина до Рима около 2 ч 50 мин прямым рейсом."])
+    e.a.onTranscript("Вопрос, сколько лететь до Рима?", true)
+    await e.clock.advance(SILENCE_MS + 10)
+    expect(e.shown.at(-1)).toContain("ответьте голосом")
+
+    // the user answers without saying the wake phrase
+    e.a.onTranscript("Из Дуб", false)
+    expect(e.a.phase).toBe("capturing")
+    e.a.onTranscript("Из Дублина.", true)
+    await e.clock.advance(SILENCE_MS + 10)
+
+    expect(e.requests.length).toBe(2)
+    expect(e.requests[1].body.input).toEqual([
+      {role: "user", content: "сколько лететь до Рима?"},
+      {role: "assistant", content: "Из какого города вы вылетаете?"},
+      {role: "user", content: "Из Дублина."},
+    ])
+    expect(e.shown.at(-1)!.replace(/\n/g, " ")).toContain("Из Дублина до Рима")
+  })
+
+  test("very short reply ('Да') works when only a final result arrives", async () => {
+    const e = setup(["Показать цены в евро?", "Билет от 40 евро."])
+    e.a.onTranscript("Вопрос, сколько стоит билет до Рима?", true)
+    await e.clock.advance(SILENCE_MS + 10)
+    e.a.onTranscript("Да.", true)
+    await e.clock.advance(SILENCE_MS + 10)
+    expect(e.requests.length).toBe(2)
+    expect(e.requests[1].body.input.at(-1)).toEqual({role: "user", content: "Да."})
+  })
+
+  test("'дальше' during the reply window still turns the page", async () => {
+    const long = "Нужно уточнить детали. ".repeat(12) + "Из какого города вылет?"
+    const e = setup([long])
+    e.a.onTranscript("Вопрос, сколько лететь до Рима?", true)
+    await e.clock.advance(SILENCE_MS + 10)
+    expect(e.a.pages.length).toBeGreaterThan(1)
+    e.a.onTranscript("Дальше", false)
+    e.a.onTranscript("Дальше.", true)
+    await e.clock.advance(SILENCE_MS + 10)
+    expect(e.requests.length).toBe(1)
+    expect(e.a.page).toBe(1)
+  })
+
+  test("reply window closes; later speech without wake phrase is ignored", async () => {
+    const e = setup(["Из какого города?"])
+    e.a.onTranscript("Вопрос, сколько лететь до Рима?", true)
+    await e.clock.advance(SILENCE_MS + 10)
+    await e.clock.advance(30_000)
+    e.a.onTranscript("Пойдём пить кофе", true)
+    await e.clock.advance(SILENCE_MS + 10)
+    expect(e.requests.length).toBe(1)
+  })
+
+  test("normal answers do not open a reply window", async () => {
+    const e = setup(["Около 3 часов."])
+    e.a.onTranscript("Вопрос, сколько лететь до Рима?", true)
+    await e.clock.advance(SILENCE_MS + 10)
+    e.a.onTranscript("А мне кажется, дольше", true)
+    await e.clock.advance(SILENCE_MS + 10)
+    expect(e.requests.length).toBe(1)
+  })
+})
+
 describe("errors are explained on the glasses", () => {
   test("no key", async () => {
     const e = setup([], {apiKey: ""})

@@ -8,7 +8,7 @@
 import {fitScreen, paginate, sanitizeForG1} from "./g1text"
 import {askOpenAI, explainError, OpenAIError, type FetchLike} from "./openai"
 import {normalizeSettings, Store, type Message, type Settings} from "./store"
-import {detectWake, isMeaningful, parseCommand, type VoiceCommand} from "./voice"
+import {detectWake, isMeaningful, normalize, parseCommand, type VoiceCommand} from "./voice"
 
 export type Phase = "idle" | "capturing" | "thinking" | "answering"
 
@@ -37,6 +37,14 @@ export interface AssistantDeps {
 
 /** How long a pause in speech ends a question. */
 export const SILENCE_MS = 1600
+/** After an answer that ends with a question, accept the reply without the wake phrase for this long. */
+export const REPLY_WINDOW_SEC = 25
+
+/** True if the last sentence of the text is a question. */
+export function endsWithQuestion(text: string): boolean {
+  const t = String(text ?? "").trim().replace(/[\s»")\]]+$/, "")
+  return t.endsWith("?")
+}
 /** How long we wait for a question after a bare wake phrase. */
 export const WAKE_WAIT_MS = 9000
 const INTERIM_THROTTLE_MS = 450
@@ -64,6 +72,7 @@ export class Assistant {
   private lastInterimShow = 0
   private requestSeq = 0
   private followUpUntil = 0
+  private captureIsReply = false
   private displayChecked = false
 
   private readonly now: () => number
@@ -183,9 +192,15 @@ export class Assistant {
     }
 
     if (!isFinal) {
-      // Show early feedback as soon as the wake phrase is heard.
-      if (this.settings.listenMode === "wake" && detectWake(t, this.settings.wakeWords).matched) {
-        this.startCapture(true)
+      // Show early feedback as soon as the wake phrase is heard,
+      // or as soon as the user starts replying to a counter-question.
+      const inReplyWindow = this.now() < this.followUpUntil && this.phase === "answering"
+      if (
+        (this.settings.listenMode === "wake" && detectWake(t, this.settings.wakeWords).matched) ||
+        (inReplyWindow && isMeaningful(t) && !parseCommand(t))
+      ) {
+        if (inReplyWindow) this.addLog("wake", "Ответ на встречный вопрос / уточнение без активатора")
+        this.startCapture(true, inReplyWindow)
         this.captureText(t, false)
       }
       return
@@ -208,13 +223,15 @@ export class Assistant {
     if (wake.matched) this.addLog("wake", wake.rest ? `Фраза-активатор, вопрос: «${wake.rest}»` : "Фраза-активатор")
     else if (followUp) this.addLog("wake", "Уточнение без активатора")
 
-    if (!body || !isMeaningful(body)) {
+    // A reply to a counter-question may be very short ("да", "в евро").
+    const shortReplyOk = !wake.matched && followUp && normalize(body).length > 0
+    if (!body || (!isMeaningful(body) && !shortReplyOk)) {
       if (wake.matched) {
         this.startCapture(false)
       }
       return
     }
-    this.startCapture(false)
+    this.startCapture(false, !wake.matched && followUp)
     this.captureText(body, true)
   }
 
@@ -236,9 +253,10 @@ export class Assistant {
     }
   }
 
-  private startCapture(fromInterim: boolean): void {
+  private startCapture(fromInterim: boolean, isReply = false): void {
     if (this.phase === "thinking") this.requestSeq++ // a new question supersedes the pending one
     this.phase = "capturing"
+    this.captureIsReply = isReply
     this.committed = []
     this.interim = ""
     this.cancelTimer("pageTimer")
@@ -320,7 +338,7 @@ export class Assistant {
     this.committed = []
     this.interim = ""
     this.cancelTimer("wakeTimer")
-    if (!isMeaningful(q)) {
+    if (!isMeaningful(q) && !(this.captureIsReply && normalize(q).length > 0)) {
       this.phase = "idle"
       this.clearDisplay()
       this.changed()
@@ -366,11 +384,16 @@ export class Assistant {
       this.deps.store.saveHistory(this.history)
       this.lastAnswer = res.text
       const clean = sanitizeForG1(res.text)
-      this.pages = paginate(clean.length ? clean : "(пустой ответ)")
+      // If the assistant asked something back ("Из какого города?"), the user's reply
+      // must be accepted without the wake phrase.
+      const asksBack = endsWithQuestion(clean)
+      this.pages = paginate(clean.length ? clean + (asksBack ? "\n» ответьте голосом" : "") : "(пустой ответ)")
       this.page = 0
       this.phase = "answering"
-      this.followUpUntil = this.settings.followUpSec > 0 ? this.now() + this.settings.followUpSec * 1000 : 0
+      const windowSec = Math.max(this.settings.followUpSec, asksBack ? REPLY_WINDOW_SEC : 0)
+      this.followUpUntil = windowSec > 0 ? this.now() + windowSec * 1000 : 0
       this.addLog("display", `Ответ: ${this.pages.length} экр.`)
+      if (asksBack) this.addLog("info", `Встречный вопрос — жду ответ без активатора ${windowSec} с`)
       this.showPage(0)
     } catch (e) {
       if (seq !== this.requestSeq) return

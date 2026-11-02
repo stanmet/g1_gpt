@@ -4727,7 +4727,8 @@
       "Пиши обычным текстом без Markdown: без заголовков, звёздочек, таблиц, ссылок, эмодзи и блоков кода.",
       `Начинай сразу с сути, без вступлений и повторения вопроса. По умолчанию уложись примерно в ${s.answerWords} слов. Если пользователь просит подробнее или вопрос этого требует — можно длиннее, короткими абзацами.`,
       "Списки оформляй короткими строками, каждая начинается с «• ». Числа пиши цифрами.",
-      "Вопрос получен через распознавание речи и может содержать ошибки — угадывай смысл по контексту. Если запрос совсем непонятен, коротко переспроси.",
+      "Вопрос получен через распознавание речи и может содержать ошибки — угадывай смысл по контексту.",
+      "Старайся отвечать сразу, без встречных вопросов: если чего-то не хватает (например, города отправления), сделай разумное предположение — по сведениям о пользователе, если они есть, — коротко назови его и ответь. Переспрашивай, только если без уточнения ответ бесполезен, и тогда задай один короткий вопрос.",
       "Учитывай предыдущие реплики разговора: пользователь может задавать уточняющие вопросы.",
       `Текущие дата и время у пользователя: ${localDateTime(now)}.`
     ];
@@ -5036,6 +5037,11 @@ ${s.instructions.trim()}`);
 
   // src/background/assistant.ts
   var SILENCE_MS = 1600;
+  var REPLY_WINDOW_SEC = 25;
+  function endsWithQuestion(text) {
+    const t = String(text ?? "").trim().replace(/[\s»")\]]+$/, "");
+    return t.endsWith("?");
+  }
   var WAKE_WAIT_MS = 9000;
   var INTERIM_THROTTLE_MS = 450;
   var LOG_MAX = 80;
@@ -5062,6 +5068,7 @@ ${s.instructions.trim()}`);
     lastInterimShow = 0;
     requestSeq = 0;
     followUpUntil = 0;
+    captureIsReply = false;
     displayChecked = false;
     now;
     setTimer;
@@ -5164,8 +5171,11 @@ ${s.instructions.trim()}`);
         return;
       }
       if (!isFinal) {
-        if (this.settings.listenMode === "wake" && detectWake(t, this.settings.wakeWords).matched) {
-          this.startCapture(true);
+        const inReplyWindow = this.now() < this.followUpUntil && this.phase === "answering";
+        if (this.settings.listenMode === "wake" && detectWake(t, this.settings.wakeWords).matched || inReplyWindow && isMeaningful(t) && !parseCommand(t)) {
+          if (inReplyWindow)
+            this.addLog("wake", "Ответ на встречный вопрос / уточнение без активатора");
+          this.startCapture(true, inReplyWindow);
           this.captureText(t, false);
         }
         return;
@@ -5185,13 +5195,14 @@ ${s.instructions.trim()}`);
         this.addLog("wake", wake.rest ? `Фраза-активатор, вопрос: «${wake.rest}»` : "Фраза-активатор");
       else if (followUp)
         this.addLog("wake", "Уточнение без активатора");
-      if (!body || !isMeaningful(body)) {
+      const shortReplyOk = !wake.matched && followUp && normalize(body).length > 0;
+      if (!body || !isMeaningful(body) && !shortReplyOk) {
         if (wake.matched) {
           this.startCapture(false);
         }
         return;
       }
-      this.startCapture(false);
+      this.startCapture(false, !wake.matched && followUp);
       this.captureText(body, true);
     }
     commandRelevant(cmd) {
@@ -5216,10 +5227,11 @@ ${s.instructions.trim()}`);
           this.startCapture(false);
       }
     }
-    startCapture(fromInterim) {
+    startCapture(fromInterim, isReply = false) {
       if (this.phase === "thinking")
         this.requestSeq++;
       this.phase = "capturing";
+      this.captureIsReply = isReply;
       this.committed = [];
       this.interim = "";
       this.cancelTimer("pageTimer");
@@ -5291,7 +5303,7 @@ ${s.instructions.trim()}`);
       this.committed = [];
       this.interim = "";
       this.cancelTimer("wakeTimer");
-      if (!isMeaningful(q)) {
+      if (!isMeaningful(q) && !(this.captureIsReply && normalize(q).length > 0)) {
         this.phase = "idle";
         this.clearDisplay();
         this.changed();
@@ -5334,11 +5346,16 @@ ${s.instructions.trim()}`);
         this.deps.store.saveHistory(this.history);
         this.lastAnswer = res.text;
         const clean = sanitizeForG1(res.text);
-        this.pages = paginate(clean.length ? clean : "(пустой ответ)");
+        const asksBack = endsWithQuestion(clean);
+        this.pages = paginate(clean.length ? clean + (asksBack ? `
+» ответьте голосом` : "") : "(пустой ответ)");
         this.page = 0;
         this.phase = "answering";
-        this.followUpUntil = this.settings.followUpSec > 0 ? this.now() + this.settings.followUpSec * 1000 : 0;
+        const windowSec = Math.max(this.settings.followUpSec, asksBack ? REPLY_WINDOW_SEC : 0);
+        this.followUpUntil = windowSec > 0 ? this.now() + windowSec * 1000 : 0;
         this.addLog("display", `Ответ: ${this.pages.length} экр.`);
+        if (asksBack)
+          this.addLog("info", `Встречный вопрос — жду ответ без активатора ${windowSec} с`);
         this.showPage(0);
       } catch (e) {
         if (seq !== this.requestSeq)
@@ -5455,7 +5472,7 @@ ${s.instructions.trim()}`);
   }
 
   // src/background/index.ts
-  var APP_VERSION = "1.0.0";
+  var APP_VERSION = "1.0.1";
   function getKV() {
     try {
       const ls = globalThis.localStorage;
