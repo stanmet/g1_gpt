@@ -536,6 +536,75 @@ describe("Mentra dashboard hides answers while the head is up", () => {
   })
 })
 
+describe("lecture mode («лекция»)", () => {
+  const SENT =
+    "Today we talk about entropy, which measures how many microscopic arrangements correspond to the same macroscopic state."
+
+  test("voice start, lecturer speech → key points, own question, stop", async () => {
+    const e = setup([
+      "Q: Энтропия льда при таянии?\nA: Растёт.",
+      "• Энтропия — число микросостояний",
+      "Q: Что такое микросостояние?\nA: Расположение всех частиц.",
+    ])
+    e.a.onTranscript("Лекция", true)
+    expect(e.a.phase).toBe("lecture")
+    expect(e.shown.at(-1)).toContain("Режим лекции")
+
+    // the lecturer's English "question" is lecture content, not the activator
+    e.a.onTranscript(SENT, true)
+    e.a.onTranscript("Question for you: what happens to the entropy of ice when it melts?", true)
+    await e.clock.advance(10)
+    expect(e.requests.length).toBe(1)
+    expect(e.requests[0].body.instructions).toContain("обратился к аудитории")
+    expect(e.requests[0].body.input).toEqual([{role: "user", content: expect.stringContaining("entropy of ice")}])
+    expect(e.requests[0].body.tools).toBeUndefined() // no web search in lecture mode
+    expect(e.shown.at(-1)).toContain("→ Растёт")
+    expect(e.a.history.length).toBe(0) // lecture calls do not pollute the conversation
+
+    await e.clock.advance(15_000) // pause → key points (held behind the answer)
+    expect(e.requests.length).toBe(2)
+    expect(e.requests[1].body.instructions).toContain("тезис")
+
+    // the user's own question in Russian with the activator stays in lecture mode
+    e.a.onTranscript("Вопрос, что такое микросостояние?", true)
+    await e.clock.advance(10)
+    expect(e.a.phase).toBe("lecture")
+    expect(e.requests[2].body.instructions).toContain("Студент")
+    expect(e.shown.at(-1)).toContain("Расположение всех частиц")
+
+    // English "stop" from the lecturer does nothing; «стоп лекция» stops
+    e.a.onTranscript("Stop.", true)
+    expect(e.a.phase).toBe("lecture")
+    e.a.onTranscript("Стоп лекция", true)
+    expect(e.a.phase).toBe("idle")
+    expect(e.shown.at(-1)).toContain("Тезисов: 1, ответов: 2")
+    expect(e.store.loadLecture()!.notes.length).toBe(3)
+  })
+
+  test("needs a key; switches to translation and back; UI question goes to the lecture", async () => {
+    const nokey = setup([], {apiKey: ""})
+    nokey.a.onTranscript("Лекция", true)
+    expect(nokey.a.phase).toBe("idle")
+    expect(nokey.shown.at(-1)).toContain("ключ")
+
+    const e = setup(["Q: Сколько будет 2+2?\nA: 4."])
+    e.a.onTranscript("Режим лекции", true)
+    expect(e.a.phase).toBe("lecture")
+    await e.a.ask("Сколько будет 2+2?", "ui")
+    await e.clock.advance(10)
+    expect(e.a.phase).toBe("lecture")
+    expect(e.shown.at(-1)).toContain("→ 4.")
+    e.a.onTranscript("Транслейт", true)
+    expect(e.a.phase).toBe("translating")
+    e.a.onTranscript("Лекция", true)
+    expect(e.a.phase).toBe("lecture")
+    e.a.command("hide", "ui")
+    expect(e.a.phase).toBe("idle")
+    expect(e.a.snapshot().lecture.active).toBe(false)
+    expect(e.a.snapshot().lecture.total).toBe(1)
+  })
+})
+
 describe("live translation («транслейт»)", () => {
   const tr = (text: string, isFinal: boolean, extra: Record<string, unknown> = {}) =>
     translation.handler?.({text, isFinal, sourceLanguage: "en", targetLanguage: "ru-RU", originalText: "x", utteranceId: "u1", ...extra})

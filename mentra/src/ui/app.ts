@@ -23,6 +23,7 @@ declare global {
 
 import {PROVIDERS, type Provider} from "../background/llm"
 import {remoteCommand} from "./remote"
+import {notesAsText, type LectureRecord} from "../background/lecture"
 
 const AI_FOOTER: Record<Provider, string> = {
   openai: "GPT‑6.1 Terra отвечает быстро и стоит доли цента за вопрос. Sol и Astra умнее, но дороже.",
@@ -111,6 +112,21 @@ function previewBridge(): Bridge {
       if (channel === "command" && payload?.cmd === "provider") state.settings.provider = payload.provider
       if (channel === "command" && payload?.cmd === "translate") state.translating = true
       if (channel === "command" && payload?.cmd === "translateStop") state.translating = false
+      if (channel === "command" && payload?.cmd === "lecture") {
+        state.translating = false
+        state.phase = "lecture"
+        state.currentScreen = "• Энтропия — мера беспорядка\n• Растёт в замкнутой системе"
+        state.lecture = {active: true, startedAt: Date.now() - 600000, endedAt: 0, total: 3, notes: [
+          {t: Date.now() - 500000, kind: "point", text: "Энтропия — мера беспорядка системы"},
+          {t: Date.now() - 400000, kind: "qa", q: "Что происходит с энтропией льда при таянии?", text: "Растёт: молекулы воды движутся свободнее."},
+          {t: Date.now() - 300000, kind: "point", text: "В замкнутой системе энтропия не убывает"},
+        ]}
+      }
+      if (channel === "command" && payload?.cmd === "lectureStop") {
+        state.phase = "idle"
+        state.lecture = {...state.lecture, active: false, endedAt: Date.now()}
+      }
+      if (channel === "getLecture") return state.lecture
       return state
     },
     on() {
@@ -182,6 +198,7 @@ const PHASE: Record<string, string> = {
   thinking: "Думаю…",
   answering: "Ответ на очках",
   translating: "Перевод",
+  lecture: "Лекция",
 }
 
 function capitalize(s: string) {
@@ -194,6 +211,7 @@ function render(s: any) {
   const st = s.settings ?? {}
   renderGlasses(s, st)
   renderChat(s)
+  renderLecture(s)
   renderSettings(s, st)
   renderLog(s)
 }
@@ -204,7 +222,7 @@ function renderGlasses(s: any, st: any) {
   $("connText").textContent =
     s.glassesConnected === true ? "Очки подключены" : s.glassesConnected === false ? "Очки не подключены" : "Очки: нет данных"
 
-  const mode = s.translating ? "translate" : "assistant"
+  const mode = s.lecture?.active ? "lecture" : s.translating ? "translate" : "assistant"
   $("lens").dataset.mode = mode
   const seg = $("modeSeg")
   seg.dataset.mode = mode
@@ -212,6 +230,7 @@ function renderGlasses(s: any, st: any) {
 
   const wake = capitalize(String((st.wakeWords ?? [])[0] ?? "вопрос"))
   $("wakeHint").textContent = `«${wake}, …»`
+  $("wakeList").textContent = (st.wakeWords ?? ["вопрос"]).map((w: string) => `«${capitalize(String(w))}»`).join(", ")
 
   // The lens mirrors the glasses display.
   const lensText = $("lensText")
@@ -219,6 +238,9 @@ function renderGlasses(s: any, st: any) {
   let dim = false
   if (s.translating) {
     text = s.currentScreen || "Слушаю речь вокруг…"
+    dim = !s.currentScreen
+  } else if (s.phase === "lecture") {
+    text = s.currentScreen || "Слушаю лекцию…"
     dim = !s.currentScreen
   } else if (s.phase === "idle") {
     text = s.lastError || `Экран пуст.\nСкажите «${wake}, …»`
@@ -241,7 +263,13 @@ function renderGlasses(s: any, st: any) {
 
   const target = st.translateTo === "en-US" ? "английский" : "русский"
   $("lensState").textContent =
-    st.listenMode === "off" ? "Микрофон выключен" : s.translating ? `Перевод на ${target}` : (PHASE[s.phase] ?? s.phase)
+    st.listenMode === "off"
+      ? "Микрофон выключен"
+      : s.translating
+        ? `Перевод на ${target}`
+        : s.phase === "lecture"
+          ? `Лекция: тезисы ${st.translateTo === "en-US" ? "по-английски" : "по-русски"}`
+          : (PHASE[s.phase] ?? s.phase)
 
   const dots = $("pageDots")
   dots.textContent = ""
@@ -382,6 +410,11 @@ function fillModelOptions(p: Provider) {
   modelOptionsFor = p
 }
 
+function fmtHM(t: number) {
+  const d = new Date(t)
+  return `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`
+}
+
 function fmtTime(t: number) {
   const d = new Date(t)
   const p = (n: number) => (n < 10 ? "0" + n : "" + n)
@@ -398,8 +431,66 @@ const KIND_LABEL: Record<string, string> = {
   error: "ошибка",
   info: "инфо",
   touch: "касание",
+  lecture: "лекция",
   head: "голова",
   translate: "перевод",
+}
+
+async function copyText(text: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {
+    const ta = document.createElement("textarea")
+    ta.value = text
+    document.body.appendChild(ta)
+    ta.select()
+    document.execCommand("copy")
+    ta.remove()
+  }
+}
+
+let lectureKey = ""
+
+function renderLecture(s: any) {
+  const lec = s.lecture
+  const box = $("lectureBox")
+  const show = Boolean(lec && (lec.active || lec.total > 0))
+  box.hidden = !show
+  if (!show) return
+  const points = lec.notes.filter((n: any) => n.kind === "point").length
+  const answers = lec.notes.length - points
+  const counts = `${points} ${plural(points, "тезис", "тезиса", "тезисов")}, ${answers} ${plural(answers, "ответ", "ответа", "ответов")}`
+  $("lectureMeta").textContent = lec.active ? "Идёт запись" : `Лекция ${fmtHM(lec.startedAt)}–${lec.endedAt ? fmtHM(lec.endedAt) : "…"}`
+  $("lectureSub").textContent = counts
+  const key = `${lec.startedAt}:${lec.total}`
+  if (key === lectureKey) return
+  lectureKey = key
+  const list = $("lectureNotes")
+  list.textContent = ""
+  for (const n of [...lec.notes].reverse()) {
+    const li = document.createElement("li")
+    li.className = n.kind
+    const t = document.createElement("span")
+    t.className = "t"
+    t.textContent = fmtHM(n.t)
+    li.append(t)
+    if (n.kind !== "point") {
+      const q = document.createElement("span")
+      q.className = "q"
+      q.textContent = (n.kind === "you" ? "Вы: " : "Лектор: ") + (n.q ?? "")
+      li.append(q)
+      li.append("→ " + n.text)
+    } else li.append(n.text)
+    list.append(li)
+  }
+}
+
+function plural(n: number, one: string, few: string, many: string): string {
+  const m10 = n % 10
+  const m100 = n % 100
+  if (m10 === 1 && m100 !== 11) return one
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few
+  return many
 }
 
 function renderLog(s: any) {
@@ -608,9 +699,12 @@ function wire() {
     .querySelectorAll<HTMLButtonElement>("button")
     .forEach((b) =>
       b.addEventListener("click", () => {
-        const wantTranslate = b.dataset.mode === "translate"
-        if (wantTranslate === Boolean(current?.translating)) return
-        call("command", {cmd: wantTranslate ? "translate" : "translateStop"})
+        const want = b.dataset.mode
+        const now = current?.lecture?.active ? "lecture" : current?.translating ? "translate" : "assistant"
+        if (want === now) return
+        if (want === "translate") call("command", {cmd: "translate"})
+        else if (want === "lecture") call("command", {cmd: "lecture"})
+        else call("command", {cmd: now === "lecture" ? "lectureStop" : "translateStop"})
       }),
     )
 
@@ -669,20 +763,23 @@ function wire() {
     await call("simulateSpeech", {text})
   })
 
+  $("copyLecture").addEventListener("click", async () => {
+    let rec: LectureRecord | null = null
+    try {
+      rec = (await bridge.request("getLecture", {}, {timeout: 15000})) as LectureRecord | null
+    } catch {
+      rec = current?.lecture ?? null
+    }
+    const text = notesAsText(rec, (t) => new Date(t).toLocaleString("ru-RU", {day: "numeric", month: "long", hour: "2-digit", minute: "2-digit"}))
+    if (!text) return toast("Конспект пока пуст")
+    await copyText(text)
+    toast("Конспект скопирован")
+  })
+
   $("copyLog").addEventListener("click", async () => {
     const lines = (current?.log ?? []).map((e: any) => `${fmtTime(e.t)} [${e.kind}] ${e.msg}`).join("\n")
-    try {
-      await navigator.clipboard.writeText(lines)
-      toast("Журнал скопирован")
-    } catch {
-      const ta = document.createElement("textarea")
-      ta.value = lines
-      document.body.appendChild(ta)
-      ta.select()
-      document.execCommand("copy")
-      ta.remove()
-      toast("Журнал скопирован")
-    }
+    await copyText(lines)
+    toast("Журнал скопирован")
   })
 
   wireSettings()

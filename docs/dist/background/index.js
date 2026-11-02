@@ -4961,6 +4961,63 @@
       return null;
     return AI_BY_FORM.get(m[1].trim()) ?? null;
   }
+  var LECTURE_START = [
+    "лекция",
+    "режим лекции",
+    "лекционный режим",
+    "включи лекцию",
+    "включи режим лекции",
+    "начни лекцию",
+    "конспект",
+    "конспектируй",
+    "веди конспект",
+    "включи конспект",
+    "начни конспект",
+    "lecture",
+    "lecture mode",
+    "start lecture",
+    "take notes",
+    "start notes"
+  ];
+  var LECTURE_STOP = [
+    "стоп лекция",
+    "стоп лекции",
+    "стоп конспект",
+    "конец лекции",
+    "лекция окончена",
+    "лекция закончилась",
+    "выключи лекцию",
+    "выключи режим лекции",
+    "закончи лекцию",
+    "выйди из лекции",
+    "останови лекцию",
+    "выключи конспект",
+    "закончи конспект",
+    "останови конспект",
+    "хватит конспектировать",
+    "stop lecture",
+    "end lecture",
+    "lecture off",
+    "stop notes",
+    "stop taking notes"
+  ];
+  var LECTURE_LOOKUP = new Map;
+  for (const p of LECTURE_START)
+    LECTURE_LOOKUP.set(normalize(p), "start");
+  for (const p of LECTURE_STOP)
+    LECTURE_LOOKUP.set(normalize(p), "stop");
+  function parseLectureCommand(text) {
+    const n = normalize(text);
+    if (!n)
+      return null;
+    const FILLERS = /^(пожалуйста|ну|так|давай|а|и|окей|ок|please|ok|okay)$/;
+    let words = n.split(" ").filter(Boolean);
+    while (words.length > 1 && FILLERS.test(words[0]))
+      words = words.slice(1);
+    while (words.length > 1 && FILLERS.test(words[words.length - 1]))
+      words = words.slice(0, -1);
+    return LECTURE_LOOKUP.get(words.join(" ")) ?? null;
+  }
 
   // src/background/openai.ts
   var OPENAI_URL = "https://api.openai.com/v1/responses";
@@ -5015,7 +5072,7 @@ ${s.instructions.trim()}`);
     ];
     const body = {
       model: s.model,
-      instructions: buildInstructions(s, opts.now, detectLang(question)),
+      instructions: opts.system ?? buildInstructions(s, opts.now, detectLang(question)),
       input,
       store: false,
       max_output_tokens: Math.min(8000, Math.max(600, s.answerWords * 12))
@@ -5084,7 +5141,7 @@ ${s.instructions.trim()}`);
     const setTimer = opts.setTimer ?? setTimeout;
     const started = now();
     const send = async (includeReasoning) => {
-      const body = JSON.stringify(buildRequestBody(s, history, question, { includeReasoning }));
+      const body = JSON.stringify(buildRequestBody(s, history, question, { includeReasoning, system: opts.system }));
       let res;
       try {
         res = await withTimeout(fetchFn(OPENAI_URL, {
@@ -5290,7 +5347,7 @@ ${s.instructions.trim()}`);
     const body = {
       model: s.anthropicModel,
       max_tokens: maxTokens(s),
-      system: buildInstructions(s, opts.now, detectLang(question)),
+      system: opts.system ?? buildInstructions(s, opts.now, detectLang(question)),
       messages: [
         ...alternatingHistory(history, s.historyMessages).map((m) => ({ role: m.role, content: m.content })),
         { role: "user", content: question }
@@ -5318,9 +5375,9 @@ ${s.instructions.trim()}`);
     if (!key)
       throw new LLMError("no key", "anthropic", 401, "no_key");
     const headers = { "content-type": "application/json", "x-api-key": key, "anthropic-version": ANTHROPIC_VERSION };
-    let r = await post("anthropic", fetchFn, ANTHROPIC_URL, headers, buildAnthropicBody(s, history, q), opts);
+    let r = await post("anthropic", fetchFn, ANTHROPIC_URL, headers, buildAnthropicBody(s, history, q, { system: opts.system }), opts);
     if (!r.ok && r.status === 400 && /thinking|effort|output_config/i.test(r.raw)) {
-      r = await post("anthropic", fetchFn, ANTHROPIC_URL, headers, buildAnthropicBody(s, history, q, { includeReasoning: false }), opts);
+      r = await post("anthropic", fetchFn, ANTHROPIC_URL, headers, buildAnthropicBody(s, history, q, { includeReasoning: false, system: opts.system }), opts);
     }
     const data = parseJson("anthropic", r.status, r.raw);
     if (!r.ok) {
@@ -5347,7 +5404,7 @@ ${s.instructions.trim()}`);
     if (opts.includeReasoning !== false)
       generationConfig.thinkingConfig = { thinkingLevel: geminiThinkingLevel(s) };
     const body = {
-      systemInstruction: { parts: [{ text: buildInstructions(s, opts.now, detectLang(question)) }] },
+      systemInstruction: { parts: [{ text: opts.system ?? buildInstructions(s, opts.now, detectLang(question)) }] },
       contents: [
         ...alternatingHistory(history, s.historyMessages).map((m) => ({
           role: m.role === "assistant" ? "model" : "user",
@@ -5371,9 +5428,9 @@ ${s.instructions.trim()}`);
       throw new LLMError("no key", "gemini", 401, "no_key");
     const url = `${GEMINI_BASE}${encodeURIComponent(s.geminiModel)}:generateContent`;
     const headers = { "Content-Type": "application/json", "x-goog-api-key": key };
-    let r = await post("gemini", fetchFn, url, headers, buildGeminiBody(s, history, q), opts);
+    let r = await post("gemini", fetchFn, url, headers, buildGeminiBody(s, history, q, { system: opts.system }), opts);
     if (!r.ok && r.status === 400 && /thinking/i.test(r.raw)) {
-      r = await post("gemini", fetchFn, url, headers, buildGeminiBody(s, history, q, { includeReasoning: false }), opts);
+      r = await post("gemini", fetchFn, url, headers, buildGeminiBody(s, history, q, { includeReasoning: false, system: opts.system }), opts);
     }
     const data = parseJson("gemini", r.status, r.raw);
     if (!r.ok) {
@@ -5410,6 +5467,441 @@ ${s.instructions.trim()}`);
       if (e instanceof OpenAIError)
         throw new LLMError(e.message, "openai", e.status, e.code);
       throw new LLMError(String(e?.message ?? e), provider, 0, "network");
+    }
+  }
+
+  // src/background/lecture.ts
+  var LECTURE_MIN_WORDS = 60;
+  var LECTURE_MIN_INTERVAL_MS = 40000;
+  var LECTURE_MAX_WORDS = 220;
+  var LECTURE_SILENCE_FLUSH_MS = 12000;
+  var LECTURE_FLUSH_MIN_WORDS = 15;
+  var LECTURE_ANSWER_HOLD_MS = 45000;
+  var CONTEXT_WORDS = 600;
+  var LECTURE_RESUME_MS = 20 * 60000;
+  var PREV_POINTS = 8;
+  var NOTES_MAX = 400;
+  var ERROR_SHOW_EVERY_MS = 60000;
+  function wordCount(s) {
+    return String(s ?? "").split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length;
+  }
+  var HOUSEKEEPING = [
+    "any questions",
+    "are there any questions",
+    "do you have any questions",
+    "any more questions",
+    "any other questions",
+    "questions so far",
+    "can you hear me",
+    "can everyone hear",
+    "can you all hear",
+    "can you see",
+    "can everyone see",
+    "is that clear",
+    "is this clear",
+    "does that make sense",
+    "does this make sense",
+    "are you with me",
+    "are we ready",
+    "everyone ready",
+    "is everyone ready",
+    "are you ready",
+    "is everyone here",
+    "shall we start",
+    "shall we begin",
+    "shall we continue",
+    "ok",
+    "okay",
+    "right",
+    "yes",
+    "all right",
+    "alright",
+    "you know",
+    "есть вопросы",
+    "есть ли вопросы",
+    "какие то вопросы",
+    "все слышат",
+    "всем слышно",
+    "меня слышно",
+    "понятно",
+    "всем понятно",
+    "всё понятно",
+    "все понятно",
+    "готовы",
+    "продолжим",
+    "начнем",
+    "начинаем",
+    "да"
+  ];
+  var AUDIENCE_CUES = [
+    "does anyone",
+    "does anybody",
+    "can anyone",
+    "can anybody",
+    "can someone",
+    "could anyone",
+    "could someone",
+    "anyone know",
+    "anybody know",
+    "who can tell",
+    "who knows",
+    "who can explain",
+    "who wants to",
+    "any ideas",
+    "any guesses",
+    "what do you think",
+    "what would you say",
+    "raise your hand",
+    "hands up",
+    "who remembers",
+    "кто знает",
+    "кто может",
+    "кто скажет",
+    "кто нибудь",
+    "как вы думаете",
+    "есть идеи",
+    "кто помнит",
+    "поднимите руку"
+  ];
+  function findAudienceQuestion(text) {
+    const sentences = String(text ?? "").replace(/\s+/g, " ").split(/(?<=[.!?…])\s+/).map((s) => s.trim()).filter(Boolean);
+    for (let i = sentences.length - 1;i >= 0; i--) {
+      const s = sentences[i];
+      const n = normalize(s);
+      if (wordCount(s) < 4)
+        continue;
+      if (HOUSEKEEPING.some((h) => n === h || n.startsWith(h + " ")))
+        continue;
+      if (/\?["»”')\s]*$/.test(s) || AUDIENCE_CUES.some((c) => (" " + n + " ").includes(" " + c + " ")))
+        return s;
+    }
+    return null;
+  }
+  function langName(lang) {
+    return lang === "en" ? "английском (English)" : "русском";
+  }
+  function buildPointsPrompt(prevPoints, chunk, lang) {
+    const system = [
+      "Ты помогаешь студенту на лекции. Твой ответ показывается на крошечном дисплее умных очков: 5 строк примерно по 30 символов.",
+      "Тебе дают свежий фрагмент речи лектора, распознанный автоматически: возможны ошибки распознавания и обрывки фраз — угадывай смысл по контексту.",
+      `Выдели суть: 1–3 коротких тезиса на ${langName(lang)} языке, каждый с новой строки и начинается с «• », не длиннее 12 слов.`,
+      "Не переводи и не пересказывай дословно — только главное: определения, утверждения, формулы, числа и даты, примеры, выводы. Термины можно оставлять в оригинале.",
+      "Не повторяй уже записанные тезисы. Если во фрагменте нет ничего содержательного (приветствие, организационные моменты, шум, повтор), ответь ровно SKIP.",
+      "Без Markdown, без вступлений и пояснений."
+    ].join(`
+`);
+    const prev = prevPoints.length ? `Уже записанные тезисы:
+${prevPoints.map((p) => "• " + p).join(`
+`)}
+
+` : "";
+    return { system, user: `${prev}Новый фрагмент лекции:
+«${chunk.trim()}»` };
+  }
+  function buildAnswerPrompt(context, question, lang, fromUser) {
+    const system = fromUser ? [
+      "Студент сидит на лекции и тихо задаёт тебе вопрос. Ответ показывается на крошечном дисплее умных очков.",
+      `Ответь коротко и по делу, не больше 30 слов, на ${langName(lang)} языке. Если вопрос относится к лекции — учитывай её контекст.`,
+      `Формат ровно две строки:
+Q: <вопрос, до 8 слов>
+A: <ответ>`,
+      "Без Markdown и вступлений."
+    ].join(`
+`) : [
+      "Ты помогаешь студенту на лекции. Лектор только что обратился к аудитории с вопросом; текст распознан автоматически, возможны ошибки.",
+      `Дай короткий правильный ответ, который студент может сказать вслух: не больше 25 слов, на ${langName(lang)} языке. Учитывай контекст лекции.`,
+      `Формат ровно две строки:
+Q: <вопрос лектора, до 8 слов>
+A: <ответ>`,
+      "Если это организационный вопрос (есть ли вопросы, слышно ли, понятно ли, готовы ли) или вопрос, на который нечего ответить по существу, ответь ровно SKIP.",
+      "Без Markdown и вступлений."
+    ].join(`
+`);
+    const ctx = context.trim() ? `Недавно на лекции:
+«${context.trim()}»
+
+` : "";
+    return { system, user: `${ctx}${fromUser ? "Вопрос студента" : "Вопрос лектора"}: «${question.trim()}»` };
+  }
+  var isSkip = (t) => /^\s*skip\b/i.test(t) || /^\s*[—–-]\s*$/.test(t);
+  function parsePoints(text) {
+    if (!String(text ?? "").trim() || isSkip(text))
+      return [];
+    return String(text).split(/\n+/).map((l) => l.replace(/^\s*(?:[•*\-–—]|\d+[.)])\s*/, "").replace(/\*\*/g, "").trim()).filter((l) => l && !isSkip(l)).slice(0, 3);
+  }
+  function parseAnswer(text, fallbackQ) {
+    const t = String(text ?? "").trim();
+    if (!t || isSkip(t))
+      return null;
+    const q = /^\s*(?:Q|В|Вопрос)\s*[:：]\s*(.+)$/im.exec(t)?.[1]?.trim();
+    const aMatch = /^\s*(?:A|О|Ответ)\s*[:：]\s*([\s\S]+)$/im.exec(t);
+    const a = (aMatch ? aMatch[1] : t.replace(/^\s*(?:Q|В|Вопрос)\s*[:：].*$/im, "")).replace(/\*\*/g, "").replace(/\s*\n\s*/g, " ").trim();
+    if (!a || isSkip(a))
+      return null;
+    return { q: q || fallbackQ, a };
+  }
+  function pointsScreen(points) {
+    const lines = wrapLines(sanitizeForG1(points.map((p) => "• " + p).join(`
+`)));
+    if (lines.length <= G1_LINES)
+      return lines.join(`
+`);
+    const kept = lines.slice(0, G1_LINES);
+    kept[G1_LINES - 1] = kept[G1_LINES - 1].replace(/\s*\S*$/, "") + "…";
+    return kept.join(`
+`);
+  }
+  function answerScreen(q, a) {
+    const qLines = wrapLines(sanitizeForG1("? " + q));
+    const qLine = qLines.length > 1 ? qLines[0].replace(/\s*\S*$/, "") + "…" : qLines[0] ?? "";
+    const aLines = wrapLines(sanitizeForG1("→ " + a));
+    const room = G1_LINES - (qLine ? 1 : 0);
+    const shown = aLines.slice(0, room);
+    if (aLines.length > room)
+      shown[room - 1] = shown[room - 1].replace(/\s*\S*$/, "") + "…";
+    return [qLine, ...shown].filter(Boolean).join(`
+`);
+  }
+
+  class Lecture {
+    deps;
+    active = false;
+    record;
+    screen = "";
+    session = 0;
+    buffer = [];
+    recent = [];
+    lastSummaryAt = 0;
+    summarizing = false;
+    answering = false;
+    pendingQuestion = null;
+    holdUntil = 0;
+    pendingPoints = null;
+    flushTimer = null;
+    holdTimer = null;
+    lastErrorShownAt = -Infinity;
+    constructor(deps, saved = null) {
+      this.deps = deps;
+      this.record = saved;
+    }
+    start() {
+      this.stopTimers();
+      this.session++;
+      this.active = true;
+      this.buffer = [];
+      this.recent = [];
+      this.summarizing = false;
+      this.answering = false;
+      this.pendingQuestion = null;
+      this.pendingPoints = null;
+      this.holdUntil = 0;
+      this.lastSummaryAt = this.deps.now();
+      const prev = this.record;
+      const resume = Boolean(prev?.endedAt && this.deps.now() - prev.endedAt < LECTURE_RESUME_MS);
+      if (resume && prev)
+        delete prev.endedAt;
+      else
+        this.record = { startedAt: this.deps.now(), notes: [] };
+      this.deps.save(this.record);
+      const en = this.deps.lang() === "en";
+      this.setScreen(en ? `Lecture mode
+• key points every ~40 s
+• answers to the lecturer's questions
+Stop: «стоп лекция»` : `Режим лекции
+• тезисы примерно раз в 40 с
+• ответы на вопросы лектора
+Выключить: «стоп лекция»`);
+      this.deps.log("lecture", resume ? "Режим лекции включён — продолжаю прежний конспект" : "Режим лекции включён");
+      this.deps.onChange();
+    }
+    stop() {
+      const notes = this.record?.notes ?? [];
+      const summary = { points: notes.filter((n) => n.kind === "point").length, answers: notes.filter((n) => n.kind !== "point").length };
+      if (!this.active)
+        return summary;
+      this.active = false;
+      this.session++;
+      this.stopTimers();
+      this.buffer = [];
+      this.pendingQuestion = null;
+      this.pendingPoints = null;
+      this.screen = "";
+      if (this.record) {
+        this.record.endedAt = this.deps.now();
+        this.deps.save(this.record);
+      }
+      this.deps.log("lecture", `Режим лекции выключен: тезисов ${summary.points}, ответов ${summary.answers}`);
+      this.deps.onChange();
+      return summary;
+    }
+    onSpeech(text) {
+      if (!this.active)
+        return;
+      const t = String(text ?? "").trim();
+      if (!t)
+        return;
+      this.buffer.push(t);
+      this.recent.push(t);
+      this.trimRecent();
+      const q = findAudienceQuestion(t);
+      if (q)
+        this.answer(q, false);
+      const words = wordCount(this.buffer.join(" "));
+      const since = this.deps.now() - this.lastSummaryAt;
+      if (words >= LECTURE_MAX_WORDS || words >= LECTURE_MIN_WORDS && since >= LECTURE_MIN_INTERVAL_MS)
+        this.summarize();
+      this.armFlush();
+    }
+    askUser(question) {
+      if (!this.active || !question.trim())
+        return;
+      this.answer(question.trim(), true);
+    }
+    hide() {
+      this.holdUntil = 0;
+      this.pendingPoints = null;
+      this.screen = "";
+      this.deps.clear();
+      this.deps.onChange();
+    }
+    trimRecent() {
+      let words = wordCount(this.recent.join(" "));
+      while (this.recent.length > 1 && words > CONTEXT_WORDS) {
+        words -= wordCount(this.recent.shift());
+      }
+    }
+    armFlush() {
+      if (this.flushTimer != null)
+        this.deps.clearTimer(this.flushTimer);
+      this.flushTimer = this.deps.setTimer(() => {
+        this.flushTimer = null;
+        if (this.active && wordCount(this.buffer.join(" ")) >= LECTURE_FLUSH_MIN_WORDS)
+          this.summarize();
+      }, LECTURE_SILENCE_FLUSH_MS);
+    }
+    async summarize() {
+      if (this.summarizing || !this.buffer.length)
+        return;
+      const session = this.session;
+      const chunk = this.buffer.join(" ");
+      this.buffer = [];
+      this.summarizing = true;
+      this.lastSummaryAt = this.deps.now();
+      const prev = (this.record?.notes ?? []).filter((n) => n.kind === "point").slice(-PREV_POINTS).map((n) => n.text);
+      const { system, user } = buildPointsPrompt(prev, chunk, this.deps.lang());
+      try {
+        const reply = await this.deps.complete(system, user);
+        if (session !== this.session)
+          return;
+        const points = parsePoints(reply);
+        if (!points.length) {
+          this.deps.log("lecture", `Тезисов нет (${wordCount(chunk)} слов без сути)`);
+          return;
+        }
+        const t = this.deps.now();
+        for (const p of points)
+          this.addNote({ t, kind: "point", text: p });
+        this.deps.log("lecture", points.map((p) => "• " + p).join(" "));
+        if (this.deps.now() < this.holdUntil)
+          this.pendingPoints = points;
+        else
+          this.setScreen(pointsScreen(points));
+      } catch (e) {
+        if (session !== this.session)
+          return;
+        this.showError(e);
+      } finally {
+        if (session === this.session) {
+          this.summarizing = false;
+          if (wordCount(this.buffer.join(" ")) >= LECTURE_MAX_WORDS)
+            this.summarize();
+        }
+      }
+    }
+    async answer(question, fromUser) {
+      if (this.answering) {
+        if (fromUser || !this.pendingQuestion?.fromUser)
+          this.pendingQuestion = { text: question, fromUser };
+        return;
+      }
+      const session = this.session;
+      this.answering = true;
+      this.deps.log("lecture", `${fromUser ? "Ваш вопрос" : "Вопрос лектора"}: ${question}`);
+      if (fromUser)
+        this.setScreen(answerScreen(question, "…думаю"));
+      const { system, user } = buildAnswerPrompt(this.recent.join(" "), question, fromUser ? detectLang(question) : this.deps.lang(), fromUser);
+      try {
+        const reply = await this.deps.complete(system, user);
+        if (session !== this.session)
+          return;
+        const qa = parseAnswer(reply, question);
+        if (!qa) {
+          this.deps.log("lecture", "Организационный вопрос — без ответа");
+          return;
+        }
+        this.addNote({ t: this.deps.now(), kind: fromUser ? "you" : "qa", q: qa.q, text: qa.a });
+        this.deps.log("lecture", `→ ${qa.a}`);
+        this.setScreen(answerScreen(qa.q, qa.a));
+        this.hold();
+      } catch (e) {
+        if (session !== this.session)
+          return;
+        this.showError(e);
+      } finally {
+        if (session === this.session) {
+          this.answering = false;
+          const next = this.pendingQuestion;
+          this.pendingQuestion = null;
+          if (next)
+            this.answer(next.text, next.fromUser);
+        }
+      }
+    }
+    hold() {
+      this.holdUntil = this.deps.now() + LECTURE_ANSWER_HOLD_MS;
+      if (this.holdTimer != null)
+        this.deps.clearTimer(this.holdTimer);
+      this.holdTimer = this.deps.setTimer(() => {
+        this.holdTimer = null;
+        this.holdUntil = 0;
+        if (!this.active)
+          return;
+        if (this.pendingPoints) {
+          this.setScreen(pointsScreen(this.pendingPoints));
+          this.pendingPoints = null;
+        }
+      }, LECTURE_ANSWER_HOLD_MS);
+    }
+    addNote(n) {
+      if (!this.record)
+        this.record = { startedAt: n.t, notes: [] };
+      this.record.notes.push(n);
+      if (this.record.notes.length > NOTES_MAX)
+        this.record.notes.splice(0, this.record.notes.length - NOTES_MAX);
+      this.deps.save(this.record);
+      this.deps.onChange();
+    }
+    setScreen(text) {
+      this.screen = text;
+      this.deps.show(text);
+      this.deps.onChange();
+    }
+    showError(e) {
+      const human = this.deps.explainError(e);
+      this.deps.log("error", `Лекция: ${human}`);
+      const now = this.deps.now();
+      if (now - this.lastErrorShownAt < ERROR_SHOW_EVERY_MS)
+        return;
+      this.lastErrorShownAt = now;
+      if (now >= this.holdUntil)
+        this.setScreen(human);
+    }
+    stopTimers() {
+      for (const k of ["flushTimer", "holdTimer"]) {
+        if (this[k] != null)
+          this.deps.clearTimer(this[k]);
+        this[k] = null;
+      }
     }
   }
 
@@ -5459,6 +5951,7 @@ ${s.instructions.trim()}`);
   var PROBE_KEY = "g1gpt.probe";
   var SETTINGS_KEY = "g1gpt.settings.v1";
   var HISTORY_KEY = "g1gpt.history.v1";
+  var LECTURE_KEY = "g1gpt.lecture.v1";
   function clampInt(v, min, max, dflt) {
     const n = typeof v === "number" ? v : parseInt(String(v), 10);
     if (!Number.isFinite(n))
@@ -5543,6 +6036,13 @@ ${s.instructions.trim()}`);
     saveHistory(h) {
       this.write(HISTORY_KEY, h.slice(-200));
     }
+    loadLecture() {
+      const r = this.read(LECTURE_KEY);
+      return r && typeof r.startedAt === "number" && Array.isArray(r.notes) ? r : null;
+    }
+    saveLecture(r) {
+      this.write(LECTURE_KEY, r);
+    }
   }
 
   // src/background/assistant.ts
@@ -5610,6 +6110,7 @@ ${s.instructions.trim()}`);
     headUpSince = 0;
     lastDashboardWarnAt = -Infinity;
     displayChecked = false;
+    lecture;
     now;
     setTimer;
     clearTimerFn;
@@ -5620,6 +6121,41 @@ ${s.instructions.trim()}`);
       this.clearTimerFn = deps.clearTimer ?? ((id) => clearTimeout(id));
       this.settings = deps.store.loadSettings();
       this.history = deps.store.loadHistory();
+      this.lecture = new Lecture({
+        complete: (system, user) => this.completeOnce(system, user),
+        explainError: (e) => {
+          const err = e;
+          return explainLLMError(err?.provider ?? asProvider(this.settings.provider), Number(err?.status) || 0, String(err?.code ?? ""), String(err?.message ?? ""));
+        },
+        show: (t) => this.show(t),
+        clear: () => this.clearDisplay(),
+        log: (kind, msg) => this.addLog(kind, msg),
+        lang: () => this.settings.translateTo === "en-US" ? "en" : "ru",
+        now: () => this.now(),
+        setTimer: (fn, ms) => this.setTimer(fn, ms),
+        clearTimer: (id) => this.clearTimerFn(id),
+        save: (r) => this.deps.store.saveLecture(r),
+        onChange: () => this.changed()
+      }, deps.store.loadLecture());
+    }
+    async completeOnce(system, user) {
+      const provider = asProvider(this.settings.provider);
+      const quick = {
+        ...this.settings,
+        webSearch: false,
+        historyMessages: 0,
+        answerWords: 40,
+        effort: this.settings.effort === "medium" || this.settings.effort === "high" ? "low" : this.settings.effort
+      };
+      const res = await askLLM(this.deps.fetch, quick, provider, [], user, {
+        system,
+        timeoutMs: 30000,
+        setTimer: (fn, ms) => this.setTimer(fn, ms),
+        now: this.now
+      });
+      const usage = res.usage ? `, токены ${res.usage.input_tokens ?? "?"}→${res.usage.output_tokens ?? "?"}` : "";
+      this.addLog("openai", `${PROVIDERS[provider].label}: ${(res.ms / 1000).toFixed(1)} с (${res.model}${usage})`);
+      return res.text;
     }
     addLog(kind, msg) {
       this.log.push({ t: this.now(), kind, msg: msg.slice(0, 400) });
@@ -5698,6 +6234,8 @@ ${s.instructions.trim()}`);
           this.clearDisplay();
         else if (this.phase === "answering")
           this.showPage(this.page);
+        else if (this.phase === "lecture")
+          this.lecture.screen ? this.show(this.lecture.screen) : this.clearDisplay();
       }, ms);
     }
     wakeWords() {
@@ -5721,6 +6259,11 @@ ${s.instructions.trim()}`);
           this.onTranscriptWhileTranslating(t);
         return;
       }
+      if (this.phase === "lecture") {
+        if (isFinal)
+          this.onTranscriptWhileLecture(t);
+        return;
+      }
       if (this.phase === "capturing") {
         this.captureText(t, isFinal);
         return;
@@ -5741,6 +6284,10 @@ ${s.instructions.trim()}`);
       const body = wake.matched ? wake.rest : t;
       if (parseTranslateCommand(body) === "start") {
         this.startTranslation("voice");
+        return;
+      }
+      if (parseLectureCommand(body) === "start") {
+        this.startLecture("voice");
         return;
       }
       const switchTo = parseSwitchCommand(body);
@@ -5785,6 +6332,8 @@ ${s.instructions.trim()}`);
     }
     onTouch(kind) {
       this.addLog("touch", kind);
+      if (this.phase === "lecture")
+        return;
       if (kind === "single_tap" || kind === "swipe_down") {
         if (this.pages.length)
           this.command("next", "touch");
@@ -5853,6 +6402,13 @@ ${s.instructions.trim()}`);
           this.startTranslation("voice");
           return;
         }
+        if (this.committed.length === 0 && parseLectureCommand(clean) === "start") {
+          this.cancelTimer("silenceTimer");
+          this.cancelTimer("wakeTimer");
+          this.interim = "";
+          this.startLecture("voice");
+          return;
+        }
         const cmd = parseCommand(clean);
         if (cmd && (this.committed.length === 0 || cmd === "cancel" || cmd === "hide")) {
           this.cancelTimer("silenceTimer");
@@ -5916,6 +6472,11 @@ ${s.instructions.trim()}`);
       const q = question.trim();
       if (!q)
         return;
+      if (this.phase === "lecture") {
+        this.addLog("ask", `${source === "ui" ? "[с телефона] " : ""}${q}`);
+        this.lecture.askUser(q);
+        return;
+      }
       if (this.phase === "translating")
         this.stopTranslation("question", false);
       const seq = ++this.requestSeq;
@@ -6027,6 +6588,8 @@ ${s.instructions.trim()}`);
         this.flash("Перевод недоступен.", 3000);
         return;
       }
+      if (this.phase === "lecture")
+        this.stopLecture("switch", false);
       if (this.phase === "thinking")
         this.requestSeq++;
       for (const t of ["silenceTimer", "wakeTimer", "pageTimer", "clearTimer_"])
@@ -6054,6 +6617,73 @@ ${s.instructions.trim()}`);
 To stop: «стоп перевод»`);
       this.armTranslateIdle();
       this.changed();
+    }
+    startLecture(source) {
+      const provider = asProvider(this.settings.provider);
+      if (!keyFor(this.settings, provider)) {
+        const msg = explainLLMError(provider, 401, "no_key", "");
+        this.addLog("error", `Режим лекции: ${msg}`);
+        this.flash(msg, 6000);
+        return;
+      }
+      if (this.phase === "translating")
+        this.stopTranslation("question", false);
+      if (this.phase === "thinking")
+        this.requestSeq++;
+      for (const t of ["silenceTimer", "wakeTimer", "pageTimer", "clearTimer_"])
+        this.cancelTimer(t);
+      this.committed = [];
+      this.interim = "";
+      this.followUpUntil = 0;
+      this.phase = "lecture";
+      if (this.settings.sttLanguage === "ru-RU") {
+        this.addLog("error", "Распознавание настроено только на русский: английскую лекцию очки не поймут. Настройки → Язык распознавания → русский + английский.");
+      }
+      this.lecture.start();
+      this.addLog("lecture", `Тезисы и ответы пишет ${displayName(this.settings, provider)} (${source === "ui" ? "включено с телефона" : "включено голосом"})`);
+    }
+    stopLecture(source, announce = true) {
+      if (this.phase !== "lecture")
+        return;
+      const { points, answers } = this.lecture.stop();
+      this.phase = "idle";
+      this.pages = [];
+      if (announce) {
+        const en = this.settings.translateTo === "en-US";
+        this.flash(en ? `Lecture mode off.
+Key points: ${points}, answers: ${answers}.
+Notes are in the app.` : `Лекция выключена.
+Тезисов: ${points}, ответов: ${answers}.
+Конспект — в приложении.`, 4000);
+      } else
+        this.clearDisplay();
+      if (source === "ui")
+        this.addLog("cmd", "Режим лекции выключен с телефона");
+      this.changed();
+    }
+    onTranscriptWhileLecture(t) {
+      const wake = this.wake(t);
+      const body = wake.matched ? wake.rest : t;
+      const lc = parseLectureCommand(body);
+      if (lc === "stop")
+        return this.stopLecture("voice");
+      if (lc === "start")
+        return;
+      const mine = wake.matched || detectLang(body) === "ru";
+      if (mine && parseTranslateCommand(body) === "start") {
+        this.stopLecture("switch", false);
+        this.startTranslation("voice");
+        return;
+      }
+      const cmd = parseCommand(body);
+      if (mine && (cmd === "hide" || cmd === "cancel" || parseTranslateCommand(body) === "stop"))
+        return this.stopLecture("voice");
+      if (wake.matched && detectLang(body) === "ru" && isMeaningful(body) && !cmd) {
+        this.addLog("ask", body);
+        this.lecture.askUser(body);
+        return;
+      }
+      this.lecture.onSpeech(t);
     }
     stopTranslation(source, announce = true) {
       if (this.phase !== "translating")
@@ -6094,6 +6724,11 @@ To stop: «стоп перевод»`);
       }
       if (tcmd === "start")
         return;
+      if (parseLectureCommand(body) === "start") {
+        this.stopTranslation("question", false);
+        this.startLecture("voice");
+        return;
+      }
       const cmd = parseCommand(body);
       if ((cmd === "hide" || cmd === "cancel") && (wake.matched || detectLang(body) === "ru")) {
         this.stopTranslation("voice");
@@ -6184,6 +6819,8 @@ To stop: «стоп перевод»`);
         this.addLog("head", up ? "Голова поднята" : "Голова опущена");
         if (!up && this.phase === "answering" && this.pages.length)
           this.show(this.pages[this.page]);
+        if (!up && this.phase === "lecture" && this.lecture.screen)
+          this.show(this.lecture.screen);
         this.changed();
       }
       if (!up || !this.settings.headNod)
@@ -6210,6 +6847,13 @@ To stop: «стоп перевод»`);
     }
     command(cmd, source) {
       this.addLog("cmd", `${cmd} (${source})`);
+      if (this.phase === "lecture") {
+        if (cmd === "hide" || cmd === "cancel")
+          this.stopLecture(source === "ui" ? "ui" : "voice");
+        else if (cmd === "reset")
+          this.resetConversation(false);
+        return;
+      }
       if (this.phase === "translating") {
         if (cmd === "hide" || cmd === "cancel")
           this.stopTranslation(source === "ui" ? "ui" : "voice");
@@ -6270,13 +6914,14 @@ To stop: «стоп перевод»`);
         phase: this.phase,
         page: this.page,
         pages: this.pages.length,
-        currentScreen: this.phase === "translating" ? this.translationScreen : this.pages[this.page] ?? "",
+        currentScreen: this.phase === "translating" ? this.translationScreen : this.phase === "lecture" ? this.lecture.screen : this.pages[this.page] ?? "",
         translating: this.phase === "translating",
         lastTranscript: this.lastTranscript,
         lastQuestion: this.lastQuestion,
         lastAnswer: this.lastAnswer,
         lastError: this.lastError,
         dashboardLikely: this.dashboardLikely(),
+        lecture: lectureSnapshot(this.lecture.active, this.lecture.record),
         glassesConnected: this.glassesConnected,
         settings: {
           ...this.settings,
@@ -6298,9 +6943,18 @@ To stop: «стоп перевод»`);
       };
     }
   }
+  function lectureSnapshot(active, r) {
+    return {
+      active,
+      startedAt: r?.startedAt ?? 0,
+      endedAt: r?.endedAt ?? 0,
+      total: r?.notes.length ?? 0,
+      notes: (r?.notes ?? []).slice(-120)
+    };
+  }
 
   // src/background/index.ts
-  var APP_VERSION = "1.6.1";
+  var APP_VERSION = "1.7.0";
   function getKV() {
     try {
       const ls = globalThis.localStorage;
@@ -6423,10 +7077,15 @@ To stop: «стоп перевод»`);
         assistant.startTranslation("ui");
       else if (cmd === "translateStop")
         assistant.stopTranslation("ui");
+      else if (cmd === "lecture")
+        assistant.startLecture("ui");
+      else if (cmd === "lectureStop")
+        assistant.stopLecture("ui");
       else if (["next", "prev", "first", "repeat", "hide", "cancel", "reset"].includes(cmd))
         assistant.command(cmd, p?.source === "key" ? "key" : "ui");
       return snap();
     });
+    session.ui.handle("getLecture", () => assistant.lecture.record);
     session.ui.handle("simulateSpeech", (p) => {
       assistant.onTranscript(String(p?.text ?? ""), true);
       return snap();

@@ -227,3 +227,33 @@ export function parseSwitchCommand(text: string): AiName | null {
   if (!m) return null
   return AI_BY_FORM.get(m[1].trim()) ?? null
 }
+
+// ───────────────────────── lecture mode ─────────────────────────
+
+export type LectureCommand = "start" | "stop"
+
+const LECTURE_START = [
+  "лекция", "режим лекции", "лекционный режим", "включи лекцию", "включи режим лекции", "начни лекцию",
+  "конспект", "конспектируй", "веди конспект", "включи конспект", "начни конспект",
+  "lecture", "lecture mode", "start lecture", "take notes", "start notes",
+]
+const LECTURE_STOP = [
+  "стоп лекция", "стоп лекции", "стоп конспект", "конец лекции", "лекция окончена", "лекция закончилась",
+  "выключи лекцию", "выключи режим лекции", "закончи лекцию", "выйди из лекции", "останови лекцию",
+  "выключи конспект", "закончи конспект", "останови конспект", "хватит конспектировать",
+  "stop lecture", "end lecture", "lecture off", "stop notes", "stop taking notes",
+]
+const LECTURE_LOOKUP = new Map<string, LectureCommand>()
+for (const p of LECTURE_START) LECTURE_LOOKUP.set(normalize(p), "start")
+for (const p of LECTURE_STOP) LECTURE_LOOKUP.set(normalize(p), "stop")
+
+/** «Лекция» / «конспект» (whole utterance) starts lecture mode; «стоп лекция» / «конец лекции» stops it. */
+export function parseLectureCommand(text: string): LectureCommand | null {
+  const n = normalize(text)
+  if (!n) return null
+  const FILLERS = /^(пожалуйста|ну|так|давай|а|и|окей|ок|please|ok|okay)$/
+  let words = n.split(" ").filter(Boolean)
+  while (words.length > 1 && FILLERS.test(words[0])) words = words.slice(1)
+  while (words.length > 1 && FILLERS.test(words[words.length - 1])) words = words.slice(0, -1)
+  return LECTURE_LOOKUP.get(words.join(" ")) ?? null
+}

@@ -219,3 +219,32 @@ test("API keys and settings survive a Mentra restart (iOS localStorage polyfill)
   const log = second.sent.filter((e) => e.payload.type === "UI_SEND").map((e) => JSON.stringify(e.payload)).join()
   expect(log + st).toContain("Хранилище на телефоне работает")
 }, 15000)
+
+test("built bundle: lecture mode — lecturer's question answered, notes kept, stop", async () => {
+  const h = makeHost(["Q: Энтропия льда при таянии?\nA: Растёт: молекулы движутся свободнее."])
+  vm.runInContext(readFileSync(BUNDLE, "utf8"), h.ctx, {filename: "background/index.js"})
+  h.ctx.__mentraInitCallback("s")
+  await sleep(50)
+  h.ev("_ui", {type: "UI_OPEN"})
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "saveSettings", payload: {apiKey: "sk-test-abcdefghijklmnop"}, seq: 1, requestId: "r1"})
+  await sleep(30)
+
+  h.ev("transcription:ru-RU", {text: "Лекция.", isFinal: true})
+  await sleep(30)
+  expect(h.renders().at(-1)).toContain("Режим лекции")
+
+  h.ev("transcription:en-US", {text: "So what happens to the entropy of ice when it melts?", isFinal: true})
+  await sleep(60)
+  expect(h.openaiCalls.length).toBe(1)
+  expect(h.openaiCalls[0].body.instructions).toContain("обратился к аудитории")
+  expect(h.renders().at(-1)).toMatch(/^\? Энтропия льда.*\n→ Растёт/s)
+
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "getLecture", payload: {}, seq: 2, requestId: "L1"})
+  await sleep(30)
+  const rec = h.uiReplies().find((e) => e.payload.requestId === "L1")!.payload.payload.result
+  expect(rec.notes).toEqual([expect.objectContaining({kind: "qa", text: "Растёт: молекулы движутся свободнее."})])
+
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "command", payload: {cmd: "lectureStop"}, seq: 3, requestId: "c1"})
+  await sleep(30)
+  expect(h.renders().at(-1)).toContain("Лекция выключена")
+}, 15000)

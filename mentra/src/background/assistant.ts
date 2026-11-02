@@ -7,6 +7,7 @@
  */
 import {fitScreen, G1_LINES, paginate, sanitizeForG1, wrapLines} from "./g1text"
 import {askLLM, asProvider, displayName, explainLLMError, keyFor, LLMError, PROVIDERS, type Provider} from "./llm"
+import {Lecture, type LectureRecord} from "./lecture"
 import type {FetchLike} from "./openai"
 import {normalizeSettings, Store, type Message, type Settings} from "./store"
 import {
@@ -16,6 +17,7 @@ import {
   isMeaningful,
   normalize,
   parseCommand,
+  parseLectureCommand,
   parseSwitchCommand,
   parseTranslateCommand,
   aiForWakePhrase,
@@ -23,11 +25,11 @@ import {
   type VoiceCommand,
 } from "./voice"
 
-export type Phase = "idle" | "capturing" | "thinking" | "answering" | "translating"
+export type Phase = "idle" | "capturing" | "thinking" | "answering" | "translating" | "lecture"
 
 export interface LogEntry {
   t: number
-  kind: "stt" | "wake" | "cmd" | "ask" | "openai" | "display" | "error" | "info" | "touch" | "translate" | "head"
+  kind: "stt" | "wake" | "cmd" | "ask" | "openai" | "display" | "error" | "info" | "touch" | "translate" | "head" | "lecture"
   msg: string
 }
 
@@ -150,6 +152,8 @@ export class Assistant {
   private headUpSince = 0
   private lastDashboardWarnAt = -Infinity
   private displayChecked = false
+  /** Lecture mode: key points of what the lecturer says + answers to questions to the audience. */
+  readonly lecture: Lecture
 
   private readonly now: () => number
   private readonly setTimer: (fn: () => void, ms: number) => unknown
@@ -161,6 +165,49 @@ export class Assistant {
     this.clearTimerFn = deps.clearTimer ?? ((id) => clearTimeout(id as any))
     this.settings = deps.store.loadSettings()
     this.history = deps.store.loadHistory()
+    this.lecture = new Lecture(
+      {
+        complete: (system, user) => this.completeOnce(system, user),
+        explainError: (e) => {
+          const err = e as LLMError
+          return explainLLMError(err?.provider ?? asProvider(this.settings.provider), Number(err?.status) || 0, String(err?.code ?? ""), String(err?.message ?? ""))
+        },
+        show: (t) => this.show(t),
+        clear: () => this.clearDisplay(),
+        log: (kind, msg) => this.addLog(kind, msg),
+        lang: () => (this.settings.translateTo === "en-US" ? "en" : "ru"),
+        now: () => this.now(),
+        setTimer: (fn, ms) => this.setTimer(fn, ms),
+        clearTimer: (id) => this.clearTimerFn(id),
+        save: (r) => this.deps.store.saveLecture(r),
+        onChange: () => this.changed(),
+      },
+      deps.store.loadLecture(),
+    )
+  }
+
+  /**
+   * One request with its own system prompt and no conversation history (lecture mode).
+   * Quick by design: no web search, light reasoning.
+   */
+  private async completeOnce(system: string, user: string): Promise<string> {
+    const provider = asProvider(this.settings.provider)
+    const quick: Settings = {
+      ...this.settings,
+      webSearch: false,
+      historyMessages: 0,
+      answerWords: 40,
+      effort: this.settings.effort === "medium" || this.settings.effort === "high" ? "low" : this.settings.effort,
+    }
+    const res = await askLLM(this.deps.fetch, quick, provider, [], user, {
+      system,
+      timeoutMs: 30000,
+      setTimer: ((fn: () => void, ms: number) => this.setTimer(fn, ms)) as unknown as typeof setTimeout,
+      now: this.now,
+    })
+    const usage = res.usage ? `, токены ${res.usage.input_tokens ?? "?"}→${res.usage.output_tokens ?? "?"}` : ""
+    this.addLog("openai", `${PROVIDERS[provider].label}: ${(res.ms / 1000).toFixed(1)} с (${res.model}${usage})`)
+    return res.text
   }
 
   // ───────────────────────────── logging / UI ─────────────────────────────
@@ -250,6 +297,7 @@ export class Assistant {
       this.clearTimer_ = null
       if (this.phase === "idle") this.clearDisplay()
       else if (this.phase === "answering") this.showPage(this.page)
+      else if (this.phase === "lecture") this.lecture.screen ? this.show(this.lecture.screen) : this.clearDisplay()
     }, ms)
   }
 
@@ -275,6 +323,10 @@ export class Assistant {
 
     if (this.phase === "translating") {
       if (isFinal) this.onTranscriptWhileTranslating(t)
+      return
+    }
+    if (this.phase === "lecture") {
+      if (isFinal) this.onTranscriptWhileLecture(t)
       return
     }
 
@@ -305,6 +357,10 @@ export class Assistant {
 
     if (parseTranslateCommand(body) === "start") {
       this.startTranslation("voice")
+      return
+    }
+    if (parseLectureCommand(body) === "start") {
+      this.startLecture("voice")
       return
     }
 
@@ -358,6 +414,7 @@ export class Assistant {
 
   onTouch(kind: string): void {
     this.addLog("touch", kind)
+    if (this.phase === "lecture") return
     if (kind === "single_tap" || kind === "swipe_down") {
       if (this.pages.length) this.command("next", "touch")
     } else if (kind === "double_tap" || kind === "swipe_up") {
@@ -426,6 +483,13 @@ export class Assistant {
         this.cancelTimer("wakeTimer")
         this.interim = ""
         this.startTranslation("voice")
+        return
+      }
+      if (this.committed.length === 0 && parseLectureCommand(clean) === "start") {
+        this.cancelTimer("silenceTimer")
+        this.cancelTimer("wakeTimer")
+        this.interim = ""
+        this.startLecture("voice")
         return
       }
       // "Ассистент, дальше" or "отмена" said while capturing is a command, not a question
@@ -497,6 +561,11 @@ export class Assistant {
   async ask(question: string, source: "voice" | "ui" | "touch", providerOverride?: Provider): Promise<void> {
     const q = question.trim()
     if (!q) return
+    if (this.phase === "lecture") {
+      this.addLog("ask", `${source === "ui" ? "[с телефона] " : ""}${q}`)
+      this.lecture.askUser(q)
+      return
+    }
     if (this.phase === "translating") this.stopTranslation("question", false)
     const seq = ++this.requestSeq
     this.cancelTimer("silenceTimer")
@@ -613,6 +682,7 @@ export class Assistant {
       this.flash("Перевод недоступен.", 3000)
       return
     }
+    if (this.phase === "lecture") this.stopLecture("switch", false)
     if (this.phase === "thinking") this.requestSeq++
     for (const t of ["silenceTimer", "wakeTimer", "pageTimer", "clearTimer_"] as const) this.cancelTimer(t)
     this.stopTranslationStream()
@@ -636,6 +706,76 @@ export class Assistant {
     this.show(ru ? "Перевод включён → русский\nВыключить: «стоп перевод»" : "Translation on → English\nTo stop: «стоп перевод»")
     this.armTranslateIdle()
     this.changed()
+  }
+
+  // ───────────────────────────── lecture mode ─────────────────────────────
+
+  startLecture(source: "voice" | "ui"): void {
+    const provider = asProvider(this.settings.provider)
+    if (!keyFor(this.settings, provider)) {
+      const msg = explainLLMError(provider, 401, "no_key", "")
+      this.addLog("error", `Режим лекции: ${msg}`)
+      this.flash(msg, 6000)
+      return
+    }
+    if (this.phase === "translating") this.stopTranslation("question", false)
+    if (this.phase === "thinking") this.requestSeq++
+    for (const t of ["silenceTimer", "wakeTimer", "pageTimer", "clearTimer_"] as const) this.cancelTimer(t)
+    this.committed = []
+    this.interim = ""
+    this.followUpUntil = 0
+    this.phase = "lecture"
+    if (this.settings.sttLanguage === "ru-RU") {
+      this.addLog("error", "Распознавание настроено только на русский: английскую лекцию очки не поймут. Настройки → Язык распознавания → русский + английский.")
+    }
+    this.lecture.start()
+    this.addLog("lecture", `Тезисы и ответы пишет ${displayName(this.settings, provider)} (${source === "ui" ? "включено с телефона" : "включено голосом"})`)
+  }
+
+  stopLecture(source: "voice" | "ui" | "switch", announce = true): void {
+    if (this.phase !== "lecture") return
+    const {points, answers} = this.lecture.stop()
+    this.phase = "idle"
+    this.pages = []
+    if (announce) {
+      const en = this.settings.translateTo === "en-US"
+      this.flash(
+        en
+          ? `Lecture mode off.
+Key points: ${points}, answers: ${answers}.
+Notes are in the app.`
+          : `Лекция выключена.
+Тезисов: ${points}, ответов: ${answers}.
+Конспект — в приложении.`,
+        4000,
+      )
+    } else this.clearDisplay()
+    if (source === "ui") this.addLog("cmd", "Режим лекции выключен с телефона")
+    this.changed()
+  }
+
+  private onTranscriptWhileLecture(t: string): void {
+    const wake = this.wake(t)
+    const body = wake.matched ? wake.rest : t
+    const lc = parseLectureCommand(body)
+    if (lc === "stop") return this.stopLecture("voice")
+    if (lc === "start") return
+    // The user's own commands: Russian, or after an activator. English phrases are the lecturer's.
+    const mine = wake.matched || detectLang(body) === "ru"
+    if (mine && parseTranslateCommand(body) === "start") {
+      this.stopLecture("switch", false)
+      this.startTranslation("voice")
+      return
+    }
+    const cmd = parseCommand(body)
+    if (mine && (cmd === "hide" || cmd === "cancel" || parseTranslateCommand(body) === "stop")) return this.stopLecture("voice")
+    // «Вопрос, что такое энтропия?» — the user's own question, answered without leaving the lecture
+    if (wake.matched && detectLang(body) === "ru" && isMeaningful(body) && !cmd) {
+      this.addLog("ask", body)
+      this.lecture.askUser(body)
+      return
+    }
+    this.lecture.onSpeech(t)
   }
 
   stopTranslation(source: "voice" | "ui" | "question", announce = true): void {
@@ -677,6 +817,11 @@ export class Assistant {
       return
     }
     if (tcmd === "start") return // already translating
+    if (parseLectureCommand(body) === "start") {
+      this.stopTranslation("question", false)
+      this.startLecture("voice")
+      return
+    }
     // "скрой"/"отмена" in Russian also stop; bare English "stop" may come from people around.
     const cmd = parseCommand(body)
     if ((cmd === "hide" || cmd === "cancel") && (wake.matched || detectLang(body) === "ru")) {
@@ -768,6 +913,7 @@ export class Assistant {
       this.headUpSince = this.now()
       this.addLog("head", up ? "Голова поднята" : "Голова опущена")
       if (!up && this.phase === "answering" && this.pages.length) this.show(this.pages[this.page]) // repaint after the dashboard
+      if (!up && this.phase === "lecture" && this.lecture.screen) this.show(this.lecture.screen)
       this.changed()
     }
     if (!up || !this.settings.headNod) return
@@ -793,6 +939,11 @@ export class Assistant {
 
   command(cmd: VoiceCommand, source: CommandSource): void {
     this.addLog("cmd", `${cmd} (${source})`)
+    if (this.phase === "lecture") {
+      if (cmd === "hide" || cmd === "cancel") this.stopLecture(source === "ui" ? "ui" : "voice")
+      else if (cmd === "reset") this.resetConversation(false)
+      return
+    }
     if (this.phase === "translating") {
       if (cmd === "hide" || cmd === "cancel") this.stopTranslation(source === "ui" ? "ui" : "voice")
       else if (cmd === "reset") this.resetConversation(false)
@@ -849,13 +1000,15 @@ export class Assistant {
       phase: this.phase,
       page: this.page,
       pages: this.pages.length,
-      currentScreen: this.phase === "translating" ? this.translationScreen : this.pages[this.page] ?? "",
+      currentScreen:
+        this.phase === "translating" ? this.translationScreen : this.phase === "lecture" ? this.lecture.screen : this.pages[this.page] ?? "",
       translating: this.phase === "translating",
       lastTranscript: this.lastTranscript,
       lastQuestion: this.lastQuestion,
       lastAnswer: this.lastAnswer,
       lastError: this.lastError,
       dashboardLikely: this.dashboardLikely(),
+      lecture: lectureSnapshot(this.lecture.active, this.lecture.record),
       glassesConnected: this.glassesConnected,
       settings: {
         ...this.settings,
@@ -875,5 +1028,16 @@ export class Assistant {
       history: this.history.slice(-40),
       log: this.log.slice(-60),
     }
+  }
+}
+
+/** What the phone UI needs about lecture mode; the latest notes only. */
+function lectureSnapshot(active: boolean, r: LectureRecord | null) {
+  return {
+    active,
+    startedAt: r?.startedAt ?? 0,
+    endedAt: r?.endedAt ?? 0,
+    total: r?.notes.length ?? 0,
+    notes: (r?.notes ?? []).slice(-120),
   }
 }

@@ -1,5 +1,6 @@
 /** Settings and conversation history, persisted in the miniapp's own localStorage on the phone. */
 
+import type {LectureRecord} from "./lecture"
 export type ListenMode = "wake" | "always" | "off"
 export type Effort = "auto" | "none" | "low" | "medium" | "high"
 export type SttLanguage = "ru-RU" | "auto"
@@ -111,6 +112,7 @@ const STORE_PREFIX = "~g1:"
 const PROBE_KEY = "g1gpt.probe"
 const SETTINGS_KEY = "g1gpt.settings.v1"
 const HISTORY_KEY = "g1gpt.history.v1"
+const LECTURE_KEY = "g1gpt.lecture.v1"
 
 function clampInt(v: unknown, min: number, max: number, dflt: number): number {
   const n = typeof v === "number" ? v : parseInt(String(v), 10)
@@ -204,5 +206,15 @@ export class Store {
   saveHistory(h: Message[]): void {
     // keep at most 200 messages on disk; only the last N go to the model
     this.write(HISTORY_KEY, h.slice(-200))
+  }
+
+  /** Notes of the last lecture (lecture mode), kept until the next one starts. */
+  loadLecture(): LectureRecord | null {
+    const r = this.read<LectureRecord>(LECTURE_KEY)
+    return r && typeof r.startedAt === "number" && Array.isArray(r.notes) ? r : null
+  }
+
+  saveLecture(r: LectureRecord): void {
+    this.write(LECTURE_KEY, r)
   }
 }

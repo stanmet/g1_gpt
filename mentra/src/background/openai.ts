@@ -59,7 +59,7 @@ export function buildRequestBody(
   s: Settings,
   history: Message[],
   question: string,
-  opts: {includeReasoning?: boolean; now?: Date} = {},
+  opts: {includeReasoning?: boolean; now?: Date; system?: string} = {},
 ): Record<string, unknown> {
   const recent = s.historyMessages > 0 ? history.slice(-s.historyMessages) : []
   const input = [
@@ -68,7 +68,7 @@ export function buildRequestBody(
   ]
   const body: Record<string, unknown> = {
     model: s.model,
-    instructions: buildInstructions(s, opts.now, detectLang(question)),
+    instructions: opts.system ?? buildInstructions(s, opts.now, detectLang(question)),
     input,
     store: false,
     max_output_tokens: Math.min(8000, Math.max(600, s.answerWords * 12)),
@@ -159,7 +159,7 @@ export async function askOpenAI(
   s: Settings,
   history: Message[],
   question: string,
-  opts: {timeoutMs?: number; setTimer?: typeof setTimeout; now?: () => number} = {},
+  opts: {timeoutMs?: number; setTimer?: typeof setTimeout; now?: () => number; system?: string} = {},
 ): Promise<AskResult> {
   if (!s.apiKey) throw new OpenAIError("no key", 401, "no_key", "")
   const now = opts.now ?? Date.now
@@ -167,7 +167,7 @@ export async function askOpenAI(
   const started = now()
 
   const send = async (includeReasoning: boolean) => {
-    const body = JSON.stringify(buildRequestBody(s, history, question, {includeReasoning}))
+    const body = JSON.stringify(buildRequestBody(s, history, question, {includeReasoning, system: opts.system}))
     let res
     try {
       res = await withTimeout(
