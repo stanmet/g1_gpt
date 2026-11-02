@@ -116,6 +116,7 @@ const PROBE_KEY = "g1gpt.probe"
 const SETTINGS_KEY = "g1gpt.settings.v1"
 const HISTORY_KEY = "g1gpt.history.v1"
 const LECTURE_KEY = "g1gpt.lecture.v1"
+const TALK_KEY = "g1gpt.talk.v1"
 
 function clampInt(v: unknown, min: number, max: number, dflt: number): number {
   const n = typeof v === "number" ? v : parseInt(String(v), 10)
@@ -220,5 +221,15 @@ export class Store {
 
   saveLecture(r: LectureRecord): void {
     this.write(LECTURE_KEY, r)
+  }
+
+  /** Hints of the last conversation (conversation mode). */
+  loadTalk(): LectureRecord | null {
+    const r = this.read<LectureRecord>(TALK_KEY)
+    return r && typeof r.startedAt === "number" && Array.isArray(r.notes) ? r : null
+  }
+
+  saveTalk(r: LectureRecord): void {
+    this.write(TALK_KEY, r)
   }
 }

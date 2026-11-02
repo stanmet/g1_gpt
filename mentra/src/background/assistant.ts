@@ -8,6 +8,7 @@
 import {fitScreen, G1_LINES, paginate, sanitizeForG1, wrapLines} from "./g1text"
 import {askLLM, asProvider, displayName, explainLLMError, keyFor, LLMError, PROVIDERS, type Provider} from "./llm"
 import {Lecture, type LectureRecord} from "./lecture"
+import {Talk} from "./talk"
 import type {FetchLike} from "./openai"
 import {normalizeSettings, Store, type Message, type Settings} from "./store"
 import {
@@ -19,17 +20,18 @@ import {
   parseCommand,
   parseLectureCommand,
   parseSwitchCommand,
+  parseTalkCommand,
   parseTranslateCommand,
   aiForWakePhrase,
   AI_WAKE_WORDS,
   type VoiceCommand,
 } from "./voice"
 
-export type Phase = "idle" | "capturing" | "thinking" | "answering" | "translating" | "lecture"
+export type Phase = "idle" | "capturing" | "thinking" | "answering" | "translating" | "lecture" | "talk"
 
 export interface LogEntry {
   t: number
-  kind: "stt" | "wake" | "cmd" | "ask" | "openai" | "display" | "error" | "info" | "touch" | "translate" | "head" | "lecture"
+  kind: "stt" | "wake" | "cmd" | "ask" | "openai" | "display" | "error" | "info" | "touch" | "translate" | "head" | "lecture" | "talk"
   msg: string
 }
 
@@ -154,6 +156,8 @@ export class Assistant {
   private displayChecked = false
   /** Lecture mode: key points of what the lecturer says + answers to questions to the audience. */
   readonly lecture: Lecture
+  /** Conversation mode: facts when someone asks, a prompt when the user trails off. */
+  readonly talk: Talk
 
   private readonly now: () => number
   private readonly setTimer: (fn: () => void, ms: number) => unknown
@@ -184,6 +188,24 @@ export class Assistant {
         onChange: () => this.changed(),
       },
       deps.store.loadLecture(),
+    )
+    this.talk = new Talk(
+      {
+        complete: (system, user) => this.completeOnce(system, user),
+        explainError: (e) => {
+          const err = e as LLMError
+          return explainLLMError(err?.provider ?? asProvider(this.settings.provider), Number(err?.status) || 0, String(err?.code ?? ""), String(err?.message ?? ""))
+        },
+        show: (t) => this.show(t),
+        clear: () => this.clearDisplay(),
+        log: (kind, msg) => this.addLog(kind, msg),
+        now: () => this.now(),
+        setTimer: (fn, ms) => this.setTimer(fn, ms),
+        clearTimer: (id) => this.clearTimerFn(id),
+        save: (r) => this.deps.store.saveTalk(r),
+        onChange: () => this.changed(),
+      },
+      deps.store.loadTalk(),
     )
   }
 
@@ -299,6 +321,7 @@ export class Assistant {
       if (this.phase === "idle") this.clearDisplay()
       else if (this.phase === "answering") this.showPage(this.page)
       else if (this.phase === "lecture") this.lecture.screen ? this.show(this.lecture.screen) : this.clearDisplay()
+      else if (this.phase === "talk") this.talk.screen ? this.show(this.talk.screen) : this.clearDisplay()
     }, ms)
   }
 
@@ -328,6 +351,10 @@ export class Assistant {
     }
     if (this.phase === "lecture") {
       if (isFinal) this.onTranscriptWhileLecture(t)
+      return
+    }
+    if (this.phase === "talk") {
+      if (isFinal) this.onTranscriptWhileTalk(t)
       return
     }
 
@@ -362,6 +389,10 @@ export class Assistant {
     }
     if (parseLectureCommand(body) === "start") {
       this.startLecture("voice")
+      return
+    }
+    if (parseTalkCommand(body) === "start") {
+      this.startTalk("voice")
       return
     }
 
@@ -415,7 +446,7 @@ export class Assistant {
 
   onTouch(kind: string): void {
     this.addLog("touch", kind)
-    if (this.phase === "lecture") return
+    if (this.phase === "lecture" || this.phase === "talk") return
     if (kind === "single_tap" || kind === "swipe_down") {
       if (this.pages.length) this.command("next", "touch")
     } else if (kind === "double_tap" || kind === "swipe_up") {
@@ -493,6 +524,13 @@ export class Assistant {
         this.startLecture("voice")
         return
       }
+      if (this.committed.length === 0 && parseTalkCommand(clean) === "start") {
+        this.cancelTimer("silenceTimer")
+        this.cancelTimer("wakeTimer")
+        this.interim = ""
+        this.startTalk("voice")
+        return
+      }
       // "Ассистент, дальше" or "отмена" said while capturing is a command, not a question
       const cmd = parseCommand(clean)
       if (cmd && (this.committed.length === 0 || cmd === "cancel" || cmd === "hide")) {
@@ -562,9 +600,10 @@ export class Assistant {
   async ask(question: string, source: "voice" | "ui" | "touch", providerOverride?: Provider): Promise<void> {
     const q = question.trim()
     if (!q) return
-    if (this.phase === "lecture") {
+    if (this.phase === "lecture" || this.phase === "talk") {
       this.addLog("ask", `${source === "ui" ? "[с телефона] " : ""}${q}`)
-      this.lecture.askUser(q)
+      if (this.phase === "lecture") this.lecture.askUser(q)
+      else this.talk.askUser(q)
       return
     }
     if (this.phase === "translating") this.stopTranslation("question", false)
@@ -683,7 +722,7 @@ export class Assistant {
       this.flash("Перевод недоступен.", 3000)
       return
     }
-    if (this.phase === "lecture") this.stopLecture("switch", false)
+    if (this.phase === "lecture" || this.phase === "talk") this.leaveListeningMode()
     if (this.phase === "thinking") this.requestSeq++
     for (const t of ["silenceTimer", "wakeTimer", "pageTimer", "clearTimer_"] as const) this.cancelTimer(t)
     this.stopTranslationStream()
@@ -719,7 +758,7 @@ export class Assistant {
       this.flash(msg, 6000)
       return
     }
-    if (this.phase === "translating") this.stopTranslation("question", false)
+    if (this.phase === "translating" || this.phase === "talk") this.leaveListeningMode()
     if (this.phase === "thinking") this.requestSeq++
     for (const t of ["silenceTimer", "wakeTimer", "pageTimer", "clearTimer_"] as const) this.cancelTimer(t)
     this.committed = []
@@ -763,11 +802,7 @@ Notes are in the app.`
     if (lc === "start") return
     // The user's own commands: Russian, or after an activator. English phrases are the lecturer's.
     const mine = wake.matched || detectLang(body) === "ru"
-    if (mine && parseTranslateCommand(body) === "start") {
-      this.stopLecture("switch", false)
-      this.startTranslation("voice")
-      return
-    }
+    if (mine && this.trySwitchMode(body)) return
     const cmd = parseCommand(body)
     if (mine && (cmd === "hide" || cmd === "cancel" || parseTranslateCommand(body) === "stop")) return this.stopLecture("voice")
     // «Вопрос, что такое энтропия?» — the user's own question, answered without leaving the lecture
@@ -777,6 +812,85 @@ Notes are in the app.`
       return
     }
     this.lecture.onSpeech(t)
+  }
+
+  // ───────────────────────────── conversation mode ─────────────────────────────
+
+  startTalk(source: "voice" | "ui"): void {
+    const provider = asProvider(this.settings.provider)
+    if (!keyFor(this.settings, provider)) {
+      const msg = explainLLMError(provider, 401, "no_key", "")
+      this.addLog("error", `Режим беседы: ${msg}`)
+      this.flash(msg, 6000)
+      return
+    }
+    if (this.phase === "translating" || this.phase === "lecture") this.leaveListeningMode()
+    if (this.phase === "thinking") this.requestSeq++
+    for (const t of ["silenceTimer", "wakeTimer", "pageTimer", "clearTimer_"] as const) this.cancelTimer(t)
+    this.committed = []
+    this.interim = ""
+    this.followUpUntil = 0
+    this.phase = "talk"
+    this.talk.start({en: this.settings.translateTo === "en-US"})
+    this.addLog("talk", `Подсказки пишет ${displayName(this.settings, provider)} (${source === "ui" ? "включено с телефона" : "включено голосом"})`)
+  }
+
+  stopTalk(source: "voice" | "ui" | "switch", announce = true): void {
+    if (this.phase !== "talk") return
+    const {hints} = this.talk.stop()
+    this.phase = "idle"
+    this.pages = []
+    if (announce) {
+      const en = this.settings.translateTo === "en-US"
+      this.flash(en ? `Conversation mode off.\nHints: ${hints}. The list is in the app.` : `Беседа выключена.\nПодсказок: ${hints}. Список — в приложении.`, 4000)
+    } else this.clearDisplay()
+    if (source === "ui") this.addLog("cmd", "Режим беседы выключен с телефона")
+    this.changed()
+  }
+
+  private onTranscriptWhileTalk(t: string): void {
+    const wake = this.wake(t)
+    const body = wake.matched ? wake.rest : t
+    const tc = parseTalkCommand(body)
+    if (tc === "stop") return this.stopTalk("voice")
+    if (tc === "start") return
+    // In a conversation «стоп», «хватит» or «лекция» are ordinary words: switching or stopping needs the
+    // activator («Вопрос, стоп») or an unambiguous phrase («транслейт», «режим лекции», «стоп беседа»).
+    const unambiguous = wake.matched || parseTranslateCommand(body) === "start" || normalize(body).split(" ").length >= 2
+    if (unambiguous && this.trySwitchMode(body)) return
+    const cmd = parseCommand(body)
+    if (wake.matched && (cmd === "hide" || cmd === "cancel")) return this.stopTalk("voice")
+    if (wake.matched && isMeaningful(body) && !cmd) {
+      this.addLog("ask", body)
+      this.talk.askUser(body)
+      return
+    }
+    this.talk.onSpeech(t)
+  }
+
+  /** «Транслейт», «Лекция», «Беседа» said in another listening mode switch to that mode. */
+  private trySwitchMode(body: string): boolean {
+    const target =
+      parseTranslateCommand(body) === "start"
+        ? "translating"
+        : parseLectureCommand(body) === "start"
+          ? "lecture"
+          : parseTalkCommand(body) === "start"
+            ? "talk"
+            : null
+    if (!target) return false
+    if (target === this.phase) return true
+    if (target === "translating") this.startTranslation("voice")
+    else if (target === "lecture") this.startLecture("voice")
+    else this.startTalk("voice")
+    return true
+  }
+
+  /** Quietly leaves translation, lecture or conversation mode (before another one starts). */
+  private leaveListeningMode(): void {
+    if (this.phase === "translating") this.stopTranslation("question", false)
+    else if (this.phase === "lecture") this.stopLecture("switch", false)
+    else if (this.phase === "talk") this.stopTalk("switch", false)
   }
 
   stopTranslation(source: "voice" | "ui" | "question", announce = true): void {
@@ -818,11 +932,7 @@ Notes are in the app.`
       return
     }
     if (tcmd === "start") return // already translating
-    if (parseLectureCommand(body) === "start") {
-      this.stopTranslation("question", false)
-      this.startLecture("voice")
-      return
-    }
+    if (this.trySwitchMode(body)) return
     // "скрой"/"отмена" in Russian also stop; bare English "stop" may come from people around.
     const cmd = parseCommand(body)
     if ((cmd === "hide" || cmd === "cancel") && (wake.matched || detectLang(body) === "ru")) {
@@ -915,6 +1025,7 @@ Notes are in the app.`
       this.addLog("head", up ? "Голова поднята" : "Голова опущена")
       if (!up && this.phase === "answering" && this.pages.length) this.show(this.pages[this.page]) // repaint after the dashboard
       if (!up && this.phase === "lecture" && this.lecture.screen) this.show(this.lecture.screen)
+      if (!up && this.phase === "talk" && this.talk.screen) this.show(this.talk.screen)
       this.changed()
     }
     if (!up || !this.settings.headNod) return
@@ -940,8 +1051,9 @@ Notes are in the app.`
 
   command(cmd: VoiceCommand, source: CommandSource): void {
     this.addLog("cmd", `${cmd} (${source})`)
-    if (this.phase === "lecture") {
-      if (cmd === "hide" || cmd === "cancel") this.stopLecture(source === "ui" ? "ui" : "voice")
+    if (this.phase === "lecture" || this.phase === "talk") {
+      const by = source === "ui" ? "ui" : "voice"
+      if (cmd === "hide" || cmd === "cancel") this.phase === "lecture" ? this.stopLecture(by) : this.stopTalk(by)
       else if (cmd === "reset") this.resetConversation(false)
       return
     }
@@ -1002,7 +1114,13 @@ Notes are in the app.`
       page: this.page,
       pages: this.pages.length,
       currentScreen:
-        this.phase === "translating" ? this.translationScreen : this.phase === "lecture" ? this.lecture.screen : this.pages[this.page] ?? "",
+        this.phase === "translating"
+          ? this.translationScreen
+          : this.phase === "lecture"
+            ? this.lecture.screen
+            : this.phase === "talk"
+              ? this.talk.screen
+              : this.pages[this.page] ?? "",
       translating: this.phase === "translating",
       lastTranscript: this.lastTranscript,
       lastQuestion: this.lastQuestion,
@@ -1010,6 +1128,7 @@ Notes are in the app.`
       lastError: this.lastError,
       dashboardLikely: this.dashboardLikely(),
       lecture: lectureSnapshot(this.lecture.active, this.lecture.record),
+      talk: lectureSnapshot(this.talk.active, this.talk.record),
       glassesConnected: this.glassesConnected,
       settings: {
         ...this.settings,

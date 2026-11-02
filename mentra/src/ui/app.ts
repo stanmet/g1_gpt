@@ -128,6 +128,21 @@ function previewBridge(): Bridge {
         state.lecture = {...state.lecture, active: false, endedAt: Date.now()}
       }
       if (channel === "getLecture") return state.lecture
+      if (channel === "command" && payload?.cmd === "talk") {
+        state.translating = false
+        if (state.lecture) state.lecture = {...state.lecture, active: false, endedAt: Date.now()}
+        state.phase = "talk"
+        state.currentScreen = "? Кант\n→ Немецкий философ, 1724–1804.\nАвтор «Критики чистого\nразума», категорический\nимператив."
+        state.talk = {active: true, startedAt: Date.now() - 300000, endedAt: 0, total: 2, notes: [
+          {t: Date.now() - 200000, kind: "qa", q: "Кто такой Кант?", text: "Немецкий философ, 1724–1804. Автор «Критики чистого разума», категорический императив."},
+          {t: Date.now() - 120000, kind: "hint", q: "Категорический императив", text: "Поступай так, чтобы правило твоего поступка могло стать всеобщим законом."},
+        ]}
+      }
+      if (channel === "command" && payload?.cmd === "talkStop") {
+        state.phase = "idle"
+        state.talk = {...state.talk, active: false, endedAt: Date.now()}
+      }
+      if (channel === "getTalk") return state.talk
       return state
     },
     on() {
@@ -200,6 +215,7 @@ const PHASE: Record<string, string> = {
   answering: "Ответ на очках",
   translating: "Перевод",
   lecture: "Лекция",
+  talk: "Беседа",
 }
 
 function capitalize(s: string) {
@@ -212,7 +228,7 @@ function render(s: any) {
   const st = s.settings ?? {}
   renderGlasses(s, st)
   renderChat(s)
-  renderLecture(s)
+  renderNotes(s)
   renderSettings(s, st)
   renderLog(s)
 }
@@ -223,7 +239,7 @@ function renderGlasses(s: any, st: any) {
   $("connText").textContent =
     s.glassesConnected === true ? "Очки подключены" : s.glassesConnected === false ? "Очки не подключены" : "Очки: нет данных"
 
-  const mode = s.lecture?.active ? "lecture" : s.translating ? "translate" : "assistant"
+  const mode = modeOf(s)
   $("lens").dataset.mode = mode
   const seg = $("modeSeg")
   seg.dataset.mode = mode
@@ -242,6 +258,9 @@ function renderGlasses(s: any, st: any) {
     dim = !s.currentScreen
   } else if (s.phase === "lecture") {
     text = s.currentScreen || "Слушаю лекцию…"
+    dim = !s.currentScreen
+  } else if (s.phase === "talk") {
+    text = s.currentScreen || "Слушаю разговор…\nПодскажу, когда понадобится."
     dim = !s.currentScreen
   } else if (s.phase === "idle") {
     text = s.lastError || `Экран пуст.\nСкажите «${wake}, …»`
@@ -270,7 +289,9 @@ function renderGlasses(s: any, st: any) {
         ? `Перевод на ${target}`
         : s.phase === "lecture"
           ? `Лекция: тезисы ${st.translateTo === "en-US" ? "по-английски" : "по-русски"}`
-          : (PHASE[s.phase] ?? s.phase)
+          : s.phase === "talk"
+            ? "Беседа: подсказки по ходу разговора"
+            : (PHASE[s.phase] ?? s.phase)
 
   const dots = $("pageDots")
   dots.textContent = ""
@@ -437,6 +458,7 @@ const KIND_LABEL: Record<string, string> = {
   info: "инфо",
   touch: "касание",
   lecture: "лекция",
+  talk: "беседа",
   head: "голова",
   translate: "перевод",
 }
@@ -454,25 +476,49 @@ async function copyText(text: string): Promise<void> {
   }
 }
 
-let lectureKey = ""
+type Mode = "assistant" | "translate" | "lecture" | "talk"
+const STOP_CMD: Record<Mode, string> = {assistant: "hide", translate: "translateStop", lecture: "lectureStop", talk: "talkStop"}
 
-function renderLecture(s: any) {
+function modeOf(s: any): Mode {
+  return s?.talk?.active ? "talk" : s?.lecture?.active ? "lecture" : s?.translating ? "translate" : "assistant"
+}
+
+let notesKey = ""
+/** Which list the notes box shows: the active mode's, else the most recent one. */
+let notesShown: "lecture" | "talk" = "lecture"
+
+function renderNotes(s: any) {
+  const has = (r: any) => Boolean(r && (r.active || r.total > 0))
   const lec = s.lecture
+  const talk = s.talk
+  const recent = (r: any) => (r ? r.endedAt || Date.now() : 0)
+  notesShown = talk?.active ? "talk" : lec?.active ? "lecture" : has(talk) && (!has(lec) || recent(talk) >= recent(lec)) ? "talk" : "lecture"
+  const r = notesShown === "talk" ? talk : lec
   const box = $("lectureBox")
-  const show = Boolean(lec && (lec.active || lec.total > 0))
-  box.hidden = !show
-  if (!show) return
-  const points = lec.notes.filter((n: any) => n.kind === "point").length
-  const answers = lec.notes.length - points
-  const counts = `${points} ${plural(points, "тезис", "тезиса", "тезисов")}, ${answers} ${plural(answers, "ответ", "ответа", "ответов")}`
-  $("lectureMeta").textContent = lec.active ? "Идёт запись" : `Лекция ${fmtHM(lec.startedAt)}–${lec.endedAt ? fmtHM(lec.endedAt) : "…"}`
-  $("lectureSub").textContent = counts
-  const key = `${lec.startedAt}:${lec.total}`
-  if (key === lectureKey) return
-  lectureKey = key
+  box.hidden = !has(r)
+  if (box.hidden) return
+  const isTalk = notesShown === "talk"
+  $("notesTitle").textContent = isTalk ? "Подсказки в беседе" : "Конспект лекции"
+  $("lectureFooter").hidden = isTalk
+  $("talkFooter").hidden = !isTalk
+  const points = r.notes.filter((n: any) => n.kind === "point").length
+  const answers = r.notes.length - points
+  $("lectureMeta").textContent = r.active
+    ? isTalk
+      ? "Слушаю разговор"
+      : "Идёт запись"
+    : `${isTalk ? "Беседа" : "Лекция"} ${fmtHM(r.startedAt)}–${r.endedAt ? fmtHM(r.endedAt) : "…"}`
+  $("lectureSub").textContent = isTalk
+    ? `${answers} ${plural(answers, "подсказка", "подсказки", "подсказок")}`
+    : `${points} ${plural(points, "тезис", "тезиса", "тезисов")}, ${answers} ${plural(answers, "ответ", "ответа", "ответов")}`
+  const key = `${notesShown}:${r.startedAt}:${r.total}`
+  if (key === notesKey) return
+  notesKey = key
   const list = $("lectureNotes")
+  list.dataset.empty = isTalk ? "Пока нет подсказок — они появятся, когда в разговоре прозвучит вопрос с фактами." : ""
   list.textContent = ""
-  for (const n of [...lec.notes].reverse()) {
+  const who: Record<string, string> = {you: "Вы: ", qa: isTalk ? "Вопрос: " : "Лектор: ", hint: "Подсказка: "}
+  for (const n of [...r.notes].reverse()) {
     const li = document.createElement("li")
     li.className = n.kind
     const t = document.createElement("span")
@@ -482,7 +528,7 @@ function renderLecture(s: any) {
     if (n.kind !== "point") {
       const q = document.createElement("span")
       q.className = "q"
-      q.textContent = (n.kind === "you" ? "Вы: " : "Лектор: ") + (n.q ?? "")
+      q.textContent = (who[n.kind] ?? "") + (n.q ?? "")
       li.append(q)
       li.append("→ " + n.text)
     } else li.append(n.text)
@@ -705,11 +751,10 @@ function wire() {
     .forEach((b) =>
       b.addEventListener("click", () => {
         const want = b.dataset.mode
-        const now = current?.lecture?.active ? "lecture" : current?.translating ? "translate" : "assistant"
+        const now = modeOf(current)
         if (want === now) return
-        if (want === "translate") call("command", {cmd: "translate"})
-        else if (want === "lecture") call("command", {cmd: "lecture"})
-        else call("command", {cmd: now === "lecture" ? "lectureStop" : "translateStop"})
+        if (want === "assistant") call("command", {cmd: STOP_CMD[now]})
+        else call("command", {cmd: want})
       }),
     )
 
@@ -769,16 +814,19 @@ function wire() {
   })
 
   $("copyLecture").addEventListener("click", async () => {
+    const which = notesShown
     let rec: LectureRecord | null = null
     try {
-      rec = (await bridge.request("getLecture", {}, {timeout: 15000})) as LectureRecord | null
+      rec = (await bridge.request(which === "talk" ? "getTalk" : "getLecture", {}, {timeout: 15000})) as LectureRecord | null
     } catch {
-      rec = current?.lecture ?? null
+      rec = current?.[which] ?? null
     }
-    const text = notesAsText(rec, (t) => new Date(t).toLocaleString("ru-RU", {day: "numeric", month: "long", hour: "2-digit", minute: "2-digit"}))
-    if (!text) return toast("Конспект пока пуст")
+    const fmt = (t: number) => new Date(t).toLocaleString("ru-RU", {day: "numeric", month: "long", hour: "2-digit", minute: "2-digit"})
+    const text =
+      which === "talk" ? notesAsText(rec, fmt, {title: "Подсказки в беседе", asked: "Вопрос"}) : notesAsText(rec, fmt)
+    if (!text) return toast("Список пока пуст")
     await copyText(text)
-    toast("Конспект скопирован")
+    toast(which === "talk" ? "Подсказки скопированы" : "Конспект скопирован")
   })
 
   $("copyLog").addEventListener("click", async () => {

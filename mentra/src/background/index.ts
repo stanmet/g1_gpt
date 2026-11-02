@@ -165,12 +165,15 @@ registerMiniapp((session: any) => {
     else if (cmd === "translateStop") assistant.stopTranslation("ui")
     else if (cmd === "lecture") assistant.startLecture("ui")
     else if (cmd === "lectureStop") assistant.stopLecture("ui")
+    else if (cmd === "talk") assistant.startTalk("ui")
+    else if (cmd === "talkStop") assistant.stopTalk("ui")
     else if (["next", "prev", "first", "repeat", "hide", "cancel", "reset"].includes(cmd)) assistant.command(cmd, p?.source === "key" ? "key" : "ui")
     return snap()
   })
 
   // Full notes of the current or last lecture (the state snapshot carries only the latest ones).
   session.ui.handle("getLecture", () => assistant.lecture.record)
+  session.ui.handle("getTalk", () => assistant.talk.record)
 
   session.ui.handle("simulateSpeech", (p: {text: string}) => {
     // Lets you test wake phrases and commands by typing, without the glasses mic.

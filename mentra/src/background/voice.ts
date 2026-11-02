@@ -257,3 +257,33 @@ export function parseLectureCommand(text: string): LectureCommand | null {
   while (words.length > 1 && FILLERS.test(words[words.length - 1])) words = words.slice(0, -1)
   return LECTURE_LOOKUP.get(words.join(" ")) ?? null
 }
+
+// ───────────────────────── conversation mode ─────────────────────────
+
+export type TalkCommand = "start" | "stop"
+
+const TALK_START = [
+  "беседа", "режим беседы", "включи беседу", "включи режим беседы", "начни беседу", "суфлер", "режим суфлера",
+  "включи суфлера", "подсказки", "режим подсказок", "включи подсказки", "conversation", "conversation mode",
+  "talk mode", "prompter",
+]
+const TALK_STOP = [
+  "стоп беседа", "стоп беседы", "конец беседы", "выключи беседу", "выключи режим беседы", "закончи беседу",
+  "останови беседу", "выйди из беседы", "стоп суфлер", "выключи суфлера", "стоп подсказки", "выключи подсказки",
+  "хватит подсказок", "хватит подсказывать", "stop conversation", "end conversation", "conversation off",
+  "stop prompter",
+]
+const TALK_LOOKUP = new Map<string, TalkCommand>()
+for (const p of TALK_START) TALK_LOOKUP.set(normalize(p), "start")
+for (const p of TALK_STOP) TALK_LOOKUP.set(normalize(p), "stop")
+
+/** «Беседа» / «Суфлёр» (whole utterance) starts conversation mode; «стоп беседа» / «конец беседы» stops it. */
+export function parseTalkCommand(text: string): TalkCommand | null {
+  const n = normalize(text)
+  if (!n) return null
+  const FILLERS = /^(пожалуйста|ну|так|давай|а|и|окей|ок|please|ok|okay)$/
+  let words = n.split(" ").filter(Boolean)
+  while (words.length > 1 && FILLERS.test(words[0])) words = words.slice(1)
+  while (words.length > 1 && FILLERS.test(words[words.length - 1])) words = words.slice(0, -1)
+  return TALK_LOOKUP.get(words.join(" ")) ?? null
+}

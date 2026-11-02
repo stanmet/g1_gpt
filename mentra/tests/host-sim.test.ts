@@ -248,3 +248,32 @@ test("built bundle: lecture mode — lecturer's question answered, notes kept, s
   await sleep(30)
   expect(h.renders().at(-1)).toContain("Лекция выключена")
 }, 15000)
+
+test("built bundle: conversation mode — a question in the conversation gets facts on the glasses", async () => {
+  const h = makeHost(["Q: Иммануил Кант\nA: Немецкий философ, 1724–1804, автор «Критики чистого разума»."])
+  vm.runInContext(readFileSync(BUNDLE, "utf8"), h.ctx, {filename: "background/index.js"})
+  h.ctx.__mentraInitCallback("s")
+  await sleep(50)
+  h.ev("_ui", {type: "UI_OPEN"})
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "saveSettings", payload: {apiKey: "sk-test-abcdefghijklmnop"}, seq: 1, requestId: "r1"})
+  await sleep(30)
+
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "command", payload: {cmd: "talk"}, seq: 2, requestId: "c1"})
+  await sleep(30)
+  expect(h.renders().at(-1)).toContain("Режим беседы")
+
+  h.ev("transcription:ru-RU", {text: "Слушай, а кто такой Кант?", isFinal: true})
+  await sleep(60)
+  expect(h.openaiCalls.length).toBe(1)
+  expect(h.openaiCalls[0].body.instructions).toContain("суфлёр")
+  expect(h.renders().at(-1)).toMatch(/^\? Иммануил Кант\n→ Немецкий философ/)
+
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "getTalk", payload: {}, seq: 3, requestId: "T1"})
+  await sleep(30)
+  const rec = h.uiReplies().find((e) => e.payload.requestId === "T1")!.payload.payload.result
+  expect(rec.notes).toEqual([expect.objectContaining({kind: "qa", q: "Иммануил Кант"})])
+
+  h.ev("transcription:ru-RU", {text: "Стоп беседа.", isFinal: true})
+  await sleep(30)
+  expect(h.renders().at(-1)).toContain("Беседа выключена")
+}, 15000)

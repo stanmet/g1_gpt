@@ -5018,6 +5018,60 @@
       words = words.slice(0, -1);
     return LECTURE_LOOKUP.get(words.join(" ")) ?? null;
   }
+  var TALK_START = [
+    "беседа",
+    "режим беседы",
+    "включи беседу",
+    "включи режим беседы",
+    "начни беседу",
+    "суфлер",
+    "режим суфлера",
+    "включи суфлера",
+    "подсказки",
+    "режим подсказок",
+    "включи подсказки",
+    "conversation",
+    "conversation mode",
+    "talk mode",
+    "prompter"
+  ];
+  var TALK_STOP = [
+    "стоп беседа",
+    "стоп беседы",
+    "конец беседы",
+    "выключи беседу",
+    "выключи режим беседы",
+    "закончи беседу",
+    "останови беседу",
+    "выйди из беседы",
+    "стоп суфлер",
+    "выключи суфлера",
+    "стоп подсказки",
+    "выключи подсказки",
+    "хватит подсказок",
+    "хватит подсказывать",
+    "stop conversation",
+    "end conversation",
+    "conversation off",
+    "stop prompter"
+  ];
+  var TALK_LOOKUP = new Map;
+  for (const p of TALK_START)
+    TALK_LOOKUP.set(normalize(p), "start");
+  for (const p of TALK_STOP)
+    TALK_LOOKUP.set(normalize(p), "stop");
+  function parseTalkCommand(text) {
+    const n = normalize(text);
+    if (!n)
+      return null;
+    const FILLERS = /^(пожалуйста|ну|так|давай|а|и|окей|ок|please|ok|okay)$/;
+    let words = n.split(" ").filter(Boolean);
+    while (words.length > 1 && FILLERS.test(words[0]))
+      words = words.slice(1);
+    while (words.length > 1 && FILLERS.test(words[words.length - 1]))
+      words = words.slice(0, -1);
+    return TALK_LOOKUP.get(words.join(" ")) ?? null;
+  }
 
   // src/background/openai.ts
   var OPENAI_URL = "https://api.openai.com/v1/responses";
@@ -5946,6 +6000,370 @@ Stop: «стоп лекция»` : `Режим лекции
     }
   }
 
+  // src/background/talk.ts
+  var TALK_SHOW_MS = 30000;
+  var TALK_DEDUPE_MS = 20000;
+  var INTRO_MS = 5000;
+  var CONTEXT_WORDS2 = 300;
+  var PREV_HINTS = 4;
+  var NOTES_MAX2 = 300;
+  var ERROR_SHOW_EVERY_MS2 = 60000;
+  var LEAD = new Set(["а", "и", "но", "так", "ну", "слушай", "скажи", "скажите", "кстати", "and", "so", "but", "well", "hey", "by"]);
+  var RU_Q = new Set([
+    "кто",
+    "что",
+    "когда",
+    "где",
+    "куда",
+    "откуда",
+    "почему",
+    "зачем",
+    "как",
+    "сколько",
+    "какой",
+    "какая",
+    "какое",
+    "какие",
+    "каким",
+    "какую",
+    "каких",
+    "каком",
+    "чей",
+    "чья",
+    "чье",
+    "чьи",
+    "скольких"
+  ]);
+  var EN_Q = new Set(["who", "what", "when", "where", "why", "how", "which", "whose", "whom"]);
+  var SMALL_TALK = [
+    "как дела",
+    "как ты",
+    "как вы",
+    "как сам",
+    "как жизнь",
+    "что нового",
+    "что делаешь",
+    "что ты делаешь",
+    "ты понял",
+    "вы поняли",
+    "понимаешь",
+    "понятно",
+    "правда",
+    "серьезно",
+    "да",
+    "нет",
+    "ну что",
+    "что скажешь",
+    "как тебе",
+    "как вам",
+    "ты где",
+    "где ты",
+    "когда встретимся",
+    "что будем",
+    "будешь",
+    "хочешь",
+    "how are you",
+    "whats up",
+    "what s up",
+    "how is it going",
+    "how s it going",
+    "really",
+    "right",
+    "you know",
+    "do you understand",
+    "are you ok",
+    "ok",
+    "okay",
+    "what do you want",
+    "do you want",
+    "shall we"
+  ];
+  var STRONG_CUES = [
+    "это",
+    "это значит",
+    "означает",
+    "называется",
+    "является",
+    "родился в",
+    "родилась в",
+    "умер в",
+    "умерла в",
+    "в году",
+    "равен",
+    "равна",
+    "равно",
+    "составляет",
+    "то есть",
+    "а именно",
+    "это когда",
+    "means",
+    "is called",
+    "was born in",
+    "born in",
+    "died in",
+    "equals",
+    "namely",
+    "which is"
+  ];
+  var WEAK_CUES = [
+    "значит",
+    "являлся",
+    "являлась",
+    "был",
+    "была",
+    "было",
+    "были",
+    "родился",
+    "родилась",
+    "году",
+    "около",
+    "примерно",
+    "is",
+    "are",
+    "was",
+    "were",
+    "about",
+    "around",
+    "approximately",
+    "in the year",
+    "is basically"
+  ];
+  function sentencesOf(text) {
+    return String(text ?? "").replace(/\s+/g, " ").split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter(Boolean);
+  }
+  function contentWords(n) {
+    const w = n.split(" ").filter(Boolean);
+    let i = 0;
+    while (i < 2 && i < w.length - 1 && LEAD.has(w[i]))
+      i++;
+    return w.slice(i);
+  }
+  function findTalkTrigger(text) {
+    const sentences = sentencesOf(text);
+    for (let i = sentences.length - 1;i >= 0; i--) {
+      const s = sentences[i];
+      const words = contentWords(normalize(s));
+      if (words.length < 3)
+        continue;
+      const n = words.join(" ");
+      if (SMALL_TALK.some((st) => n === st || n.startsWith(st + " ")))
+        continue;
+      const asked = /\?["»”')\s]*$/.test(s);
+      const open = !/(?<!\.)[.!]["»”')\s]*$/.test(s);
+      const interrogative = open && (RU_Q.has(words[0]) || EN_Q.has(words[0]) || words[1] === "ли") && words.length <= 14;
+      if (asked || interrogative)
+        return { kind: "question", text: s };
+    }
+    const last = sentences.at(-1);
+    if (last) {
+      const n = normalize(last);
+      const closed = /(?<!\.)[.!]["»”')\s]*$/.test(last);
+      const cues = closed ? STRONG_CUES : [...STRONG_CUES, ...WEAK_CUES];
+      if (n.split(" ").length >= 3 && cues.some((c) => n.endsWith(" " + c)))
+        return { kind: "prompt", text: last };
+    }
+    return null;
+  }
+  function langName2(lang) {
+    return lang === "en" ? "английском (English)" : "русском";
+  }
+  function buildTalkPrompt(context, prevHints, trigger, fromUser, lang) {
+    const system = [
+      "Ты — незаметный суфлёр в умных очках. Пользователь разговаривает с другим человеком; ты видишь распознанную речь (возможны ошибки, неизвестно, кто говорит). Ответ показывается на крошечном дисплее: 5 строк примерно по 30 символов.",
+      "Если в последней реплике задан вопрос, требующий точной информации (люди, даты, места, числа, определения, термины, факты), дай эти сведения так, чтобы пользователь мог сразу сказать их вслух.",
+      "Если пользователь начал объяснять и запнулся («Категорический императив — это…», «Он родился в…»), дай то, чем закончить фразу.",
+      `Коротко: до 25 слов, сначала главное — даты, числа, суть. Пиши на ${langName2(lang)} языке.`,
+      "Учитывай разговор и прошлые подсказки: «он», «а это…» обычно относятся к той же теме.",
+      `Формат ровно две строки:
+Q: <тема, до 6 слов>
+A: <сведения>`,
+      fromUser ? "Это прямой вопрос пользователя к тебе — ответь обязательно." : "Если реплика личная или бытовая (как дела, будешь кофе, где встретимся), мнение без фактов или нечего подсказать по существу — ответь ровно SKIP.",
+      "Без Markdown и вступлений."
+    ].join(`
+`);
+    const ctx = context.trim() ? `Недавно в разговоре:
+«${context.trim()}»
+
+` : "";
+    const prev = prevHints.length ? `Прошлые подсказки:
+${prevHints.map((h) => `— ${h.q}: ${h.a}`).join(`
+`)}
+
+` : "";
+    const label = fromUser ? "Вопрос пользователя" : trigger.kind === "prompt" ? "Последняя реплика (оборвана)" : "Последняя реплика";
+    return { system, user: `${ctx}${prev}${label}: «${trigger.text.trim()}»` };
+  }
+
+  class Talk {
+    deps;
+    active = false;
+    record;
+    screen = "";
+    session = 0;
+    recent = [];
+    busy = false;
+    pending = null;
+    screenTimer = null;
+    last = { n: "", at: -Infinity };
+    lastErrorShownAt = -Infinity;
+    constructor(deps, saved = null) {
+      this.deps = deps;
+      this.record = saved;
+    }
+    start(intro) {
+      this.session++;
+      this.active = true;
+      this.recent = [];
+      this.busy = false;
+      this.pending = null;
+      this.last = { n: "", at: -Infinity };
+      const prev = this.record;
+      const resume = Boolean(prev?.endedAt && this.deps.now() - prev.endedAt < LECTURE_RESUME_MS);
+      if (resume && prev)
+        delete prev.endedAt;
+      else
+        this.record = { startedAt: this.deps.now(), notes: [] };
+      this.deps.save(this.record);
+      this.setScreen(intro.en ? `Conversation mode
+• facts when someone asks
+• a prompt when you trail off
+Stop: «стоп беседа»` : `Режим беседы
+• факты, когда спрашивают
+• подскажу, если запнётесь
+Выключить: «стоп беседа»`, INTRO_MS);
+      this.deps.log("talk", resume ? "Режим беседы включён — продолжаю прежний список" : "Режим беседы включён");
+      this.deps.onChange();
+    }
+    stop() {
+      const hints = this.record?.notes.length ?? 0;
+      if (!this.active)
+        return { hints };
+      this.active = false;
+      this.session++;
+      this.cancelScreenTimer();
+      this.pending = null;
+      this.screen = "";
+      if (this.record) {
+        this.record.endedAt = this.deps.now();
+        this.deps.save(this.record);
+      }
+      this.deps.log("talk", `Режим беседы выключен: подсказок ${hints}`);
+      this.deps.onChange();
+      return { hints };
+    }
+    onSpeech(text) {
+      if (!this.active)
+        return;
+      const t = String(text ?? "").trim();
+      if (!t)
+        return;
+      this.recent.push(t);
+      let words = wordCount(this.recent.join(" "));
+      while (this.recent.length > 1 && words > CONTEXT_WORDS2)
+        words -= wordCount(this.recent.shift());
+      const trigger = findTalkTrigger(t);
+      if (trigger)
+        this.hint(trigger, false);
+    }
+    askUser(question) {
+      if (!this.active || !question.trim())
+        return;
+      this.hint({ kind: "question", text: question.trim() }, true);
+    }
+    async hint(trigger, fromUser, queued = false) {
+      if (!queued) {
+        const n = normalize(trigger.text);
+        const now = this.deps.now();
+        if (!fromUser && n === this.last.n && now - this.last.at < TALK_DEDUPE_MS)
+          return;
+        this.last = { n, at: now };
+      }
+      if (this.busy) {
+        if (fromUser || !this.pending?.fromUser)
+          this.pending = { trigger, fromUser };
+        return;
+      }
+      const session = this.session;
+      this.busy = true;
+      this.deps.log("talk", `${fromUser ? "Ваш вопрос" : trigger.kind === "prompt" ? "Подсказать" : "Вопрос"}: ${trigger.text}`);
+      if (fromUser)
+        this.setScreen(answerScreen(trigger.text, "…думаю"));
+      const prev = (this.record?.notes ?? []).slice(-PREV_HINTS).map((x) => ({ q: x.q ?? "", a: x.text }));
+      const context = this.recent.slice(0, -1).join(" ");
+      const { system, user } = buildTalkPrompt(context, prev, trigger, fromUser, detectLang(trigger.text));
+      try {
+        const reply = await this.deps.complete(system, user);
+        if (session !== this.session)
+          return;
+        const qa = parseAnswer(reply, trigger.text);
+        if (!qa) {
+          this.deps.log("talk", "Подсказка не нужна");
+          if (fromUser)
+            this.setScreen("");
+          return;
+        }
+        const kind = fromUser ? "you" : trigger.kind === "prompt" ? "hint" : "qa";
+        this.addNote({ t: this.deps.now(), kind, q: qa.q, text: qa.a });
+        this.deps.log("talk", `→ ${qa.a}`);
+        this.setScreen(answerScreen(qa.q, qa.a), TALK_SHOW_MS);
+      } catch (e) {
+        if (session !== this.session)
+          return;
+        this.showError(e);
+      } finally {
+        if (session === this.session) {
+          this.busy = false;
+          const next = this.pending;
+          this.pending = null;
+          if (next)
+            this.hint(next.trigger, next.fromUser, true);
+        }
+      }
+    }
+    addNote(n) {
+      if (!this.record)
+        this.record = { startedAt: n.t, notes: [] };
+      this.record.notes.push(n);
+      if (this.record.notes.length > NOTES_MAX2)
+        this.record.notes.splice(0, this.record.notes.length - NOTES_MAX2);
+      this.deps.save(this.record);
+      this.deps.onChange();
+    }
+    setScreen(text, forMs = 0) {
+      this.cancelScreenTimer();
+      this.screen = text;
+      if (text)
+        this.deps.show(text);
+      else
+        this.deps.clear();
+      if (forMs > 0 && text) {
+        this.screenTimer = this.deps.setTimer(() => {
+          this.screenTimer = null;
+          if (this.active && this.screen === text) {
+            this.screen = "";
+            this.deps.clear();
+            this.deps.onChange();
+          }
+        }, forMs);
+      }
+      this.deps.onChange();
+    }
+    cancelScreenTimer() {
+      if (this.screenTimer != null)
+        this.deps.clearTimer(this.screenTimer);
+      this.screenTimer = null;
+    }
+    showError(e) {
+      const human = this.deps.explainError(e);
+      this.deps.log("error", `Беседа: ${human}`);
+      const now = this.deps.now();
+      if (now - this.lastErrorShownAt < ERROR_SHOW_EVERY_MS2)
+        return;
+      this.lastErrorShownAt = now;
+      this.setScreen(human, TALK_SHOW_MS);
+    }
+  }
+
   // src/background/store.ts
   var SETTINGS_VERSION = 2;
   var OLD_DEFAULT_WAKE = ["вопрос", "ассистент", "джипити", "чат джипити", "чат gpt", "chat gpt", "chatgpt", "гпт"];
@@ -5994,6 +6412,7 @@ Stop: «стоп лекция»` : `Режим лекции
   var SETTINGS_KEY = "g1gpt.settings.v1";
   var HISTORY_KEY = "g1gpt.history.v1";
   var LECTURE_KEY = "g1gpt.lecture.v1";
+  var TALK_KEY = "g1gpt.talk.v1";
   function clampInt(v, min, max, dflt) {
     const n = typeof v === "number" ? v : parseInt(String(v), 10);
     if (!Number.isFinite(n))
@@ -6086,6 +6505,13 @@ Stop: «стоп лекция»` : `Режим лекции
     saveLecture(r) {
       this.write(LECTURE_KEY, r);
     }
+    loadTalk() {
+      const r = this.read(TALK_KEY);
+      return r && typeof r.startedAt === "number" && Array.isArray(r.notes) ? r : null;
+    }
+    saveTalk(r) {
+      this.write(TALK_KEY, r);
+    }
   }
 
   // src/background/assistant.ts
@@ -6154,6 +6580,7 @@ Stop: «стоп лекция»` : `Режим лекции
     lastDashboardWarnAt = -Infinity;
     displayChecked = false;
     lecture;
+    talk;
     now;
     setTimer;
     clearTimerFn;
@@ -6181,6 +6608,21 @@ Stop: «стоп лекция»` : `Режим лекции
         save: (r) => this.deps.store.saveLecture(r),
         onChange: () => this.changed()
       }, deps.store.loadLecture());
+      this.talk = new Talk({
+        complete: (system, user) => this.completeOnce(system, user),
+        explainError: (e) => {
+          const err = e;
+          return explainLLMError(err?.provider ?? asProvider(this.settings.provider), Number(err?.status) || 0, String(err?.code ?? ""), String(err?.message ?? ""));
+        },
+        show: (t) => this.show(t),
+        clear: () => this.clearDisplay(),
+        log: (kind, msg) => this.addLog(kind, msg),
+        now: () => this.now(),
+        setTimer: (fn, ms) => this.setTimer(fn, ms),
+        clearTimer: (id) => this.clearTimerFn(id),
+        save: (r) => this.deps.store.saveTalk(r),
+        onChange: () => this.changed()
+      }, deps.store.loadTalk());
     }
     async completeOnce(system, user) {
       const provider = asProvider(this.settings.provider);
@@ -6280,6 +6722,8 @@ Stop: «стоп лекция»` : `Режим лекции
           this.showPage(this.page);
         else if (this.phase === "lecture")
           this.lecture.screen ? this.show(this.lecture.screen) : this.clearDisplay();
+        else if (this.phase === "talk")
+          this.talk.screen ? this.show(this.talk.screen) : this.clearDisplay();
       }, ms);
     }
     wakeWords() {
@@ -6308,6 +6752,11 @@ Stop: «стоп лекция»` : `Режим лекции
           this.onTranscriptWhileLecture(t);
         return;
       }
+      if (this.phase === "talk") {
+        if (isFinal)
+          this.onTranscriptWhileTalk(t);
+        return;
+      }
       if (this.phase === "capturing") {
         this.captureText(t, isFinal);
         return;
@@ -6332,6 +6781,10 @@ Stop: «стоп лекция»` : `Режим лекции
       }
       if (parseLectureCommand(body) === "start") {
         this.startLecture("voice");
+        return;
+      }
+      if (parseTalkCommand(body) === "start") {
+        this.startTalk("voice");
         return;
       }
       const switchTo = parseSwitchCommand(body);
@@ -6376,7 +6829,7 @@ Stop: «стоп лекция»` : `Режим лекции
     }
     onTouch(kind) {
       this.addLog("touch", kind);
-      if (this.phase === "lecture")
+      if (this.phase === "lecture" || this.phase === "talk")
         return;
       if (kind === "single_tap" || kind === "swipe_down") {
         if (this.pages.length)
@@ -6453,6 +6906,13 @@ Stop: «стоп лекция»` : `Режим лекции
           this.startLecture("voice");
           return;
         }
+        if (this.committed.length === 0 && parseTalkCommand(clean) === "start") {
+          this.cancelTimer("silenceTimer");
+          this.cancelTimer("wakeTimer");
+          this.interim = "";
+          this.startTalk("voice");
+          return;
+        }
         const cmd = parseCommand(clean);
         if (cmd && (this.committed.length === 0 || cmd === "cancel" || cmd === "hide")) {
           this.cancelTimer("silenceTimer");
@@ -6516,9 +6976,12 @@ Stop: «стоп лекция»` : `Режим лекции
       const q = question.trim();
       if (!q)
         return;
-      if (this.phase === "lecture") {
+      if (this.phase === "lecture" || this.phase === "talk") {
         this.addLog("ask", `${source === "ui" ? "[с телефона] " : ""}${q}`);
-        this.lecture.askUser(q);
+        if (this.phase === "lecture")
+          this.lecture.askUser(q);
+        else
+          this.talk.askUser(q);
         return;
       }
       if (this.phase === "translating")
@@ -6632,8 +7095,8 @@ Stop: «стоп лекция»` : `Режим лекции
         this.flash("Перевод недоступен.", 3000);
         return;
       }
-      if (this.phase === "lecture")
-        this.stopLecture("switch", false);
+      if (this.phase === "lecture" || this.phase === "talk")
+        this.leaveListeningMode();
       if (this.phase === "thinking")
         this.requestSeq++;
       for (const t of ["silenceTimer", "wakeTimer", "pageTimer", "clearTimer_"])
@@ -6670,8 +7133,8 @@ To stop: «стоп перевод»`);
         this.flash(msg, 6000);
         return;
       }
-      if (this.phase === "translating")
-        this.stopTranslation("question", false);
+      if (this.phase === "translating" || this.phase === "talk")
+        this.leaveListeningMode();
       if (this.phase === "thinking")
         this.requestSeq++;
       for (const t of ["silenceTimer", "wakeTimer", "pageTimer", "clearTimer_"])
@@ -6714,11 +7177,8 @@ Notes are in the app.` : `Лекция выключена.
       if (lc === "start")
         return;
       const mine = wake.matched || detectLang(body) === "ru";
-      if (mine && parseTranslateCommand(body) === "start") {
-        this.stopLecture("switch", false);
-        this.startTranslation("voice");
+      if (mine && this.trySwitchMode(body))
         return;
-      }
       const cmd = parseCommand(body);
       if (mine && (cmd === "hide" || cmd === "cancel" || parseTranslateCommand(body) === "stop"))
         return this.stopLecture("voice");
@@ -6728,6 +7188,87 @@ Notes are in the app.` : `Лекция выключена.
         return;
       }
       this.lecture.onSpeech(t);
+    }
+    startTalk(source) {
+      const provider = asProvider(this.settings.provider);
+      if (!keyFor(this.settings, provider)) {
+        const msg = explainLLMError(provider, 401, "no_key", "");
+        this.addLog("error", `Режим беседы: ${msg}`);
+        this.flash(msg, 6000);
+        return;
+      }
+      if (this.phase === "translating" || this.phase === "lecture")
+        this.leaveListeningMode();
+      if (this.phase === "thinking")
+        this.requestSeq++;
+      for (const t of ["silenceTimer", "wakeTimer", "pageTimer", "clearTimer_"])
+        this.cancelTimer(t);
+      this.committed = [];
+      this.interim = "";
+      this.followUpUntil = 0;
+      this.phase = "talk";
+      this.talk.start({ en: this.settings.translateTo === "en-US" });
+      this.addLog("talk", `Подсказки пишет ${displayName(this.settings, provider)} (${source === "ui" ? "включено с телефона" : "включено голосом"})`);
+    }
+    stopTalk(source, announce = true) {
+      if (this.phase !== "talk")
+        return;
+      const { hints } = this.talk.stop();
+      this.phase = "idle";
+      this.pages = [];
+      if (announce) {
+        const en = this.settings.translateTo === "en-US";
+        this.flash(en ? `Conversation mode off.
+Hints: ${hints}. The list is in the app.` : `Беседа выключена.
+Подсказок: ${hints}. Список — в приложении.`, 4000);
+      } else
+        this.clearDisplay();
+      if (source === "ui")
+        this.addLog("cmd", "Режим беседы выключен с телефона");
+      this.changed();
+    }
+    onTranscriptWhileTalk(t) {
+      const wake = this.wake(t);
+      const body = wake.matched ? wake.rest : t;
+      const tc = parseTalkCommand(body);
+      if (tc === "stop")
+        return this.stopTalk("voice");
+      if (tc === "start")
+        return;
+      const unambiguous = wake.matched || parseTranslateCommand(body) === "start" || normalize(body).split(" ").length >= 2;
+      if (unambiguous && this.trySwitchMode(body))
+        return;
+      const cmd = parseCommand(body);
+      if (wake.matched && (cmd === "hide" || cmd === "cancel"))
+        return this.stopTalk("voice");
+      if (wake.matched && isMeaningful(body) && !cmd) {
+        this.addLog("ask", body);
+        this.talk.askUser(body);
+        return;
+      }
+      this.talk.onSpeech(t);
+    }
+    trySwitchMode(body) {
+      const target = parseTranslateCommand(body) === "start" ? "translating" : parseLectureCommand(body) === "start" ? "lecture" : parseTalkCommand(body) === "start" ? "talk" : null;
+      if (!target)
+        return false;
+      if (target === this.phase)
+        return true;
+      if (target === "translating")
+        this.startTranslation("voice");
+      else if (target === "lecture")
+        this.startLecture("voice");
+      else
+        this.startTalk("voice");
+      return true;
+    }
+    leaveListeningMode() {
+      if (this.phase === "translating")
+        this.stopTranslation("question", false);
+      else if (this.phase === "lecture")
+        this.stopLecture("switch", false);
+      else if (this.phase === "talk")
+        this.stopTalk("switch", false);
     }
     stopTranslation(source, announce = true) {
       if (this.phase !== "translating")
@@ -6768,11 +7309,8 @@ Notes are in the app.` : `Лекция выключена.
       }
       if (tcmd === "start")
         return;
-      if (parseLectureCommand(body) === "start") {
-        this.stopTranslation("question", false);
-        this.startLecture("voice");
+      if (this.trySwitchMode(body))
         return;
-      }
       const cmd = parseCommand(body);
       if ((cmd === "hide" || cmd === "cancel") && (wake.matched || detectLang(body) === "ru")) {
         this.stopTranslation("voice");
@@ -6865,6 +7403,8 @@ Notes are in the app.` : `Лекция выключена.
           this.show(this.pages[this.page]);
         if (!up && this.phase === "lecture" && this.lecture.screen)
           this.show(this.lecture.screen);
+        if (!up && this.phase === "talk" && this.talk.screen)
+          this.show(this.talk.screen);
         this.changed();
       }
       if (!up || !this.settings.headNod)
@@ -6891,9 +7431,10 @@ Notes are in the app.` : `Лекция выключена.
     }
     command(cmd, source) {
       this.addLog("cmd", `${cmd} (${source})`);
-      if (this.phase === "lecture") {
+      if (this.phase === "lecture" || this.phase === "talk") {
+        const by = source === "ui" ? "ui" : "voice";
         if (cmd === "hide" || cmd === "cancel")
-          this.stopLecture(source === "ui" ? "ui" : "voice");
+          this.phase === "lecture" ? this.stopLecture(by) : this.stopTalk(by);
         else if (cmd === "reset")
           this.resetConversation(false);
         return;
@@ -6958,7 +7499,7 @@ Notes are in the app.` : `Лекция выключена.
         phase: this.phase,
         page: this.page,
         pages: this.pages.length,
-        currentScreen: this.phase === "translating" ? this.translationScreen : this.phase === "lecture" ? this.lecture.screen : this.pages[this.page] ?? "",
+        currentScreen: this.phase === "translating" ? this.translationScreen : this.phase === "lecture" ? this.lecture.screen : this.phase === "talk" ? this.talk.screen : this.pages[this.page] ?? "",
         translating: this.phase === "translating",
         lastTranscript: this.lastTranscript,
         lastQuestion: this.lastQuestion,
@@ -6966,6 +7507,7 @@ Notes are in the app.` : `Лекция выключена.
         lastError: this.lastError,
         dashboardLikely: this.dashboardLikely(),
         lecture: lectureSnapshot(this.lecture.active, this.lecture.record),
+        talk: lectureSnapshot(this.talk.active, this.talk.record),
         glassesConnected: this.glassesConnected,
         settings: {
           ...this.settings,
@@ -6998,7 +7540,7 @@ Notes are in the app.` : `Лекция выключена.
   }
 
   // src/background/index.ts
-  var APP_VERSION = "1.7.1";
+  var APP_VERSION = "1.8.0";
   function getKV() {
     try {
       const ls = globalThis.localStorage;
@@ -7125,11 +7667,16 @@ Notes are in the app.` : `Лекция выключена.
         assistant.startLecture("ui");
       else if (cmd === "lectureStop")
         assistant.stopLecture("ui");
+      else if (cmd === "talk")
+        assistant.startTalk("ui");
+      else if (cmd === "talkStop")
+        assistant.stopTalk("ui");
       else if (["next", "prev", "first", "repeat", "hide", "cancel", "reset"].includes(cmd))
         assistant.command(cmd, p?.source === "key" ? "key" : "ui");
       return snap();
     });
     session.ui.handle("getLecture", () => assistant.lecture.record);
+    session.ui.handle("getTalk", () => assistant.talk.record);
     session.ui.handle("simulateSpeech", (p) => {
       assistant.onTranscript(String(p?.text ?? ""), true);
       return snap();

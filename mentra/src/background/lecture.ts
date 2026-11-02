@@ -15,8 +15,11 @@ import {detectLang, normalize, type Lang} from "./voice"
 
 export interface LectureNote {
   t: number
-  /** point = key point from the lecture; qa = the lecturer asked, the AI answered; you = the user asked. */
-  kind: "point" | "qa" | "you"
+  /**
+   * point = key point from the lecture; qa = someone asked (the lecturer, the other person), the AI
+   * answered; you = the user asked («Вопрос, …»); hint = the user trailed off («X — это…») and got a prompt.
+   */
+  kind: "point" | "qa" | "you" | "hint"
   text: string
   q?: string
 }
@@ -501,11 +504,14 @@ export class Lecture {
 }
 
 /** Plain-text notes for copying: key points, then questions with answers, in order. */
-export function notesAsText(record: LectureRecord | null, fmtTime: (t: number) => string): string {
+export function notesAsText(
+  record: LectureRecord | null,
+  fmtTime: (t: number) => string,
+  opts: {title?: string; asked?: string} = {},
+): string {
   if (!record?.notes.length) return ""
-  const head = `Конспект лекции — ${fmtTime(record.startedAt)}`
-  const lines = record.notes.map((n) =>
-    n.kind === "point" ? `• ${n.text}` : `${n.kind === "you" ? "Мой вопрос" : "Вопрос лектора"}: ${n.q ?? ""}\n  → ${n.text}`,
-  )
+  const head = `${opts.title ?? "Конспект лекции"} — ${fmtTime(record.startedAt)}`
+  const label = (k: LectureNote["kind"]) => (k === "you" ? "Мой вопрос" : k === "hint" ? "Подсказка" : (opts.asked ?? "Вопрос лектора"))
+  const lines = record.notes.map((n) => (n.kind === "point" ? `• ${n.text}` : `${label(n.kind)}: ${n.q ?? ""}\n  → ${n.text}`))
   return [head, "", ...lines].join("\n")
 }

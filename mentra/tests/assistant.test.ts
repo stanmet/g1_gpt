@@ -605,6 +605,65 @@ describe("lecture mode («лекция»)", () => {
   })
 })
 
+describe("conversation mode («беседа»)", () => {
+  test("facts on a question, a prompt when trailing off; ordinary «хватит» does not stop it", async () => {
+    const e = setup([
+      "Q: Иммануил Кант\nA: Немецкий философ, 1724–1804.",
+      "Q: Категорический императив\nA: Поступай так, чтобы правило могло стать всеобщим законом.",
+    ])
+    e.a.onTranscript("Беседа", true)
+    expect(e.a.phase).toBe("talk")
+    e.a.onTranscript("Слушай, кто такой Кант?", true)
+    await e.clock.advance(10)
+    expect(e.requests.length).toBe(1)
+    expect(e.requests[0].body.instructions).toContain("суфлёр")
+    expect(e.requests[0].body.tools).toBeUndefined()
+    expect(e.shown.at(-1)).toContain("→ Немецкий философ")
+
+    e.a.onTranscript("Хватит.", true) // part of the conversation
+    expect(e.a.phase).toBe("talk")
+    e.a.onTranscript("А вот категорический императив это", true)
+    await e.clock.advance(10)
+    expect(e.requests[1].body.input[0].content).toContain("Иммануил Кант")
+    expect(e.shown.at(-1)).toContain("→ Поступай так")
+    expect(e.a.history.length).toBe(0)
+
+    e.a.onTranscript("Стоп беседа", true)
+    expect(e.a.phase).toBe("idle")
+    expect(e.shown.at(-1)).toContain("Подсказок: 2")
+    expect(e.store.loadTalk()!.notes.map((n) => n.kind)).toEqual(["qa", "hint"])
+  })
+
+  test("switching between modes; own and UI questions; snapshot", async () => {
+    const e = setup(["Q: Кант\nA: 1724.", "Q: Лима\nA: Столица Перу."])
+    e.a.onTranscript("Суфлёр", true)
+    expect(e.a.phase).toBe("talk")
+    e.a.onTranscript("Вопрос, когда родился Кант?", true)
+    await e.clock.advance(10)
+    expect(e.requests[0].body.instructions).toContain("ответь обязательно")
+    expect(e.shown.at(-1)).toContain("→ 1724.")
+    await e.a.ask("Что такое Лима?", "ui")
+    await e.clock.advance(10)
+    expect(e.a.phase).toBe("talk")
+    expect(e.shown.at(-1)).toContain("→ Столица Перу.")
+    expect(e.a.snapshot().talk).toMatchObject({active: true, total: 2})
+
+    e.a.onTranscript("Лекция", true) // one word in a conversation: not a command
+    expect(e.a.phase).toBe("talk")
+    e.a.onTranscript("Режим лекции", true)
+    expect(e.a.phase).toBe("lecture")
+    e.a.onTranscript("Беседа", true)
+    expect(e.a.phase).toBe("talk")
+    e.a.onTranscript("Транслейт", true)
+    expect(e.a.phase).toBe("translating")
+    e.a.onTranscript("Беседа", true)
+    expect(e.a.phase).toBe("talk")
+    e.a.command("hide", "ui")
+    expect(e.a.phase).toBe("idle")
+    expect(e.a.snapshot().talk.active).toBe(false)
+  })
+})
+
 describe("live translation («транслейт»)", () => {
   const tr = (text: string, isFinal: boolean, extra: Record<string, unknown> = {}) =>
     translation.handler?.({text, isFinal, sourceLanguage: "en", targetLanguage: "ru-RU", originalText: "x", utteranceId: "u1", ...extra})

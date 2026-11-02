@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light dark" />
     <title>GPT для G1</title>
     
-  <link rel="stylesheet" crossorigin href="./chunk-5vz6nrsy.css"><script type="module" crossorigin src="./chunk-ajemtpyt.js"></script></head>
+  <link rel="stylesheet" crossorigin href="./chunk-1aa047q4.css"><script type="module" crossorigin src="./chunk-77mhs7kx.js"></script></head>
   <body>
     <!-- ───────────── Очки ───────────── -->
     <section class="screen" id="screen-glasses" aria-labelledby="t-glasses">
@@ -21,6 +21,7 @@
         <button role="tab" data-mode="assistant" aria-selected="true">Помощник</button>
         <button role="tab" data-mode="translate" aria-selected="false">Перевод</button>
         <button role="tab" data-mode="lecture" aria-selected="false">Лекция</button>
+        <button role="tab" data-mode="talk" aria-selected="false">Беседа</button>
         <span class="seg-thumb" aria-hidden="true"></span>
       </div>
 
@@ -62,7 +63,7 @@
       </div>
 
       <div id="lectureBox" hidden>
-        <h2 class="group-header">Конспект лекции</h2>
+        <h2 class="group-header" id="notesTitle">Конспект лекции</h2>
         <div class="group">
           <div class="cell lecture-meta">
             <span class="cell-main"><span class="cell-title" id="lectureMeta">—</span>
@@ -71,7 +72,8 @@
           </div>
           <ol class="notes" id="lectureNotes"></ol>
         </div>
-        <p class="group-footer"><span id="lectureEveryText">Тезисы появляются примерно раз в 15 секунд.</span> Когда лектор спрашивает аудиторию, ответ показывается сразу и держится на очках 30 секунд. Частота — в Настройках.</p>
+        <p class="group-footer" id="lectureFooter"><span id="lectureEveryText">Тезисы появляются примерно раз в 15 секунд.</span> Когда лектор спрашивает аудиторию, ответ показывается сразу и держится на очках 30 секунд. Частота — в Настройках.</p>
+        <p class="group-footer" id="talkFooter" hidden>Когда собеседник спрашивает что-то с фактами — «Кто такой Кант?» — ответ сразу появляется на очках. Если вы начали объяснять и запнулись — «Категорический императив — это…» — очки подскажут. Подсказка держится 30 секунд. Бытовые вопросы пропускаются.</p>
       </div>
 
       <div class="group ai-pick">
@@ -140,6 +142,13 @@
           </span>
           <span class="cell-main"><span class="cell-title">«Лекция»</span>
             <span class="cell-sub">Очки слушают лектора и показывают тезисы, а на вопросы лектора — ответ. Ещё: «конспект», «режим лекции». Свой вопрос: «Вопрос, …». Выключить: «стоп лекция», «конец лекции», «стоп».</span></span>
+        </div>
+        <div class="cell">
+          <span class="cell-icon tint-amber">
+            <svg viewBox="0 0 24 24"><path d="M3 6h11v7H8l-3 3v-3H3z" /><path d="M14 9h7v7h-2v3l-3-3h-5v-3" /></svg>
+          </span>
+          <span class="cell-main"><span class="cell-title">«Беседа»</span>
+            <span class="cell-sub">Очки слушают разговор. Спросили о фактах — «Кто такой Кант?» — сразу ответ. Запнулись — «Категорический императив — это…» — подсказка. Ещё: «суфлёр», «подсказки». Выключить: «стоп беседа», «конец беседы».</span></span>
         </div>
       </div>
       <p class="group-footer">Каждую команду говорите отдельной фразой.</p>

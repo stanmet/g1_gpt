@@ -1,6 +1,6 @@
 {
   "packageName": "com.g1gpt.assistant",
-  "version": "1.7.1",
+  "version": "1.8.0",
   "name": "GPT для G1",
   "description": "Голосовые вопросы к OpenAI, ответы текстом на дисплее очков",
   "icon": "icon.png",
