@@ -288,3 +288,15 @@ describe("keys stay on the phone", () => {
     expect(alternatingHistory(h, 10).map((m) => m.content)).toEqual(["u1", "a1"])
   })
 })
+
+test("Claude key without a workspace: tells how to fix it", async () => {
+  const {explainLLMError} = await import("../src/background/llm")
+  const msg = explainLLMError(
+    "anthropic",
+    400,
+    "invalid_request_error",
+    "This API key is not scoped to a workspace, so this request must include the anthropic-workspace-id header with the ID of the workspace to use.",
+  )
+  expect(msg).toContain("Workspace")
+  expect(msg).toContain("platform.claude.com")
+})

@@ -5253,7 +5253,7 @@ ${s.instructions.trim()}`);
       keyField: "anthropicKey",
       modelField: "anthropicModel",
       keyPlaceholder: "sk-ant-…",
-      keyWhere: "console.anthropic.com → API Keys",
+      keyWhere: "platform.claude.com/settings/keys → Create key; в поле Workspace выберите рабочее пространство (например, Default)",
       models: [
         { id: "claude-haiku-5-5", label: "Haiku 5.5" },
         { id: "claude-sonnet-5-5", label: "Sonnet 5.5" },
@@ -5315,6 +5315,8 @@ ${s.instructions.trim()}`);
       return `Нет связи с ${name}. Проверьте интернет на телефоне.`;
     if (status === 401 || c === "authentication_error" || /api key not valid|invalid api key|invalid x-api-key/.test(m))
       return `Ключ ${name} не принят. Проверьте ключ в настройках.`;
+    if (/anthropic-workspace-id|not scoped to a workspace/.test(m))
+      return "Ключ Claude не привязан к рабочему пространству. Создайте новый на platform.claude.com/settings/keys и выберите Workspace (например, Default).";
     if (c === "insufficient_quota" || /credit balance|billing|insufficient.*(funds|credit)/.test(m) || p === "openai" && m.includes("quota"))
       return p === "openai" ? "На счёте OpenAI API нет средств. Пополните баланс на platform.openai.com." : `На счёте ${name} нет средств. Пополните баланс у ${PROVIDERS[p].company}.`;
     if (p === "gemini" && (status === 429 || c === "resource_exhausted"))
@@ -7807,7 +7809,7 @@ ${goal}` : "Цель беседы убрана.", 3000);
   }
 
   // src/background/index.ts
-  var APP_VERSION = "1.9.0";
+  var APP_VERSION = "1.9.1";
   function getKV() {
     try {
       const ls = globalThis.localStorage;

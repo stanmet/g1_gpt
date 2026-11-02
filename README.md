@@ -68,7 +68,7 @@
 | | Ключ | Модели | Цена |
 |---|---|---|---|
 | ChatGPT (OpenAI) | platform.openai.com → API keys | GPT‑6.1 Terra, 6 Luna, 6.1 Sol, 6 Astra | Terra ≈ $0.002–0.005 за вопрос |
-| Claude (Anthropic) | console.anthropic.com → API Keys | Haiku 5.5, Sonnet 5.5, Opus 5.5, Fable 5.1 | Haiku от $0.10/$0.50 за 1 млн токенов |
+| Claude (Anthropic) | platform.claude.com/settings/keys → Create key, выбрать Workspace | Haiku 5.5, Sonnet 5.5, Opus 5.5, Fable 5.1 | Haiku от $0.10/$0.50 за 1 млн токенов |
 | Gemini (Google) | aistudio.google.com → Get API key | 3.8 Flash, 3.5 Flash‑Lite, 4 Argon | у Flash есть бесплатный лимит |
 
 Голосом: «Клод, …», «Джемини, …», «Чат GPT, …» — спросить конкретную нейросеть; «Переключись на Клода» — сделать её основной.
