@@ -15,6 +15,12 @@ import {detectLang, normalize, type Lang} from "./voice"
 export const TALK_SHOW_MS = 30_000
 /** The same question heard again within this time (repeated, or re-sent by recognition) is ignored. */
 export const TALK_DEDUPE_MS = 20_000
+/**
+ * Mentra's recognizer (Soniox) closes an utterance up to ~2.5 s after speech stops. The live
+ * (interim) text is used instead: a finished «…?» is answered at once, a trailing «… это» once the
+ * live text has not changed for this long.
+ */
+export const TALK_SETTLE_MS = 900
 /** The intro screen is cleared after this long. */
 const INTRO_MS = 5000
 const CONTEXT_WORDS = 300
@@ -72,24 +78,44 @@ function contentWords(n: string): string[] {
   return w.slice(i)
 }
 
+const ENDS_WITH_QUESTION = /\?["»”')\s]*$/
+
+/** A sentence that asks something worth a hint (not small talk), or null. */
+function questionIn(s: string): TalkTrigger | null {
+  const words = contentWords(normalize(s))
+  if (words.length < 3) return null
+  const n = words.join(" ")
+  if (SMALL_TALK.some((st) => n === st || n.startsWith(st + " "))) return null
+  const asked = ENDS_WITH_QUESTION.test(s)
+  // without «?» only if recognition did not close it with a full stop («Как я говорил, это важно.» is not a question)
+  const open = !/(?<!\.)[.!]["»”')\s]*$/.test(s)
+  const interrogative = open && (RU_Q.has(words[0]) || EN_Q.has(words[0]) || words[1] === "ли") && words.length <= 14
+  return asked || interrogative ? {kind: "question", text: s} : null
+}
+
+/** Finished questions («…?») in live text, oldest first. */
+export function finishedQuestions(text: string): TalkTrigger[] {
+  return sentencesOf(text)
+    .filter((s) => ENDS_WITH_QUESTION.test(s))
+    .map(questionIn)
+    .filter((t): t is TalkTrigger => t !== null)
+}
+
+/** Hesitation words people add after «это»: «это… ну… как бы». */
+const TRAILING_FILLERS = new Set(["ну", "э", "эм", "ээ", "мм", "как", "бы", "вот", "типа", "uh", "um", "er", "like", "well"])
+
 /** What in this utterance needs a hint, or null. Cheap and local: decides whether to call the AI. */
 export function findTalkTrigger(text: string): TalkTrigger | null {
   const sentences = sentencesOf(text)
   for (let i = sentences.length - 1; i >= 0; i--) {
-    const s = sentences[i]
-    const words = contentWords(normalize(s))
-    if (words.length < 3) continue
-    const n = words.join(" ")
-    if (SMALL_TALK.some((st) => n === st || n.startsWith(st + " "))) continue
-    const asked = /\?["»”')\s]*$/.test(s)
-    // without «?» only if recognition did not close it with a full stop («Как я говорил, это важно.» is not a question)
-    const open = !/(?<!\.)[.!]["»”')\s]*$/.test(s)
-    const interrogative = open && (RU_Q.has(words[0]) || EN_Q.has(words[0]) || words[1] === "ли") && words.length <= 14
-    if (asked || interrogative) return {kind: "question", text: s}
+    const q = questionIn(sentences[i])
+    if (q) return q
   }
   const last = sentences.at(-1)
   if (last) {
-    const n = normalize(last)
+    const words = normalize(last).split(" ").filter(Boolean)
+    while (words.length > 3 && TRAILING_FILLERS.has(words[words.length - 1])) words.pop()
+    const n = words.join(" ")
     const closed = /(?<!\.)[.!]["»”')\s]*$/.test(last) // a single full stop; «...» and «…» trail off
     const cues = closed ? STRONG_CUES : [...STRONG_CUES, ...WEAK_CUES]
     if (n.split(" ").length >= 3 && cues.some((c) => n.endsWith(" " + c))) return {kind: "prompt", text: last}
@@ -117,7 +143,7 @@ export function buildTalkPrompt(
     "Формат ровно две строки:\nQ: <тема, до 6 слов>\nA: <сведения>",
     fromUser
       ? "Это прямой вопрос пользователя к тебе — ответь обязательно."
-      : "Если реплика личная или бытовая (как дела, будешь кофе, где встретимся), мнение без фактов или нечего подсказать по существу — ответь ровно SKIP.",
+      : "Ответь ровно SKIP, только если реплика явно личная или бытовая (как дела, будешь кофе, где встретимся). Если сомневаешься — лучше дай короткую полезную справку по теме, чем промолчать.",
     "Без Markdown и вступлений.",
   ].join("\n")
   const ctx = context.trim() ? `Недавно в разговоре:\n«${context.trim()}»\n\n` : ""
@@ -149,7 +175,10 @@ export class Talk {
   private busy = false
   private pending: {trigger: TalkTrigger; fromUser: boolean} | null = null
   private screenTimer: unknown = null
-  private last = {n: "", at: -Infinity}
+  /** Recently handled triggers (normalized), so live text and the final do not ask twice. */
+  private handled: {n: string; at: number}[] = []
+  private interim = ""
+  private settleTimer: unknown = null
   private lastErrorShownAt = -Infinity
 
   constructor(
@@ -165,7 +194,8 @@ export class Talk {
     this.recent = []
     this.busy = false
     this.pending = null
-    this.last = {n: "", at: -Infinity}
+    this.handled = []
+    this.interim = ""
     const prev = this.record
     const resume = Boolean(prev?.endedAt && this.deps.now() - prev.endedAt < LECTURE_RESUME_MS)
     if (resume && prev) delete prev.endedAt
@@ -187,6 +217,7 @@ export class Talk {
     this.active = false
     this.session++
     this.cancelScreenTimer()
+    this.cancelSettle()
     this.pending = null
     this.screen = ""
     if (this.record) {
@@ -198,16 +229,36 @@ export class Talk {
     return {hints}
   }
 
+  /** Live text of the utterance still being spoken (by anyone). */
+  onInterim(text: string): void {
+    if (!this.active) return
+    const t = String(text ?? "").trim()
+    if (!t || t === this.interim) return
+    this.interim = t
+    // a finished «…?» inside the live text: answer now, not after the pause
+    for (const q of finishedQuestions(t)) this.request(q, "на лету")
+    // «… — это», «… родился в»: answer once the speaker has paused briefly
+    this.cancelSettle()
+    this.settleTimer = this.deps.setTimer(() => {
+      this.settleTimer = null
+      if (!this.active || this.interim !== t) return
+      const trigger = findTalkTrigger(t)
+      if (trigger) this.request(trigger, "пауза")
+    }, TALK_SETTLE_MS)
+  }
+
   /** A final transcript of what was said (by anyone). */
   onSpeech(text: string): void {
     if (!this.active) return
     const t = String(text ?? "").trim()
     if (!t) return
+    this.cancelSettle()
+    this.interim = ""
     this.recent.push(t)
     let words = wordCount(this.recent.join(" "))
     while (this.recent.length > 1 && words > CONTEXT_WORDS) words -= wordCount(this.recent.shift()!)
     const trigger = findTalkTrigger(t)
-    if (trigger) void this.hint(trigger, false)
+    if (trigger) this.request(trigger, "")
   }
 
   /** The user's own question («Вопрос, …»): always answered. */
@@ -218,13 +269,24 @@ export class Talk {
 
   // ── internals ──
 
-  private async hint(trigger: TalkTrigger, fromUser: boolean, queued = false): Promise<void> {
-    if (!queued) {
-      const n = normalize(trigger.text)
-      const now = this.deps.now()
-      if (!fromUser && n === this.last.n && now - this.last.at < TALK_DEDUPE_MS) return
-      this.last = {n, at: now}
-    }
+  /** Asks the AI unless the same thing was just handled (from live text, a repeat, a re-send). */
+  private request(trigger: TalkTrigger, via: string): void {
+    const n = contentWords(normalize(trigger.text)).join(" ")
+    const now = this.deps.now()
+    this.handled = this.handled.filter((h) => now - h.at < TALK_DEDUPE_MS)
+    const same = (a: string, b: string) => a === b || (Math.min(a.length, b.length) >= 10 && (a.includes(b) || b.includes(a)))
+    if (this.handled.some((h) => same(h.n, n))) return
+    this.handled.push({n, at: now})
+    if (via) this.deps.log("talk", `Услышал (${via}): ${trigger.text}`)
+    void this.hint(trigger, false)
+  }
+
+  private cancelSettle(): void {
+    if (this.settleTimer != null) this.deps.clearTimer(this.settleTimer)
+    this.settleTimer = null
+  }
+
+  private async hint(trigger: TalkTrigger, fromUser: boolean): Promise<void> {
     if (this.busy) {
       // in a conversation only the newest matters; the user's own question wins
       if (fromUser || !this.pending?.fromUser) this.pending = {trigger, fromUser}
@@ -258,7 +320,7 @@ export class Talk {
         this.busy = false
         const next = this.pending
         this.pending = null
-        if (next) void this.hint(next.trigger, next.fromUser, true)
+        if (next) void this.hint(next.trigger, next.fromUser)
       }
     }
   }

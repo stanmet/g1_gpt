@@ -262,6 +262,10 @@ test("built bundle: conversation mode — a question in the conversation gets fa
   await sleep(30)
   expect(h.renders().at(-1)).toContain("Режим беседы")
 
+  // answered from the live (interim) text, before the recognizer closes the utterance
+  h.ev("transcription:ru-RU", {text: "Слушай, а кто такой Кант?", isFinal: false})
+  await sleep(60)
+  expect(h.openaiCalls.length).toBe(1)
   h.ev("transcription:ru-RU", {text: "Слушай, а кто такой Кант?", isFinal: true})
   await sleep(60)
   expect(h.openaiCalls.length).toBe(1)

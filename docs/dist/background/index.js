@@ -6003,6 +6003,7 @@ Stop: «стоп лекция»` : `Режим лекции
   // src/background/talk.ts
   var TALK_SHOW_MS = 30000;
   var TALK_DEDUPE_MS = 20000;
+  var TALK_SETTLE_MS = 900;
   var INTRO_MS = 5000;
   var CONTEXT_WORDS2 = 300;
   var PREV_HINTS = 4;
@@ -6138,25 +6139,36 @@ Stop: «стоп лекция»` : `Режим лекции
       i++;
     return w.slice(i);
   }
+  var ENDS_WITH_QUESTION = /\?["»”')\s]*$/;
+  function questionIn(s) {
+    const words = contentWords(normalize(s));
+    if (words.length < 3)
+      return null;
+    const n = words.join(" ");
+    if (SMALL_TALK.some((st) => n === st || n.startsWith(st + " ")))
+      return null;
+    const asked = ENDS_WITH_QUESTION.test(s);
+    const open = !/(?<!\.)[.!]["»”')\s]*$/.test(s);
+    const interrogative = open && (RU_Q.has(words[0]) || EN_Q.has(words[0]) || words[1] === "ли") && words.length <= 14;
+    return asked || interrogative ? { kind: "question", text: s } : null;
+  }
+  function finishedQuestions(text) {
+    return sentencesOf(text).filter((s) => ENDS_WITH_QUESTION.test(s)).map(questionIn).filter((t) => t !== null);
+  }
+  var TRAILING_FILLERS = new Set(["ну", "э", "эм", "ээ", "мм", "как", "бы", "вот", "типа", "uh", "um", "er", "like", "well"]);
   function findTalkTrigger(text) {
     const sentences = sentencesOf(text);
     for (let i = sentences.length - 1;i >= 0; i--) {
-      const s = sentences[i];
-      const words = contentWords(normalize(s));
-      if (words.length < 3)
-        continue;
-      const n = words.join(" ");
-      if (SMALL_TALK.some((st) => n === st || n.startsWith(st + " ")))
-        continue;
-      const asked = /\?["»”')\s]*$/.test(s);
-      const open = !/(?<!\.)[.!]["»”')\s]*$/.test(s);
-      const interrogative = open && (RU_Q.has(words[0]) || EN_Q.has(words[0]) || words[1] === "ли") && words.length <= 14;
-      if (asked || interrogative)
-        return { kind: "question", text: s };
+      const q = questionIn(sentences[i]);
+      if (q)
+        return q;
     }
     const last = sentences.at(-1);
     if (last) {
-      const n = normalize(last);
+      const words = normalize(last).split(" ").filter(Boolean);
+      while (words.length > 3 && TRAILING_FILLERS.has(words[words.length - 1]))
+        words.pop();
+      const n = words.join(" ");
       const closed = /(?<!\.)[.!]["»”')\s]*$/.test(last);
       const cues = closed ? STRONG_CUES : [...STRONG_CUES, ...WEAK_CUES];
       if (n.split(" ").length >= 3 && cues.some((c) => n.endsWith(" " + c)))
@@ -6177,7 +6189,7 @@ Stop: «стоп лекция»` : `Режим лекции
       `Формат ровно две строки:
 Q: <тема, до 6 слов>
 A: <сведения>`,
-      fromUser ? "Это прямой вопрос пользователя к тебе — ответь обязательно." : "Если реплика личная или бытовая (как дела, будешь кофе, где встретимся), мнение без фактов или нечего подсказать по существу — ответь ровно SKIP.",
+      fromUser ? "Это прямой вопрос пользователя к тебе — ответь обязательно." : "Ответь ровно SKIP, только если реплика явно личная или бытовая (как дела, будешь кофе, где встретимся). Если сомневаешься — лучше дай короткую полезную справку по теме, чем промолчать.",
       "Без Markdown и вступлений."
     ].join(`
 `);
@@ -6204,7 +6216,9 @@ ${prevHints.map((h) => `— ${h.q}: ${h.a}`).join(`
     busy = false;
     pending = null;
     screenTimer = null;
-    last = { n: "", at: -Infinity };
+    handled = [];
+    interim = "";
+    settleTimer = null;
     lastErrorShownAt = -Infinity;
     constructor(deps, saved = null) {
       this.deps = deps;
@@ -6216,7 +6230,8 @@ ${prevHints.map((h) => `— ${h.q}: ${h.a}`).join(`
       this.recent = [];
       this.busy = false;
       this.pending = null;
-      this.last = { n: "", at: -Infinity };
+      this.handled = [];
+      this.interim = "";
       const prev = this.record;
       const resume = Boolean(prev?.endedAt && this.deps.now() - prev.endedAt < LECTURE_RESUME_MS);
       if (resume && prev)
@@ -6241,6 +6256,7 @@ Stop: «стоп беседа»` : `Режим беседы
       this.active = false;
       this.session++;
       this.cancelScreenTimer();
+      this.cancelSettle();
       this.pending = null;
       this.screen = "";
       if (this.record) {
@@ -6251,33 +6267,64 @@ Stop: «стоп беседа»` : `Режим беседы
       this.deps.onChange();
       return { hints };
     }
+    onInterim(text) {
+      if (!this.active)
+        return;
+      const t = String(text ?? "").trim();
+      if (!t || t === this.interim)
+        return;
+      this.interim = t;
+      for (const q of finishedQuestions(t))
+        this.request(q, "на лету");
+      this.cancelSettle();
+      this.settleTimer = this.deps.setTimer(() => {
+        this.settleTimer = null;
+        if (!this.active || this.interim !== t)
+          return;
+        const trigger = findTalkTrigger(t);
+        if (trigger)
+          this.request(trigger, "пауза");
+      }, TALK_SETTLE_MS);
+    }
     onSpeech(text) {
       if (!this.active)
         return;
       const t = String(text ?? "").trim();
       if (!t)
         return;
+      this.cancelSettle();
+      this.interim = "";
       this.recent.push(t);
       let words = wordCount(this.recent.join(" "));
       while (this.recent.length > 1 && words > CONTEXT_WORDS2)
         words -= wordCount(this.recent.shift());
       const trigger = findTalkTrigger(t);
       if (trigger)
-        this.hint(trigger, false);
+        this.request(trigger, "");
     }
     askUser(question) {
       if (!this.active || !question.trim())
         return;
       this.hint({ kind: "question", text: question.trim() }, true);
     }
-    async hint(trigger, fromUser, queued = false) {
-      if (!queued) {
-        const n = normalize(trigger.text);
-        const now = this.deps.now();
-        if (!fromUser && n === this.last.n && now - this.last.at < TALK_DEDUPE_MS)
-          return;
-        this.last = { n, at: now };
-      }
+    request(trigger, via) {
+      const n = contentWords(normalize(trigger.text)).join(" ");
+      const now = this.deps.now();
+      this.handled = this.handled.filter((h) => now - h.at < TALK_DEDUPE_MS);
+      const same = (a, b) => a === b || Math.min(a.length, b.length) >= 10 && (a.includes(b) || b.includes(a));
+      if (this.handled.some((h) => same(h.n, n)))
+        return;
+      this.handled.push({ n, at: now });
+      if (via)
+        this.deps.log("talk", `Услышал (${via}): ${trigger.text}`);
+      this.hint(trigger, false);
+    }
+    cancelSettle() {
+      if (this.settleTimer != null)
+        this.deps.clearTimer(this.settleTimer);
+      this.settleTimer = null;
+    }
+    async hint(trigger, fromUser) {
       if (this.busy) {
         if (fromUser || !this.pending?.fromUser)
           this.pending = { trigger, fromUser };
@@ -6316,7 +6363,7 @@ Stop: «стоп беседа»` : `Режим беседы
           const next = this.pending;
           this.pending = null;
           if (next)
-            this.hint(next.trigger, next.fromUser, true);
+            this.hint(next.trigger, next.fromUser);
         }
       }
     }
@@ -6755,6 +6802,8 @@ Stop: «стоп беседа»` : `Режим беседы
       if (this.phase === "talk") {
         if (isFinal)
           this.onTranscriptWhileTalk(t);
+        else if (!this.wake(t).matched)
+          this.talk.onInterim(t);
         return;
       }
       if (this.phase === "capturing") {
@@ -7540,7 +7589,7 @@ Hints: ${hints}. The list is in the app.` : `Беседа выключена.
   }
 
   // src/background/index.ts
-  var APP_VERSION = "1.8.0";
+  var APP_VERSION = "1.8.1";
   function getKV() {
     try {
       const ls = globalThis.localStorage;

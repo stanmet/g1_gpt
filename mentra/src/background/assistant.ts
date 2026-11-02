@@ -355,6 +355,7 @@ export class Assistant {
     }
     if (this.phase === "talk") {
       if (isFinal) this.onTranscriptWhileTalk(t)
+      else if (!this.wake(t).matched) this.talk.onInterim(t) // «Вопрос, …» waits for the final
       return
     }
 

@@ -1,7 +1,7 @@
 import {describe, expect, test} from "bun:test"
 import {G1_LINES} from "../src/background/g1text"
 import {notesAsText, type LectureRecord} from "../src/background/lecture"
-import {buildTalkPrompt, findTalkTrigger, Talk, TALK_DEDUPE_MS, TALK_SHOW_MS} from "../src/background/talk"
+import {buildTalkPrompt, findTalkTrigger, finishedQuestions, Talk, TALK_DEDUPE_MS, TALK_SETTLE_MS, TALK_SHOW_MS} from "../src/background/talk"
 import {parseTalkCommand} from "../src/background/voice"
 
 class Clock {
@@ -74,6 +74,14 @@ describe("what needs a hint", () => {
     expect(findTalkTrigger("The speed of light is about")?.kind).toBe("prompt")
   })
 
+  test("hesitation after the cue still counts; finished questions in live text", () => {
+    expect(findTalkTrigger("Категорический императив это ну как бы")?.kind).toBe("prompt")
+    expect(findTalkTrigger("Кант родился в э")?.kind).toBe("prompt")
+    expect(finishedQuestions("Слушай, кто такой Кант? И когда")).toEqual([{kind: "question", text: "Слушай, кто такой Кант?"}])
+    expect(finishedQuestions("Кто такой Кант")).toEqual([]) // not finished yet
+    expect(finishedQuestions("Как дела? Нормально.")).toEqual([])
+  })
+
   test("small talk and finished statements cost nothing", () => {
     for (const t of [
       "Как дела?", "Будешь кофе?", "Ты понял?", "Что?", "Ну, это", "Он там был.", "Я думаю, что это хорошая идея.",
@@ -142,6 +150,38 @@ describe("conversation flow", () => {
     await e.clock.advance(TALK_SHOW_MS + 10)
     expect(e.shown.at(-1)).toBe("<clear>")
     expect(e.talk.screen).toBe("")
+  })
+
+  test("live text: a finished question is answered before the utterance ends, not twice", async () => {
+    const e = setup(["Q: Иммануил Кант\nA: Немецкий философ, 1724–1804."])
+    e.talk.start({en: false})
+    e.talk.onInterim("Слушай,")
+    e.talk.onInterim("Слушай, кто такой")
+    e.talk.onInterim("Слушай, кто такой Кант?")
+    await e.clock.advance(10)
+    expect(e.calls.length).toBe(1) // at once, no pause needed
+    expect(e.shown.at(-1)).toContain("→ Немецкий философ")
+    e.talk.onInterim("Слушай, кто такой Кант? Ну, в двух словах")
+    e.talk.onSpeech("Слушай, кто такой Кант? Ну, в двух словах.")
+    await e.clock.advance(TALK_SETTLE_MS + 10)
+    expect(e.calls.length).toBe(1)
+  })
+
+  test("live text: a trailing «это» is answered after a short pause, not twice", async () => {
+    const e = setup(["Q: Категорический императив\nA: Поступай так, чтобы правило могло стать всеобщим законом."])
+    e.talk.start({en: false})
+    e.talk.onInterim("А вот категорический")
+    await e.clock.advance(500)
+    e.talk.onInterim("А вот категорический императив это")
+    await e.clock.advance(TALK_SETTLE_MS - 100)
+    expect(e.calls.length).toBe(0) // still speaking?
+    await e.clock.advance(200)
+    expect(e.calls.length).toBe(1)
+    expect(e.calls[0].user).toContain("оборвана")
+    e.talk.onSpeech("А вот категорический императив это.")
+    await e.clock.advance(10)
+    expect(e.calls.length).toBe(1)
+    expect(e.shown.at(-1)).toContain("→ Поступай так")
   })
 
   test("small talk is skipped by the AI; duplicates are ignored; the newest wins while busy", async () => {

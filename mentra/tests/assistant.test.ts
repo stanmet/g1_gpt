@@ -620,6 +620,9 @@ describe("conversation mode («беседа»)", () => {
     expect(e.requests[0].body.tools).toBeUndefined()
     expect(e.shown.at(-1)).toContain("→ Немецкий философ")
 
+    e.a.onTranscript("Вопрос, сколько будет", false) // own question: waits for the final, not answered from live text
+    await e.clock.advance(2000)
+    expect(e.requests.length).toBe(1)
     e.a.onTranscript("Хватит.", true) // part of the conversation
     expect(e.a.phase).toBe("talk")
     e.a.onTranscript("А вот категорический императив это", true)
