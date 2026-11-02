@@ -14,10 +14,31 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 type Env = {payload: any; requestId?: string}
 
-function makeHost(openaiAnswers: string[]) {
+/**
+ * Exactly what Mentra 3.2.1's iOS polyfill does: native returns the stored string as a JS
+ * string, the polyfill JSON.parses it and returns null unless the result is a string.
+ */
+function iosLocalStorage(store: Map<string, string>) {
+  return {
+    getItem(key: string) {
+      const raw = store.get(String(key))
+      if (raw == null) return null
+      let v: unknown
+      try {
+        v = JSON.parse(raw)
+      } catch {
+        v = raw
+      }
+      return typeof v === "string" ? v : null
+    },
+    setItem: (k: string, v: string) => void store.set(String(k), String(v)),
+    removeItem: (k: string) => void store.delete(String(k)),
+  }
+}
+
+function makeHost(openaiAnswers: string[], store = new Map<string, string>()) {
   const sent: Env[] = []
   const openaiCalls: any[] = []
-  const store = new Map<string, string>()
   let ctx: any
 
   const deliver = (env: Env) => setTimeout(() => ctx.__mentraDeliverBridgeRaw?.(JSON.stringify(env)), 0)
@@ -64,11 +85,7 @@ function makeHost(openaiAnswers: string[]) {
     queueMicrotask,
     fetch,
     WebSocket: undefined,
-    localStorage: {
-      getItem: (k: string) => store.get(k) ?? null,
-      setItem: (k: string, v: string) => void store.set(k, String(v)),
-      removeItem: (k: string) => void store.delete(k),
-    },
+    localStorage: iosLocalStorage(store),
     crypto: {getRandomValues: (a: any) => crypto.getRandomValues(a), randomUUID: () => crypto.randomUUID()},
     TextEncoder,
     TextDecoder,
@@ -160,4 +177,34 @@ test("built bundle: G1 transcript → OpenAI → render, follow-up keeps context
   const lastRender = h.sent.filter((e) => e.payload.type === "miniapp_render").at(-1)!.payload
   expect(lastRender.view).toBe("main")
   expect(lastRender.elements[0].box).toEqual({x: 0, y: 0, w: 640, h: 200})
+}, 15000)
+
+test("API keys and settings survive a Mentra restart (iOS localStorage polyfill)", async () => {
+  const disk = new Map<string, string>()
+  const boot = async () => {
+    const h = makeHost(["Ответ."], disk)
+    vm.runInContext(readFileSync(BUNDLE, "utf8"), h.ctx, {filename: "background/index.js"})
+    h.ctx.__mentraInitCallback("s")
+    await sleep(50)
+    h.ev("_ui", {type: "UI_OPEN"})
+    return h
+  }
+  const first = await boot()
+  first.ev("_ui", {type: "UI_MESSAGE", channel: "saveSettings", seq: 1, requestId: "k1",
+    payload: {apiKey: "sk-test-abcdefghijklmnop", anthropicKey: "sk-ant-api03-abcdefghijklmnop", aboutMe: "Живу в Дублине"}})
+  await sleep(50)
+
+  // Mentra is closed and opened again: a fresh JS context, same phone storage
+  const second = await boot()
+  second.ev("_ui", {type: "UI_MESSAGE", channel: "getState", seq: 1, requestId: "g1", payload: {}})
+  await sleep(50)
+  const reply = second.uiReplies().find((e) => e.payload.requestId === "g1")!
+  const st = JSON.stringify(reply.payload)
+  expect(st).toContain('"hasKey":true')
+  expect(st).toContain("sk-…mnop")
+  expect(st).toContain("sk-ant-…mnop")
+  expect(st).toContain("Живу в Дублине")
+  expect(st).not.toContain("sk-test-abcdefghijklmnop") // the key itself is never sent to the UI
+  const log = second.sent.filter((e) => e.payload.type === "UI_SEND").map((e) => JSON.stringify(e.payload)).join()
+  expect(log + st).toContain("Хранилище на телефоне работает")
 }, 15000)

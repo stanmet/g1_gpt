@@ -57,6 +57,13 @@ registerMiniapp((session: any) => {
   })
 
   assistant.addLog("info", `Запущено, версия ${APP_VERSION}`)
+  const storageOk = store.selfTest()
+  assistant.addLog(
+    storageOk ? "info" : "error",
+    storageOk
+      ? "Хранилище на телефоне работает: ключи и настройки сохраняются"
+      : "Хранилище недоступно: настройки сохранятся только до перезапуска Mentra",
+  )
   if (!assistant.settings.apiKey) assistant.addLog("info", "Ключ OpenAI не задан — откройте настройки")
 
   // ── Speech-to-text ─────────────────────────────────────────────

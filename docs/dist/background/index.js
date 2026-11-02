@@ -5454,6 +5454,8 @@ ${s.instructions.trim()}`);
     r.v = SETTINGS_VERSION;
     return r;
   }
+  var STORE_PREFIX = "~g1:";
+  var PROBE_KEY = "g1gpt.probe";
   var SETTINGS_KEY = "g1gpt.settings.v1";
   var HISTORY_KEY = "g1gpt.history.v1";
   function clampInt(v, min, max, dflt) {
@@ -5504,15 +5506,27 @@ ${s.instructions.trim()}`);
     read(key) {
       try {
         const s = this.kv?.getItem(key);
-        return s ? JSON.parse(s) : null;
+        if (typeof s !== "string" || !s)
+          return null;
+        return JSON.parse(s.startsWith(STORE_PREFIX) ? s.slice(STORE_PREFIX.length) : s);
       } catch {
         return null;
       }
     }
     write(key, value) {
       try {
-        this.kv?.setItem(key, JSON.stringify(value));
+        this.kv?.setItem(key, STORE_PREFIX + JSON.stringify(value));
       } catch {}
+    }
+    selfTest() {
+      if (!this.kv)
+        return false;
+      try {
+        this.write(PROBE_KEY, { ok: 1, at: Date.now() });
+        return this.read(PROBE_KEY)?.ok === 1;
+      } catch {
+        return false;
+      }
     }
     loadSettings() {
       return normalizeSettings(migrateSettings(this.read(SETTINGS_KEY)));
@@ -6240,7 +6254,7 @@ To stop: «стоп перевод»`);
   }
 
   // src/background/index.ts
-  var APP_VERSION = "1.5.0";
+  var APP_VERSION = "1.5.1";
   function getKV() {
     try {
       const ls = globalThis.localStorage;
@@ -6282,6 +6296,8 @@ To stop: «стоп перевод»`);
       onChange: pushState
     });
     assistant.addLog("info", `Запущено, версия ${APP_VERSION}`);
+    const storageOk = store.selfTest();
+    assistant.addLog(storageOk ? "info" : "error", storageOk ? "Хранилище на телефоне работает: ключи и настройки сохраняются" : "Хранилище недоступно: настройки сохранятся только до перезапуска Mentra");
     if (!assistant.settings.apiKey)
       assistant.addLog("info", "Ключ OpenAI не задан — откройте настройки");
     let unsubscribeStt = null;

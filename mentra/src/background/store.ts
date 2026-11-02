@@ -97,6 +97,15 @@ export interface KV {
   removeItem(key: string): void
 }
 
+/**
+ * Values are stored as "~g1:" + JSON. Mentra 3.2.1 on iOS bridges localStorage through
+ * a polyfill that JSON-parses whatever native returns and drops anything that is not a
+ * string — so a plain JSON value ('{"apiKey":…}') was saved but read back as null,
+ * and settings (with the API keys) were lost on every Mentra restart. The prefix makes
+ * the stored text non-JSON, so it comes back intact.
+ */
+const STORE_PREFIX = "~g1:"
+const PROBE_KEY = "g1gpt.probe"
 const SETTINGS_KEY = "g1gpt.settings.v1"
 const HISTORY_KEY = "g1gpt.history.v1"
 
@@ -149,7 +158,8 @@ export class Store {
   private read<T>(key: string): T | null {
     try {
       const s = this.kv?.getItem(key)
-      return s ? (JSON.parse(s) as T) : null
+      if (typeof s !== "string" || !s) return null
+      return JSON.parse(s.startsWith(STORE_PREFIX) ? s.slice(STORE_PREFIX.length) : s) as T
     } catch {
       return null
     }
@@ -157,9 +167,20 @@ export class Store {
 
   private write(key: string, value: unknown): void {
     try {
-      this.kv?.setItem(key, JSON.stringify(value))
+      this.kv?.setItem(key, STORE_PREFIX + JSON.stringify(value))
     } catch {
       // storage full or unavailable: keep working in memory
+    }
+  }
+
+  /** Write and read back a value, to confirm that saved settings survive a restart. */
+  selfTest(): boolean {
+    if (!this.kv) return false
+    try {
+      this.write(PROBE_KEY, {ok: 1, at: Date.now()})
+      return this.read<{ok: number}>(PROBE_KEY)?.ok === 1
+    } catch {
+      return false
     }
   }
 
