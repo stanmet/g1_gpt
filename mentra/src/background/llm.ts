@@ -64,7 +64,7 @@ export const PROVIDERS: Record<Provider, ProviderInfo> = {
     keyField: "geminiKey",
     modelField: "geminiModel",
     keyPlaceholder: "AIza…",
-    keyWhere: "aistudio.google.com → Get API key",
+    keyWhere: "aistudio.google.com/apikey → Create API key",
     models: [
       {id: "gemini-3.8-flash", label: "3.8 Flash"},
       {id: "gemini-3.5-flash-lite", label: "3.5 Flash‑Lite"},

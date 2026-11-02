@@ -5267,7 +5267,7 @@ ${s.instructions.trim()}`);
       keyField: "geminiKey",
       modelField: "geminiModel",
       keyPlaceholder: "AIza…",
-      keyWhere: "aistudio.google.com → Get API key",
+      keyWhere: "aistudio.google.com/apikey → Create API key",
       models: [
         { id: "gemini-3.8-flash", label: "3.8 Flash" },
         { id: "gemini-3.5-flash-lite", label: "3.5 Flash‑Lite" },
@@ -7809,7 +7809,7 @@ ${goal}` : "Цель беседы убрана.", 3000);
   }
 
   // src/background/index.ts
-  var APP_VERSION = "1.9.1";
+  var APP_VERSION = "1.9.2";
   function getKV() {
     try {
       const ls = globalThis.localStorage;

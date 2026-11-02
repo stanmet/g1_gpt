@@ -699,7 +699,8 @@ const KEY_DOMAIN: Record<Provider, string> = {openai: "api.openai.com", anthropi
 const KEY_SHAPE: Record<Provider, RegExp> = {
   openai: /^sk-[A-Za-z0-9_\-]{16,}$/,
   anthropic: /^sk-ant-[A-Za-z0-9_\-]{16,}$/,
-  gemini: /^AIza[A-Za-z0-9_\-]{20,}$/,
+  // classic keys start with AIza; keys made in AI Studio since May 2026 may look different
+  gemini: /^(AIza[A-Za-z0-9_\-]{20,}|[A-Za-z0-9._\-]{30,})$/,
 }
 
 function fillKeySheet() {
