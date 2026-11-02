@@ -465,6 +465,52 @@ describe("long answers stay until the last page", () => {
   })
 })
 
+describe("looking up turns the page (G1 head-up sensor)", () => {
+  const long = "Колизей открыт с 9 утра. Билет стоит около 18 евро и включает Форум и Палатин. ".repeat(6)
+
+  test("up → next page; down and sensor bounce are ignored; nothing on the last page", async () => {
+    const e = setup([long], {clearAfterSec: 10})
+    e.a.onTranscript("Вопрос, расскажи про Колизей", true)
+    await e.clock.advance(SILENCE_MS + 10)
+    const n = e.a.pages.length
+    expect(n).toBeGreaterThan(2)
+
+    e.a.onHeadPosition("up")
+    expect(e.a.page).toBe(1)
+    e.a.onHeadPosition("down")
+    e.a.onHeadPosition("up") // bounce right after
+    expect(e.a.page).toBe(1)
+    for (let i = 2; i < n; i++) {
+      await e.clock.advance(1500)
+      e.a.onHeadPosition("up")
+      expect(e.a.page).toBe(i)
+    }
+    await e.clock.advance(1500)
+    const shownBefore = e.shown.length
+    e.a.onHeadPosition("up") // last page: stays
+    expect(e.a.page).toBe(n - 1)
+    expect(e.shown.length).toBe(shownBefore)
+    expect(e.a.phase).toBe("answering")
+    expect(e.a.log.some((l) => l.msg === "next (head)")).toBe(true)
+  })
+
+  test("ignored when no answer is on screen, while listening, or when turned off", async () => {
+    const e = setup([long, long], {headNod: false})
+    e.a.onHeadPosition("up")
+    expect(e.shown.length).toBe(0)
+    e.a.onTranscript("Вопрос, расскажи про Колизей", true)
+    await e.clock.advance(SILENCE_MS + 10)
+    e.a.onHeadPosition("up")
+    expect(e.a.page).toBe(0)
+
+    const on = setup([long])
+    on.a.onTranscript("Вопрос, расскажи", false)
+    expect(on.a.phase).toBe("capturing")
+    on.a.onHeadPosition("up")
+    expect(on.a.phase).toBe("capturing")
+  })
+})
+
 describe("live translation («транслейт»)", () => {
   const tr = (text: string, isFinal: boolean, extra: Record<string, unknown> = {}) =>
     translation.handler?.({text, isFinal, sourceLanguage: "en", targetLanguage: "ru-RU", originalText: "x", utteranceId: "u1", ...extra})

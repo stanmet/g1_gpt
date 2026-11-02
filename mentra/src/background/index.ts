@@ -122,6 +122,12 @@ registerMiniapp((session: any) => {
     // no button
   }
   try {
+    // G1 head-up sensor: Mentra forwards it on iOS (unlike the G1 touchpads).
+    session.imu.onHeadPosition((h: {position: string}) => assistant.onHeadPosition(String(h?.position ?? "")))
+  } catch {
+    // older host
+  }
+  try {
     session.glasses.onConnection((c: {connected: boolean; modelName?: string}) => {
       assistant.glassesConnected = Boolean(c?.connected)
       assistant.addLog("info", c?.connected ? `Очки подключены${c.modelName ? ": " + c.modelName : ""}` : "Очки отключены")
@@ -152,12 +158,12 @@ registerMiniapp((session: any) => {
     return snap()
   })
 
-  session.ui.handle("command", (p: {cmd: string; provider?: string}) => {
+  session.ui.handle("command", (p: {cmd: string; provider?: string; source?: string}) => {
     const cmd = String(p?.cmd ?? "") as any
     if (cmd === "provider") assistant.switchProvider(asProvider(p?.provider), "ui")
     else if (cmd === "translate") assistant.startTranslation("ui")
     else if (cmd === "translateStop") assistant.stopTranslation("ui")
-    else if (["next", "prev", "first", "repeat", "hide", "cancel", "reset"].includes(cmd)) assistant.command(cmd, "ui")
+    else if (["next", "prev", "first", "repeat", "hide", "cancel", "reset"].includes(cmd)) assistant.command(cmd, p?.source === "key" ? "key" : "ui")
     return snap()
   })
 

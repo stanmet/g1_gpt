@@ -5435,6 +5435,7 @@ ${s.instructions.trim()}`);
     webSearch: false,
     autoAdvanceSec: 0,
     clearAfterSec: 90,
+    headNod: true,
     followUpSec: 0,
     translateTo: "ru-RU",
     v: SETTINGS_VERSION
@@ -5492,6 +5493,7 @@ ${s.instructions.trim()}`);
       webSearch: Boolean(pick("webSearch")),
       autoAdvanceSec: clampInt(pick("autoAdvanceSec"), 0, 60, 0),
       clearAfterSec: clampInt(pick("clearAfterSec"), 0, 3600, DEFAULT_SETTINGS.clearAfterSec),
+      headNod: pick("headNod") !== false,
       followUpSec: clampInt(pick("followUpSec"), 0, 120, 0),
       translateTo: pick("translateTo") === "en-US" ? "en-US" : "ru-RU",
       v: SETTINGS_VERSION
@@ -5565,6 +5567,7 @@ ${s.instructions.trim()}`);
   var WAKE_WAIT_MS = 9000;
   var INTERIM_THROTTLE_MS = 450;
   var LOG_MAX = 80;
+  var NOD_DEBOUNCE_MS = 1200;
 
   class Assistant {
     deps;
@@ -5599,6 +5602,7 @@ ${s.instructions.trim()}`);
     trIdleTimer = null;
     translationScreen = "";
     autoHidden = false;
+    lastNodAt = 0;
     displayChecked = false;
     now;
     setTimer;
@@ -6163,6 +6167,17 @@ To stop: «стоп перевод»`);
         this.changed();
       }, TRANSLATE_IDLE_MS);
     }
+    onHeadPosition(position) {
+      if (position !== "up" || !this.settings.headNod)
+        return;
+      if (this.phase !== "answering" || this.page >= this.pages.length - 1)
+        return;
+      const now = this.now();
+      if (now - this.lastNodAt < NOD_DEBOUNCE_MS)
+        return;
+      this.lastNodAt = now;
+      this.command("next", "head");
+    }
     command(cmd, source) {
       this.addLog("cmd", `${cmd} (${source})`);
       if (this.phase === "translating") {
@@ -6254,7 +6269,7 @@ To stop: «стоп перевод»`);
   }
 
   // src/background/index.ts
-  var APP_VERSION = "1.5.1";
+  var APP_VERSION = "1.6.0";
   function getKV() {
     try {
       const ls = globalThis.localStorage;
@@ -6344,6 +6359,9 @@ To stop: «стоп перевод»`);
       session.input.onButtonPress((p) => assistant.onTouch(p?.pressType === "long" ? "long_press" : "single_tap"));
     } catch {}
     try {
+      session.imu.onHeadPosition((h) => assistant.onHeadPosition(String(h?.position ?? "")));
+    } catch {}
+    try {
       session.glasses.onConnection((c) => {
         assistant.glassesConnected = Boolean(c?.connected);
         assistant.addLog("info", c?.connected ? `Очки подключены${c.modelName ? ": " + c.modelName : ""}` : "Очки отключены");
@@ -6375,7 +6393,7 @@ To stop: «стоп перевод»`);
       else if (cmd === "translateStop")
         assistant.stopTranslation("ui");
       else if (["next", "prev", "first", "repeat", "hide", "cancel", "reset"].includes(cmd))
-        assistant.command(cmd, "ui");
+        assistant.command(cmd, p?.source === "key" ? "key" : "ui");
       return snap();
     });
     session.ui.handle("simulateSpeech", (p) => {

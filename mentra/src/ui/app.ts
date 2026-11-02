@@ -22,6 +22,7 @@ declare global {
 }
 
 import {PROVIDERS, type Provider} from "../background/llm"
+import {remoteCommand} from "./remote"
 
 const AI_FOOTER: Record<Provider, string> = {
   openai: "GPT‑6.1 Terra отвечает быстро и стоит доли цента за вопрос. Sol и Astra умнее, но дороже.",
@@ -70,6 +71,7 @@ function previewBridge(): Bridge {
       followUpSec: 0,
       autoAdvanceSec: 0,
       clearAfterSec: 90,
+      headNod: true,
       translateTo: "ru-RU",
       provider: "anthropic",
       anthropicModel: "claude-haiku-5-5",
@@ -118,6 +120,7 @@ function previewBridge(): Bridge {
 }
 
 const bridge: Bridge = window.mentra ?? previewBridge()
+
 
 async function call(channel: string, payload: unknown = {}, timeout = 15000) {
   try {
@@ -360,6 +363,8 @@ function renderSettings(s: any, st: any) {
   setSelect("translateTo", st.translateTo ?? "ru-RU")
   setStep("autoAdvanceSec", st.autoAdvanceSec ?? 0)
   setStep("clearAfterSec", st.clearAfterSec ?? 90)
+  const nod = field<HTMLInputElement>("headNod")
+  if (document.activeElement !== nod) nod.checked = st.headNod !== false
 
   if (!$("keySheet").hidden) fillKeySheet()
   $("versionText").textContent = s.version ? `Версия ${s.version}.` : ""
@@ -480,7 +485,7 @@ function wireSettings() {
       queueSave({[PROVIDERS[currentProvider()].modelField]: el.value}, 0)
       return
     }
-    if (name === "webSearch") return queueSave({webSearch: (el as HTMLInputElement).checked}, 0)
+    if (name === "webSearch" || name === "headNod") return queueSave({[name]: (el as HTMLInputElement).checked}, 0)
     if (el instanceof HTMLSelectElement) {
       setSelect(name, el.value)
       return queueSave({[name]: el.value}, 0)
@@ -490,7 +495,7 @@ function wireSettings() {
   f.addEventListener("input", (e) => {
     const el = e.target as HTMLInputElement | HTMLTextAreaElement
     const name = el.name
-    if (!name || el instanceof HTMLSelectElement || name === "webSearch") return
+    if (!name || el instanceof HTMLSelectElement || name === "webSearch" || name === "headNod") return
     dirty.add(name)
     if (name === "customModel") return queueSave({[PROVIDERS[currentProvider()].modelField]: modelFromForm()}, 800)
     if (name === "wakeWords") {
@@ -581,6 +586,15 @@ function wire() {
   document.querySelectorAll<HTMLButtonElement>("[data-cmd]").forEach((b) =>
     b.addEventListener("click", () => call("command", {cmd: b.dataset.cmd})),
   )
+
+  // Bluetooth page turners and presenters act as a keyboard. iOS hands their key presses only
+  // to the app on screen, so this works while this page is open in Mentra, not from a pocket.
+  document.addEventListener("keydown", (e) => {
+    const cmd = remoteCommand(e)
+    if (!cmd) return
+    e.preventDefault()
+    call("command", {cmd, source: "key"})
+  })
 
   $("testDisplay").addEventListener("click", () => {
     toast("Проверочный текст отправлен на очки")

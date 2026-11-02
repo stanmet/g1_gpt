@@ -118,6 +118,7 @@ test("built bundle: G1 transcript → OpenAI → render, follow-up keeps context
   const subs = h.sent.filter((e) => e.payload.type === "miniapp_subscribe").at(-1)!.payload.subscriptions
   // bilingual recognition: auto-detect with Russian + English hints
   expect(subs).toContain("transcription:auto")
+  expect(subs).toContain("head_position") // G1 head-up sensor for hands-free paging
   const cfg = h.sent.find((e) => e.payload.type === "miniapp_transcription_config")
   expect(cfg?.payload.config.languageHints).toEqual(["ru", "en"])
 
@@ -151,6 +152,16 @@ test("built bundle: G1 transcript → OpenAI → render, follow-up keeps context
   h.ev("transcription:ru-RU", {text: "Дальше", isFinal: true})
   await sleep(30)
   expect(h.renders().at(-1)).toMatch(/2\/\d · /)
+
+  // Bluetooth remote while the app is open: the UI sends the command with source "key"
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "command", payload: {cmd: "prev", source: "key"}, seq: 2, requestId: "c1"})
+  await sleep(30)
+  expect(h.renders().at(-1)).toMatch(/1\/\d · /)
+  // looking up: Mentra forwards the G1 head-up event as head_position
+  h.ev("head_position", {position: "up", timestamp: Date.now()})
+  await sleep(30)
+  expect(h.renders().at(-1)).toMatch(/2\/\d · /)
+  h.ev("head_position", {position: "down", timestamp: Date.now()})
 
   h.ev("transcription:ru-RU", {text: "Вопрос, а в понедельник?", isFinal: true})
   await sleep(1900)

@@ -90,6 +90,11 @@ export function endsWithQuestion(text: string): boolean {
 export const WAKE_WAIT_MS = 9000
 const INTERIM_THROTTLE_MS = 450
 const LOG_MAX = 80
+/** Ignore repeated head-up events closer than this (sensor bounce). */
+const NOD_DEBOUNCE_MS = 1200
+
+/** Where a paging command came from; shown in the log. key = Bluetooth remote or keyboard. */
+export type CommandSource = "voice" | "ui" | "touch" | "head" | "key"
 
 export class Assistant {
   settings: Settings
@@ -128,6 +133,7 @@ export class Assistant {
   translationScreen = ""
   /** The answer was removed by the clear timer (not by the user), so paging may bring it back. */
   private autoHidden = false
+  private lastNodAt = 0
   private displayChecked = false
 
   private readonly now: () => number
@@ -733,7 +739,21 @@ export class Assistant {
     }, TRANSLATE_IDLE_MS)
   }
 
-  command(cmd: VoiceCommand, source: "voice" | "ui" | "touch"): void {
+  /**
+   * G1 head-up sensor (Mentra forwards it as head_position). Looking up past the angle set in
+   * Mentra shows the next page of a long answer; nothing happens on the last page or when no
+   * answer is on screen, so glancing up at other times is harmless.
+   */
+  onHeadPosition(position: string): void {
+    if (position !== "up" || !this.settings.headNod) return
+    if (this.phase !== "answering" || this.page >= this.pages.length - 1) return
+    const now = this.now()
+    if (now - this.lastNodAt < NOD_DEBOUNCE_MS) return
+    this.lastNodAt = now
+    this.command("next", "head")
+  }
+
+  command(cmd: VoiceCommand, source: CommandSource): void {
     this.addLog("cmd", `${cmd} (${source})`)
     if (this.phase === "translating") {
       if (cmd === "hide" || cmd === "cancel") this.stopTranslation(source === "ui" ? "ui" : "voice")

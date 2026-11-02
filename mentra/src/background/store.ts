@@ -30,6 +30,8 @@ export interface Settings {
   autoAdvanceSec: number
   /** Clear the glasses this many seconds after the last page was shown; 0 = keep. */
   clearAfterSec: number
+  /** Look up (G1 head-up sensor) to show the next page of a long answer. */
+  headNod: boolean
   /** Seconds after an answer during which a question needs no wake phrase; 0 = off. */
   followUpSec: number
   /** Live translation ("транслейт") target language. */
@@ -62,6 +64,7 @@ export const DEFAULT_SETTINGS: Settings = {
   webSearch: false,
   autoAdvanceSec: 0,
   clearAfterSec: 90,
+  headNod: true,
   followUpSec: 0,
   translateTo: "ru-RU",
   v: SETTINGS_VERSION,
@@ -146,6 +149,7 @@ export function normalizeSettings(raw: Partial<Settings> | null | undefined, bas
     webSearch: Boolean(pick("webSearch")),
     autoAdvanceSec: clampInt(pick("autoAdvanceSec"), 0, 60, 0),
     clearAfterSec: clampInt(pick("clearAfterSec"), 0, 3600, DEFAULT_SETTINGS.clearAfterSec),
+    headNod: pick("headNod") !== false,
     followUpSec: clampInt(pick("followUpSec"), 0, 120, 0),
     translateTo: pick("translateTo") === "en-US" ? "en-US" : "ru-RU",
     v: SETTINGS_VERSION,
