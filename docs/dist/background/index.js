@@ -4759,11 +4759,16 @@
       "далее",
       "следующая",
       "следующий",
+      "следующую",
       "следующая страница",
+      "следующую страницу",
       "листай",
+      "листай дальше",
+      "покажи дальше",
       "вперед",
       "еще",
       "продолжай",
+      "продолжи",
       "next",
       "next page",
       "continue",
@@ -4774,8 +4779,12 @@
       "назад",
       "предыдущая",
       "предыдущий",
+      "предыдущую",
       "предыдущая страница",
+      "предыдущую страницу",
       "обратно",
+      "вернись",
+      "верни назад",
       "back",
       "go back",
       "previous",
@@ -4821,14 +4830,29 @@
     for (const p of phrases)
       COMMAND_LOOKUP.set(normalize(p), cmd);
   function parseCommand(text) {
-    let n = normalize(text);
+    const n = normalize(text);
     if (!n)
       return null;
-    n = n.replace(/^(пожалуйста|ну|так|давай|а|please|ok|okay)\s+/, "").replace(/\s+(пожалуйста|давай|please)$/, "");
-    const words = n.split(" ");
+    const FILLERS = /^(пожалуйста|ну|так|давай|а|и|окей|ок|хорошо|ладно|ага|угу|please|ok|okay|alright|so)$/;
+    let words = n.split(" ").filter(Boolean);
+    while (words.length > 1 && FILLERS.test(words[0]))
+      words = words.slice(1);
+    while (words.length > 1 && FILLERS.test(words[words.length - 1]))
+      words = words.slice(0, -1);
+    if (words.length > 1 && words.every((w) => w === words[0]))
+      words = [words[0]];
     if (words.length > 4)
       return null;
-    return COMMAND_LOOKUP.get(n) ?? null;
+    return COMMAND_LOOKUP.get(words.join(" ")) ?? null;
+  }
+  function isCommandPrefix(text) {
+    const n = normalize(text);
+    if (!n)
+      return false;
+    for (const phrase of COMMAND_LOOKUP.keys())
+      if (phrase.startsWith(n))
+        return true;
+    return false;
   }
   function isMeaningful(text) {
     const n = normalize(text);
@@ -5163,6 +5187,7 @@ ${s.instructions.trim()}`);
     requestSeq = 0;
     followUpUntil = 0;
     captureIsReply = false;
+    autoHidden = false;
     displayChecked = false;
     now;
     setTimer;
@@ -5266,7 +5291,7 @@ ${s.instructions.trim()}`);
       }
       if (!isFinal) {
         const inReplyWindow = this.now() < this.followUpUntil && this.phase === "answering";
-        if (this.settings.listenMode === "wake" && detectWake(t, this.settings.wakeWords).matched || inReplyWindow && isMeaningful(t) && !parseCommand(t)) {
+        if (this.settings.listenMode === "wake" && detectWake(t, this.settings.wakeWords).matched || inReplyWindow && isMeaningful(t) && !parseCommand(t) && !isCommandPrefix(t)) {
           if (inReplyWindow)
             this.addLog("wake", "Ответ на встречный вопрос / уточнение без активатора");
           this.startCapture(true, inReplyWindow);
@@ -5306,7 +5331,7 @@ ${s.instructions.trim()}`);
         return this.phase === "thinking" || this.phase === "answering";
       if (cmd === "hide")
         return this.phase === "answering";
-      return this.pages.length > 0 && (this.phase === "answering" || cmd === "repeat");
+      return this.pages.length > 0 && (this.phase === "answering" || this.phase === "idle" && this.autoHidden || cmd === "repeat");
     }
     onTouch(kind) {
       this.addLog("touch", kind);
@@ -5490,16 +5515,19 @@ ${s.instructions.trim()}`);
             this.showPage(this.page + 1);
         }, this.settings.autoAdvanceSec * 1000);
       }
-      if (this.settings.clearAfterSec > 0) {
+      if (this.settings.clearAfterSec > 0 && last) {
         this.clearTimer_ = this.setTimer(() => {
           this.clearTimer_ = null;
           if (this.phase === "answering") {
             this.phase = "idle";
+            this.autoHidden = true;
             this.clearDisplay();
+            this.addLog("display", "Ответ убран по таймеру (последняя страница прочитана)");
             this.changed();
           }
-        }, this.settings.clearAfterSec * 1000 + (last ? 0 : this.settings.autoAdvanceSec * 1000 * (this.pages.length - 1 - this.page)));
+        }, this.settings.clearAfterSec * 1000);
       }
+      this.autoHidden = false;
       this.changed();
     }
     command(cmd, source) {
@@ -5539,6 +5567,7 @@ ${s.instructions.trim()}`);
           this.committed = [];
           this.interim = "";
           this.phase = "idle";
+          this.autoHidden = false;
           this.clearDisplay();
           this.changed();
           break;
@@ -5569,7 +5598,7 @@ ${s.instructions.trim()}`);
   }
 
   // src/background/index.ts
-  var APP_VERSION = "1.1.0";
+  var APP_VERSION = "1.2.0";
   function getKV() {
     try {
       const ls = globalThis.localStorage;

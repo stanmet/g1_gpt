@@ -8,7 +8,7 @@
 import {fitScreen, paginate, sanitizeForG1} from "./g1text"
 import {askOpenAI, explainError, OpenAIError, type FetchLike} from "./openai"
 import {normalizeSettings, Store, type Message, type Settings} from "./store"
-import {detectLang, detectWake, isMeaningful, normalize, parseCommand, type VoiceCommand} from "./voice"
+import {detectLang, detectWake, isCommandPrefix, isMeaningful, normalize, parseCommand, type VoiceCommand} from "./voice"
 
 export type Phase = "idle" | "capturing" | "thinking" | "answering"
 
@@ -73,6 +73,8 @@ export class Assistant {
   private requestSeq = 0
   private followUpUntil = 0
   private captureIsReply = false
+  /** The answer was removed by the clear timer (not by the user), so paging may bring it back. */
+  private autoHidden = false
   private displayChecked = false
 
   private readonly now: () => number
@@ -197,7 +199,7 @@ export class Assistant {
       const inReplyWindow = this.now() < this.followUpUntil && this.phase === "answering"
       if (
         (this.settings.listenMode === "wake" && detectWake(t, this.settings.wakeWords).matched) ||
-        (inReplyWindow && isMeaningful(t) && !parseCommand(t))
+        (inReplyWindow && isMeaningful(t) && !parseCommand(t) && !isCommandPrefix(t))
       ) {
         if (inReplyWindow) this.addLog("wake", "Ответ на встречный вопрос / уточнение без активатора")
         this.startCapture(true, inReplyWindow)
@@ -239,7 +241,9 @@ export class Assistant {
     if (cmd === "reset") return true
     if (cmd === "cancel") return this.phase === "thinking" || this.phase === "answering"
     if (cmd === "hide") return this.phase === "answering"
-    return this.pages.length > 0 && (this.phase === "answering" || cmd === "repeat")
+    // Paging works while the answer is shown, and also after it was hidden by the timer
+    // (then "назад"/"повтори" bring it back). After an explicit "скрой" only "повтори" does.
+    return this.pages.length > 0 && (this.phase === "answering" || (this.phase === "idle" && this.autoHidden) || cmd === "repeat")
   }
 
   onTouch(kind: string): void {
@@ -433,16 +437,21 @@ export class Assistant {
         if (this.phase === "answering") this.showPage(this.page + 1)
       }, this.settings.autoAdvanceSec * 1000)
     }
-    if (this.settings.clearAfterSec > 0) {
+    // The answer stays on the glasses until its last page has been shown;
+    // only then does the "clear after N seconds" timer start.
+    if (this.settings.clearAfterSec > 0 && last) {
       this.clearTimer_ = this.setTimer(() => {
         this.clearTimer_ = null
         if (this.phase === "answering") {
           this.phase = "idle"
+          this.autoHidden = true
           this.clearDisplay()
+          this.addLog("display", "Ответ убран по таймеру (последняя страница прочитана)")
           this.changed()
         }
-      }, this.settings.clearAfterSec * 1000 + (last ? 0 : this.settings.autoAdvanceSec * 1000 * (this.pages.length - 1 - this.page)))
+      }, this.settings.clearAfterSec * 1000)
     }
+    this.autoHidden = false
     this.changed()
   }
 
@@ -478,6 +487,7 @@ export class Assistant {
         this.committed = []
         this.interim = ""
         this.phase = "idle"
+        this.autoHidden = false
         this.clearDisplay()
         this.changed()
         break

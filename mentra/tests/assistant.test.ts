@@ -380,6 +380,77 @@ describe("settings migration", () => {
   })
 })
 
+describe("long answers stay until the last page", () => {
+  const long = "Колизей открыт с 9 утра. Билет стоит около 18 евро и включает Форум и Палатин. ".repeat(6)
+
+  test("no auto-clear before the last page; clear timer starts on the last page", async () => {
+    const e = setup([long], {clearAfterSec: 10, autoAdvanceSec: 0})
+    e.a.onTranscript("Вопрос, расскажи про Колизей", true)
+    await e.clock.advance(SILENCE_MS + 10)
+    const n = e.a.pages.length
+    expect(n).toBeGreaterThan(2)
+
+    await e.clock.advance(120_000) // reading slowly — must not disappear
+    expect(e.a.phase).toBe("answering")
+    expect(e.shown.at(-1)).toBe(e.a.pages[0])
+
+    for (let i = 1; i < n; i++) {
+      await e.clock.advance(30_000)
+      e.a.onTranscript("Дальше.", true)
+      expect(e.a.page).toBe(i)
+      expect(e.a.phase).toBe("answering")
+    }
+    await e.clock.advance(9_000)
+    expect(e.a.phase).toBe("answering")
+    await e.clock.advance(1_100)
+    expect(e.shown.at(-1)).toBe("<clear>")
+    expect(e.a.phase).toBe("idle")
+
+    // after the timer hid it, "назад" brings the answer back
+    e.a.onTranscript("Назад", true)
+    expect(e.a.phase).toBe("answering")
+    expect(e.a.page).toBe(n - 2)
+  })
+
+  test("after an explicit «скрой», «дальше» does not pop the answer back", async () => {
+    const e = setup([long])
+    e.a.onTranscript("Вопрос, расскажи про Колизей", true)
+    await e.clock.advance(SILENCE_MS + 10)
+    e.a.onTranscript("Скрой", true)
+    expect(e.a.phase).toBe("idle")
+    e.a.onTranscript("Дальше", true)
+    expect(e.a.phase).toBe("idle")
+    e.a.onTranscript("Повтори", true)
+    expect(e.a.phase).toBe("answering")
+  })
+
+  test("tolerant paging phrases", async () => {
+    const e = setup([long])
+    e.a.onTranscript("Вопрос, расскажи про Колизей", true)
+    await e.clock.advance(SILENCE_MS + 10)
+    e.a.onTranscript("Ну давай дальше", true)
+    expect(e.a.page).toBe(1)
+    e.a.onTranscript("Окей, дальше, пожалуйста.", true)
+    expect(e.a.page).toBe(2)
+    e.a.onTranscript("Назад назад", true)
+    expect(e.a.page).toBe(1)
+    e.a.onTranscript("Следующую страницу", true)
+    expect(e.a.page).toBe(2)
+  })
+
+  test("interim «Даль…» in the reply window does not replace the answer with «Слушаю…»", async () => {
+    const e = setup(["Нужно уточнить детали поездки. ".repeat(10) + "Из какого города?"])
+    e.a.onTranscript("Вопрос, сколько лететь до Рима?", true)
+    await e.clock.advance(SILENCE_MS + 10)
+    const before = e.shown.length
+    e.a.onTranscript("Даль", false)
+    expect(e.a.phase).toBe("answering")
+    expect(e.shown.length).toBe(before)
+    e.a.onTranscript("Дальше.", true)
+    expect(e.a.page).toBe(1)
+  })
+})
+
 describe("errors are explained on the glasses", () => {
   test("no key", async () => {
     const e = setup([], {apiKey: ""})

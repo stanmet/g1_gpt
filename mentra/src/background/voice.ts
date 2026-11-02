@@ -82,9 +82,11 @@ export function detectWake(text: string, wakePhrases: string[]): WakeResult {
 export type VoiceCommand = "next" | "prev" | "first" | "repeat" | "hide" | "cancel" | "reset"
 
 const COMMANDS: [VoiceCommand, string[]][] = [
-  ["next", ["дальше", "далее", "следующая", "следующий", "следующая страница", "листай", "вперед", "еще", "продолжай",
+  ["next", ["дальше", "далее", "следующая", "следующий", "следующую", "следующая страница", "следующую страницу",
+    "листай", "листай дальше", "покажи дальше", "вперед", "еще", "продолжай", "продолжи",
     "next", "next page", "continue", "go on", "more"]],
-  ["prev", ["назад", "предыдущая", "предыдущий", "предыдущая страница", "обратно",
+  ["prev", ["назад", "предыдущая", "предыдущий", "предыдущую", "предыдущая страница", "предыдущую страницу", "обратно",
+    "вернись", "верни назад",
     "back", "go back", "previous", "previous page"]],
   ["first", ["сначала", "с начала", "в начало", "первая страница", "к началу", "first page", "from the start", "from the beginning"]],
   ["repeat", ["повтори", "покажи снова", "покажи еще раз", "покажи ответ", "еще раз", "repeat", "again", "show again"]],
@@ -103,14 +105,24 @@ for (const [cmd, phrases] of COMMANDS) for (const p of phrases) COMMAND_LOOKUP.s
  * like "что дальше делать с визой" is not mistaken for "дальше".
  */
 export function parseCommand(text: string): VoiceCommand | null {
-  let n = normalize(text)
+  const n = normalize(text)
   if (!n) return null
-  n = n
-    .replace(/^(пожалуйста|ну|так|давай|а|please|ok|okay)\s+/, "")
-    .replace(/\s+(пожалуйста|давай|please)$/, "")
-  const words = n.split(" ")
+  // strip fillers ("ну давай дальше", "окей, дальше пожалуйста") and repeats ("дальше дальше")
+  const FILLERS = /^(пожалуйста|ну|так|давай|а|и|окей|ок|хорошо|ладно|ага|угу|please|ok|okay|alright|so)$/
+  let words = n.split(" ").filter(Boolean)
+  while (words.length > 1 && FILLERS.test(words[0])) words = words.slice(1)
+  while (words.length > 1 && FILLERS.test(words[words.length - 1])) words = words.slice(0, -1)
+  if (words.length > 1 && words.every((w) => w === words[0])) words = [words[0]]
   if (words.length > 4) return null
-  return COMMAND_LOOKUP.get(n) ?? null
+  return COMMAND_LOOKUP.get(words.join(" ")) ?? null
+}
+
+/** True if the (interim) text could still become a command, e.g. "даль" → "дальше". */
+export function isCommandPrefix(text: string): boolean {
+  const n = normalize(text)
+  if (!n) return false
+  for (const phrase of COMMAND_LOOKUP.keys()) if (phrase.startsWith(n)) return true
+  return false
 }
 
 /** True if an utterance has enough content to be worth sending to the model. */
