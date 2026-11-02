@@ -4873,6 +4873,63 @@
     }
     return lat > cyr ? "en" : "ru";
   }
+  var TRANSLATE_START = [
+    "транслейт",
+    "трансляйт",
+    "транслэйт",
+    "translate",
+    "переводи",
+    "переводчик",
+    "перевод",
+    "режим перевода",
+    "включи перевод",
+    "включи переводчик",
+    "начни перевод",
+    "переводи мне",
+    "translation",
+    "translation mode",
+    "start translation",
+    "start translating",
+    "translate mode"
+  ];
+  var TRANSLATE_STOP = [
+    "стоп перевод",
+    "стоп",
+    "хватит",
+    "хватит переводить",
+    "выключи перевод",
+    "выключи переводчик",
+    "закончи перевод",
+    "конец перевода",
+    "перестань переводить",
+    "отключи перевод",
+    "останови перевод",
+    "транслейт стоп",
+    "стоп транслейт",
+    "stop translation",
+    "stop translating",
+    "translation off",
+    "end translation"
+  ];
+  var TRANSLATE_LOOKUP = new Map;
+  for (const p of TRANSLATE_START)
+    TRANSLATE_LOOKUP.set(normalize(p), "start");
+  for (const p of TRANSLATE_STOP)
+    TRANSLATE_LOOKUP.set(normalize(p), "stop");
+  function parseTranslateCommand(text) {
+    const n = normalize(text);
+    if (!n)
+      return null;
+    const FILLERS = /^(пожалуйста|ну|так|давай|а|и|окей|ок|please|ok|okay)$/;
+    let words = n.split(" ").filter(Boolean);
+    while (words.length > 1 && FILLERS.test(words[0]))
+      words = words.slice(1);
+    while (words.length > 1 && FILLERS.test(words[words.length - 1]))
+      words = words.slice(0, -1);
+    if (words.length > 4)
+      return null;
+    return TRANSLATE_LOOKUP.get(words.join(" ")) ?? null;
+  }
 
   // src/background/openai.ts
   var OPENAI_URL = "https://api.openai.com/v1/responses";
@@ -5068,6 +5125,7 @@ ${s.instructions.trim()}`);
     autoAdvanceSec: 0,
     clearAfterSec: 90,
     followUpSec: 0,
+    translateTo: "ru-RU",
     v: SETTINGS_VERSION
   };
   function migrateSettings(raw) {
@@ -5116,6 +5174,7 @@ ${s.instructions.trim()}`);
       autoAdvanceSec: clampInt(pick("autoAdvanceSec"), 0, 60, 0),
       clearAfterSec: clampInt(pick("clearAfterSec"), 0, 3600, DEFAULT_SETTINGS.clearAfterSec),
       followUpSec: clampInt(pick("followUpSec"), 0, 120, 0),
+      translateTo: pick("translateTo") === "en-US" ? "en-US" : "ru-RU",
       v: SETTINGS_VERSION
     };
   }
@@ -5155,6 +5214,18 @@ ${s.instructions.trim()}`);
 
   // src/background/assistant.ts
   var SILENCE_MS = 1600;
+  var TRANSLATE_IDLE_MS = 20000;
+  var TRANSLATE_RENDER_MS = 350;
+  var TRANSLATE_KEEP = 12;
+  function primaryLang(tag) {
+    return String(tag ?? "").toLowerCase().split(/[-_]/)[0];
+  }
+  function isPassthrough(ev, target) {
+    const src = primaryLang(ev.sourceLanguage);
+    if (src && src !== "auto")
+      return src === primaryLang(target);
+    return !ev.originalText;
+  }
   var REPLY_WINDOW_SEC = 25;
   function endsWithQuestion(text) {
     const t = String(text ?? "").trim().replace(/[\s»")\]]+$/, "");
@@ -5187,6 +5258,13 @@ ${s.instructions.trim()}`);
     requestSeq = 0;
     followUpUntil = 0;
     captureIsReply = false;
+    translateUnsub = null;
+    trFinals = [];
+    trInterim = null;
+    trLastRender = 0;
+    trRenderTimer = null;
+    trIdleTimer = null;
+    translationScreen = "";
     autoHidden = false;
     displayChecked = false;
     now;
@@ -5285,6 +5363,11 @@ ${s.instructions.trim()}`);
         this.lastTranscript = t;
         this.addLog("stt", t);
       }
+      if (this.phase === "translating") {
+        if (isFinal)
+          this.onTranscriptWhileTranslating(t);
+        return;
+      }
       if (this.phase === "capturing") {
         this.captureText(t, isFinal);
         return;
@@ -5301,6 +5384,10 @@ ${s.instructions.trim()}`);
       }
       const wake = detectWake(t, this.settings.wakeWords);
       const body = wake.matched ? wake.rest : t;
+      if (parseTranslateCommand(body) === "start") {
+        this.startTranslation("voice");
+        return;
+      }
       const cmd = parseCommand(body);
       if (cmd && (wake.matched || this.commandRelevant(cmd))) {
         this.command(cmd, "voice");
@@ -5381,6 +5468,13 @@ ${s.instructions.trim()}`);
     captureText(t, isFinal) {
       const clean = this.stripWake(t);
       if (isFinal) {
+        if (this.committed.length === 0 && parseTranslateCommand(clean) === "start") {
+          this.cancelTimer("silenceTimer");
+          this.cancelTimer("wakeTimer");
+          this.interim = "";
+          this.startTranslation("voice");
+          return;
+        }
         const cmd = parseCommand(clean);
         if (cmd && (this.committed.length === 0 || cmd === "cancel" || cmd === "hide")) {
           this.cancelTimer("silenceTimer");
@@ -5434,6 +5528,8 @@ ${s.instructions.trim()}`);
       const q = question.trim();
       if (!q)
         return;
+      if (this.phase === "translating")
+        this.stopTranslation("question", false);
       const seq = ++this.requestSeq;
       this.cancelTimer("silenceTimer");
       this.cancelTimer("wakeTimer");
@@ -5530,8 +5626,170 @@ ${s.instructions.trim()}`);
       this.autoHidden = false;
       this.changed();
     }
+    get translating() {
+      return this.phase === "translating";
+    }
+    startTranslation(source) {
+      if (!this.deps.startTranslation) {
+        this.addLog("error", "Перевод недоступен в этой версии Mentra");
+        this.flash("Перевод недоступен.", 3000);
+        return;
+      }
+      if (this.phase === "thinking")
+        this.requestSeq++;
+      for (const t of ["silenceTimer", "wakeTimer", "pageTimer", "clearTimer_"])
+        this.cancelTimer(t);
+      this.stopTranslationStream();
+      this.committed = [];
+      this.interim = "";
+      this.trFinals = [];
+      this.trInterim = null;
+      this.translationScreen = "";
+      this.phase = "translating";
+      const target = this.settings.translateTo;
+      try {
+        this.translateUnsub = this.deps.startTranslation(target, (ev) => this.onTranslation(ev));
+      } catch (e) {
+        this.phase = "idle";
+        this.addLog("error", `Не удалось включить перевод: ${String(e?.message ?? e)}`);
+        this.flash("Не удалось включить перевод.", 3000);
+        return;
+      }
+      const ru = target === "ru-RU";
+      this.addLog("translate", `Перевод включён (${source === "ui" ? "с телефона" : "голосом"}) → ${ru ? "русский" : "английский"}`);
+      this.show(ru ? `Перевод включён → русский
+Выключить: «стоп перевод»` : `Translation on → English
+To stop: «стоп перевод»`);
+      this.armTranslateIdle();
+      this.changed();
+    }
+    stopTranslation(source, announce = true) {
+      if (this.phase !== "translating")
+        return;
+      this.stopTranslationStream();
+      this.phase = "idle";
+      this.translationScreen = "";
+      this.addLog("translate", `Перевод выключен (${source === "ui" ? "с телефона" : source === "question" ? "задан вопрос" : "голосом"})`);
+      if (announce)
+        this.flash("Перевод выключен.", 1500);
+      else
+        this.clearDisplay();
+      this.changed();
+    }
+    stopTranslationStream() {
+      if (this.translateUnsub) {
+        try {
+          this.translateUnsub();
+        } catch {}
+        this.translateUnsub = null;
+      }
+      if (this.trRenderTimer != null) {
+        this.clearTimerFn(this.trRenderTimer);
+        this.trRenderTimer = null;
+      }
+      if (this.trIdleTimer != null) {
+        this.clearTimerFn(this.trIdleTimer);
+        this.trIdleTimer = null;
+      }
+    }
+    onTranscriptWhileTranslating(t) {
+      const wake = detectWake(t, this.settings.wakeWords);
+      const body = wake.matched ? wake.rest : t;
+      const tcmd = parseTranslateCommand(body);
+      if (tcmd === "stop") {
+        this.stopTranslation("voice");
+        return;
+      }
+      if (tcmd === "start")
+        return;
+      const cmd = parseCommand(body);
+      if ((cmd === "hide" || cmd === "cancel") && (wake.matched || detectLang(body) === "ru")) {
+        this.stopTranslation("voice");
+        return;
+      }
+      if (wake.matched && isMeaningful(body) && !cmd) {
+        this.stopTranslation("question", false);
+        this.startCapture(false);
+        this.captureText(body, true);
+      }
+    }
+    onTranslation(ev) {
+      if (this.phase !== "translating")
+        return;
+      const text = sanitizeForG1(String(ev?.text ?? "")).replace(/\n+/g, " ").trim();
+      if (!text)
+        return;
+      if (isPassthrough(ev, this.settings.translateTo))
+        return;
+      const id = ev.utteranceId ?? "_";
+      if (ev.isFinal) {
+        this.trFinals.push(text);
+        if (this.trFinals.length > TRANSLATE_KEEP)
+          this.trFinals.splice(0, this.trFinals.length - TRANSLATE_KEEP);
+        if (!this.trInterim || this.trInterim.id === id)
+          this.trInterim = null;
+        this.addLog("translate", `${ev.sourceLanguage ? "[" + primaryLang(ev.sourceLanguage) + "] " : ""}${text}`);
+      } else {
+        this.trInterim = { id, text };
+      }
+      this.armTranslateIdle();
+      this.scheduleTranslationRender(ev.isFinal);
+    }
+    scheduleTranslationRender(immediate) {
+      const now = this.now();
+      const due = immediate || now - this.trLastRender >= TRANSLATE_RENDER_MS;
+      if (due) {
+        if (this.trRenderTimer != null) {
+          this.clearTimerFn(this.trRenderTimer);
+          this.trRenderTimer = null;
+        }
+        this.renderTranslation();
+      } else if (this.trRenderTimer == null) {
+        this.trRenderTimer = this.setTimer(() => {
+          this.trRenderTimer = null;
+          this.renderTranslation();
+        }, TRANSLATE_RENDER_MS - (now - this.trLastRender));
+      }
+    }
+    renderTranslation() {
+      if (this.phase !== "translating")
+        return;
+      const parts = [...this.trFinals];
+      if (this.trInterim)
+        parts.push(this.trInterim.text);
+      const lines = wrapLines(parts.join(" "));
+      const screen = lines.slice(-G1_LINES).join(`
+`);
+      this.trLastRender = this.now();
+      if (screen && screen !== this.translationScreen) {
+        this.translationScreen = screen;
+        this.show(screen);
+        this.changed();
+      }
+    }
+    armTranslateIdle() {
+      if (this.trIdleTimer != null)
+        this.clearTimerFn(this.trIdleTimer);
+      this.trIdleTimer = this.setTimer(() => {
+        this.trIdleTimer = null;
+        if (this.phase !== "translating")
+          return;
+        this.trFinals = [];
+        this.trInterim = null;
+        this.translationScreen = "";
+        this.clearDisplay();
+        this.changed();
+      }, TRANSLATE_IDLE_MS);
+    }
     command(cmd, source) {
       this.addLog("cmd", `${cmd} (${source})`);
+      if (this.phase === "translating") {
+        if (cmd === "hide" || cmd === "cancel")
+          this.stopTranslation(source === "ui" ? "ui" : "voice");
+        else if (cmd === "reset")
+          this.resetConversation(false);
+        return;
+      }
       if (!this.pages.length && (cmd === "next" || cmd === "prev" || cmd === "first" || cmd === "repeat")) {
         if (this.phase === "idle")
           this.clearDisplay();
@@ -5583,7 +5841,8 @@ ${s.instructions.trim()}`);
         phase: this.phase,
         page: this.page,
         pages: this.pages.length,
-        currentScreen: this.pages[this.page] ?? "",
+        currentScreen: this.phase === "translating" ? this.translationScreen : this.pages[this.page] ?? "",
+        translating: this.phase === "translating",
         lastTranscript: this.lastTranscript,
         lastQuestion: this.lastQuestion,
         lastAnswer: this.lastAnswer,
@@ -5598,7 +5857,7 @@ ${s.instructions.trim()}`);
   }
 
   // src/background/index.ts
-  var APP_VERSION = "1.2.0";
+  var APP_VERSION = "1.3.0";
   function getKV() {
     try {
       const ls = globalThis.localStorage;
@@ -5635,6 +5894,7 @@ ${s.instructions.trim()}`);
       clear: () => {
         session.display.render([]);
       },
+      startTranslation: (target, handler) => session.translation.to(target, handler),
       onChange: pushState
     });
     assistant.addLog("info", `Запущено, версия ${APP_VERSION}`);
@@ -5708,7 +5968,11 @@ ${s.instructions.trim()}`);
     });
     session.ui.handle("command", (p) => {
       const cmd = String(p?.cmd ?? "");
-      if (["next", "prev", "first", "repeat", "hide", "cancel", "reset"].includes(cmd))
+      if (cmd === "translate")
+        assistant.startTranslation("ui");
+      else if (cmd === "translateStop")
+        assistant.stopTranslation("ui");
+      else if (["next", "prev", "first", "repeat", "hide", "cancel", "reset"].includes(cmd))
         assistant.command(cmd, "ui");
       return assistant.snapshot();
     });

@@ -1,6 +1,6 @@
 import {describe, expect, test} from "bun:test"
 import {DEFAULT_SETTINGS} from "../src/background/store"
-import {detectLang, detectWake, isMeaningful, parseCommand} from "../src/background/voice"
+import {detectLang, detectWake, isMeaningful, parseCommand, parseTranslateCommand} from "../src/background/voice"
 
 const W = DEFAULT_SETTINGS.wakeWords
 
@@ -76,5 +76,21 @@ describe("English commands and language detection", () => {
     ["How do you say спасибо in Japanese?", "en"],
   ])("%s → %s", (text, lang) => {
     expect(detectLang(text)).toBe(lang as any)
+  })
+})
+
+describe("translate commands", () => {
+  test.each([
+    ["Транслейт.", "start"],
+    ["translate", "start"],
+    ["Переводи", "start"],
+    ["Включи перевод", "start"],
+    ["Стоп перевод", "stop"],
+    ["Хватит переводить", "stop"],
+    ["Stop translating", "stop"],
+    ["Переведи мне, пожалуйста, это письмо на английский язык", null],
+    ["Stop", null],
+  ])("%s → %s", (text, cmd) => {
+    expect(parseTranslateCommand(text)).toBe(cmd as any)
   })
 })

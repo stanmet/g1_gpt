@@ -141,6 +141,21 @@ test("built bundle: G1 transcript → OpenAI → render, follow-up keeps context
   expect(h.openaiCalls[1].body.input.map((m: any) => m.role)).toEqual(["user", "assistant", "user"])
   expect(h.renders().at(-1)).toBe("Да, в понедельник он открыт.")
 
+  // live translation over the real SDK bridge: «Транслейт» → translation:*:ru-RU subscription
+  h.ev("transcription:ru-RU", {text: "Транслейт.", isFinal: true})
+  await sleep(50)
+  const subs2 = h.sent.filter((e) => e.payload.type === "miniapp_subscribe").at(-1)!.payload.subscriptions
+  expect(subs2).toContain("translation:*:ru-RU")
+  expect(h.renders().at(-1)).toContain("Перевод включён")
+  h.ev("translation:en-US:ru-RU", {text: "Добрый день, чем могу помочь?", isFinal: true, sourceLanguage: "en", targetLanguage: "ru-RU", originalText: "Good afternoon, how can I help?", utteranceId: "a1"})
+  await sleep(50)
+  expect(h.renders().at(-1)).toBe("Добрый день, чем могу помочь?")
+  h.ev("transcription:ru-RU", {text: "Стоп перевод", isFinal: true})
+  await sleep(50)
+  const subs3 = h.sent.filter((e) => e.payload.type === "miniapp_subscribe").at(-1)!.payload.subscriptions
+  expect(subs3).not.toContain("translation:*:ru-RU")
+  expect(h.renders().at(-1)).toContain("Перевод выключен")
+
   // render requests target the main view with one full-screen text element
   const lastRender = h.sent.filter((e) => e.payload.type === "miniapp_render").at(-1)!.payload
   expect(lastRender.view).toBe("main")

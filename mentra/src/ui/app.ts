@@ -25,6 +25,7 @@ const PHASE_LABEL: Record<string, string> = {
   capturing: "Слушаю вопрос…",
   thinking: "Думаю…",
   answering: "Показываю ответ",
+  translating: "Перевод включён",
 }
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
@@ -121,13 +122,18 @@ function render(s: any) {
 
   const wakeWord = String((s.settings?.wakeWords ?? [])[0] ?? "вопрос")
   const wakeCap = wakeWord.charAt(0).toUpperCase() + wakeWord.slice(1)
-  if (s.phase === "idle") {
+  if (s.translating) {
+    $("hud").textContent = s.currentScreen || "Перевод включён — жду речь вокруг…"
+  } else if (s.phase === "idle") {
     const last = s.currentScreen ? `\n\nПоследний ответ (скрыт):\n${s.currentScreen}` : ""
     $("hud").textContent = (s.lastError ? s.lastError + "\n\n" : "") + `Экран очков пуст. Скажите: «${wakeCap}, …»` + last
   } else {
     $("hud").textContent = s.currentScreen || (s.lastError ? s.lastError : "—")
   }
-  $("pageinfo").textContent = s.pages > 1 ? `${s.page + 1} / ${s.pages}` : ""
+  $("pageinfo").textContent = s.translating ? "перевод" : s.pages > 1 ? `${s.page + 1} / ${s.pages}` : ""
+  const tb = $<HTMLButtonElement>("translateBtn")
+  tb.textContent = s.translating ? "Перевод: выключить" : "Перевод: включить"
+  tb.className = s.translating ? "wide primary" : "wide"
   $("lastHeard").textContent = `Последняя распознанная фраза: ${s.lastTranscript || "—"}`
 
   const st = s.settings ?? {}
@@ -175,7 +181,8 @@ function fillForm(st: any) {
   ;(el("instructions") as unknown as HTMLTextAreaElement).value = st.instructions ?? ""
   ;(el("listenMode") as unknown as HTMLSelectElement).value = st.listenMode ?? "wake"
   el("wakeWords").value = (st.wakeWords ?? []).join(", ")
-  ;(el("sttLanguage") as unknown as HTMLSelectElement).value = st.sttLanguage ?? "ru-RU"
+  ;(el("sttLanguage") as unknown as HTMLSelectElement).value = st.sttLanguage ?? "auto"
+  ;(el("translateTo") as unknown as HTMLSelectElement).value = st.translateTo ?? "ru-RU"
   el("followUpSec").value = String(st.followUpSec ?? 0)
   el("autoAdvanceSec").value = String(st.autoAdvanceSec ?? 0)
   el("clearAfterSec").value = String(st.clearAfterSec ?? 90)
@@ -199,6 +206,7 @@ function readForm() {
       .map((w) => w.trim())
       .filter(Boolean),
     sttLanguage: v("sttLanguage"),
+    translateTo: v("translateTo"),
     followUpSec: Number(v("followUpSec")),
     autoAdvanceSec: Number(v("autoAdvanceSec")),
     clearAfterSec: Number(v("clearAfterSec")),
@@ -225,6 +233,10 @@ function wire() {
       call("command", {cmd})
     }),
   )
+
+  $("translateBtn").addEventListener("click", () => {
+    call("command", {cmd: current?.translating ? "translateStop" : "translate"})
+  })
 
   $("testDisplay").addEventListener("click", () => {
     toast("Отправил тест на очки — посмотрите на дисплей")

@@ -1,5 +1,5 @@
 import {beforeEach, describe, expect, test} from "bun:test"
-import {Assistant, SILENCE_MS} from "../src/background/assistant"
+import {Assistant, SILENCE_MS, TRANSLATE_IDLE_MS} from "../src/background/assistant"
 import {buildRequestBody, effortFor, extractText} from "../src/background/openai"
 import {DEFAULT_SETTINGS, Store, type KV} from "../src/background/store"
 
@@ -66,7 +66,13 @@ function okResponse(text: string) {
   }
 }
 
+type TrHandler = (ev: any) => void
+const translation: {target: string | null; handler: TrHandler | null; unsubs: number} = {target: null, handler: null, unsubs: 0}
+
 function setup(answers: string[], settings: Partial<typeof DEFAULT_SETTINGS> = {}) {
+  translation.target = null
+  translation.handler = null
+  translation.unsubs = 0
   const kv = new MemKV()
   const store = new Store(kv)
   store.saveSettings({...DEFAULT_SETTINGS, apiKey: "sk-test-1234567890abcdef", ...settings})
@@ -90,6 +96,14 @@ function setup(answers: string[], settings: Partial<typeof DEFAULT_SETTINGS> = {
     now: clock.now,
     setTimer: clock.set,
     clearTimer: clock.clear,
+    startTranslation: (target, handler) => {
+      translation.target = target
+      translation.handler = handler
+      return () => {
+        translation.unsubs++
+        translation.handler = null
+      }
+    },
   })
   return {a, clock, shown, requests, store, kv}
 }
@@ -448,6 +462,115 @@ describe("long answers stay until the last page", () => {
     expect(e.shown.length).toBe(before)
     e.a.onTranscript("Дальше.", true)
     expect(e.a.page).toBe(1)
+  })
+})
+
+describe("live translation («транслейт»)", () => {
+  const tr = (text: string, isFinal: boolean, extra: Record<string, unknown> = {}) =>
+    translation.handler?.({text, isFinal, sourceLanguage: "en", targetLanguage: "ru-RU", originalText: "x", utteranceId: "u1", ...extra})
+
+  test("«Транслейт» starts translation to Russian; captions show on the glasses", async () => {
+    const e = setup([])
+    e.a.onTranscript("Транслейт.", true)
+    expect(e.a.phase).toBe("translating")
+    expect(translation.target).toBe("ru-RU")
+    expect(e.shown.at(-1)).toContain("Перевод включён")
+
+    tr("Добрый", false)
+    expect(e.shown.at(-1)).toBe("Добрый")
+    await e.clock.advance(100)
+    tr("Добрый день, как", false) // throttled
+    await e.clock.advance(400)
+    expect(e.shown.at(-1)).toBe("Добрый день, как")
+    tr("Добрый день, как у вас дела?", true)
+    expect(e.shown.at(-1)).toBe("Добрый день, как у вас дела?")
+    expect(e.requests.length).toBe(0) // no OpenAI cost
+  })
+
+  test("long conversation keeps only the last 5 lines", async () => {
+    const e = setup([])
+    e.a.onTranscript("Translate", true)
+    for (let i = 0; i < 10; i++) {
+      tr(`Это предложение номер ${i} в длинном разговоре о погоде и планах.`, true, {utteranceId: `u${i}`})
+      await e.clock.advance(500)
+    }
+    const screen = e.shown.at(-1)!
+    expect(screen.split("\n").length).toBe(5)
+    expect(screen).toContain("номер 9")
+    expect(screen).not.toContain("номер 0")
+  })
+
+  test("the wearer's own Russian speech is not echoed", async () => {
+    const e = setup([])
+    e.a.onTranscript("Переводи", true)
+    const before = e.shown.length
+    tr("Я сейчас скажу по-русски", true, {sourceLanguage: "ru", originalText: undefined})
+    expect(e.shown.length).toBe(before)
+  })
+
+  test("«Стоп перевод» stops; English «stop» from people around does not", async () => {
+    const e = setup([])
+    e.a.onTranscript("Транслейт", true)
+    e.a.onTranscript("Stop!", true)
+    expect(e.a.phase).toBe("translating")
+    e.a.onTranscript("Стоп перевод.", true)
+    expect(e.a.phase).toBe("idle")
+    expect(translation.unsubs).toBe(1)
+    expect(e.shown.at(-1)).toContain("Перевод выключен")
+    tr("поздний результат", true)
+    expect(e.shown.at(-1)).toContain("Перевод выключен")
+  })
+
+  test("«Хватит» (Russian) also stops", async () => {
+    const e = setup([])
+    e.a.onTranscript("Транслейт", true)
+    e.a.onTranscript("Хватит", true)
+    expect(e.a.phase).toBe("idle")
+  })
+
+  test("«Вопрос, …» during translation stops it and asks the assistant", async () => {
+    const e = setup(["Сейчас 11:05."])
+    e.a.onTranscript("Транслейт", true)
+    e.a.onTranscript("Вопрос, который час?", true)
+    expect(translation.unsubs).toBe(1)
+    await e.clock.advance(SILENCE_MS + 10)
+    expect(e.requests.length).toBe(1)
+    expect(e.requests[0].body.input.at(-1).content).toBe("который час?")
+    expect(e.shown.at(-1)).toBe("Сейчас 11:05.")
+  })
+
+  test("other people's speech is ignored as commands/questions while translating", async () => {
+    const e = setup([])
+    e.a.onTranscript("Транслейт", true)
+    e.a.onTranscript("Next week we should meet in the office", true)
+    e.a.onTranscript("Дальше", true)
+    expect(e.a.phase).toBe("translating")
+    expect(e.requests.length).toBe(0)
+  })
+
+  test("«Вопрос, транслейт» via interim capture also starts translation", async () => {
+    const e = setup([])
+    e.a.onTranscript("Вопрос", false)
+    e.a.onTranscript("Вопрос, транслейт", true)
+    expect(e.a.phase).toBe("translating")
+  })
+
+  test("silence clears the glasses but translation stays on", async () => {
+    const e = setup([])
+    e.a.onTranscript("Транслейт", true)
+    tr("Привет", true)
+    await e.clock.advance(TRANSLATE_IDLE_MS + 10)
+    expect(e.shown.at(-1)).toBe("<clear>")
+    expect(e.a.phase).toBe("translating")
+    tr("Новая фраза", true, {utteranceId: "u2"})
+    expect(e.shown.at(-1)).toBe("Новая фраза")
+  })
+
+  test("target language from settings", async () => {
+    const e = setup([], {translateTo: "en-US"})
+    e.a.onTranscript("Translate", true)
+    expect(translation.target).toBe("en-US")
+    expect(e.shown.at(-1)).toContain("Translation on")
   })
 })
 

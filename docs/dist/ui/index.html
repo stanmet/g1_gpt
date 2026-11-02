@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>GPT для G1</title>
     
-  <link rel="stylesheet" crossorigin href="./chunk-t5n2f0an.css"><script type="module" crossorigin src="./chunk-ps1e2ewt.js"></script></head>
+  <link rel="stylesheet" crossorigin href="./chunk-t5n2f0an.css"><script type="module" crossorigin src="./chunk-9ct2wk1a.js"></script></head>
   <body>
     <main id="app">
       <header class="top">
@@ -31,6 +31,9 @@
         <div class="row">
           <button data-cmd="hide" class="ghost">Скрыть</button>
           <button id="testDisplay" class="ghost">Тест дисплея</button>
+        </div>
+        <div class="row">
+          <button id="translateBtn" class="wide">Перевод: включить</button>
         </div>
       </section>
 
@@ -74,6 +77,7 @@
           <li>Листать: <b>«дальше»</b>, <b>«назад»</b>, <b>«сначала»</b>, <b>«повтори»</b> (или next, back, repeat).</li>
           <li><b>«Скрой»</b> — убрать текст, <b>«стоп»</b> — отменить, <b>«новый разговор»</b> — забыть контекст.</li>
           <li>Уточнения: снова <b>«Вопрос, а …»</b> — помощник помнит разговор.</li>
+          <li><b>«Транслейт»</b> (или «переводи», «translate») — всё, что звучит вокруг, переводится на очки. Выключить: <b>«стоп перевод»</b> или «хватит». «Вопрос, …» во время перевода — выключает перевод и задаёт вопрос.</li>
           <li>Если помощник сам спросил (на очках «» ответьте голосом»), отвечайте сразу, без активатора — 25 секунд.</li>
         </ul>
       </section>
@@ -150,6 +154,14 @@
         <label class="field">
           <span>Уточнять без активатора после любого ответа, с (0 — выкл.; после встречного вопроса — всегда 25 с)</span>
           <input name="followUpSec" type="number" min="0" max="120" inputmode="numeric" />
+        </label>
+
+        <label class="field">
+          <span>Перевод («транслейт») — на какой язык</span>
+          <select name="translateTo">
+            <option value="ru-RU">На русский</option>
+            <option value="en-US">На английский</option>
+          </select>
         </label>
 
         <div class="card-title spaced">Экран</div>

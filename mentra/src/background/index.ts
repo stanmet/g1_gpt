@@ -49,6 +49,7 @@ registerMiniapp((session: any) => {
     clear: () => {
       session.display.render([])
     },
+    startTranslation: (target, handler) => session.translation.to(target, handler),
     onChange: pushState,
   })
 
@@ -143,7 +144,9 @@ registerMiniapp((session: any) => {
 
   session.ui.handle("command", (p: {cmd: string}) => {
     const cmd = String(p?.cmd ?? "") as any
-    if (["next", "prev", "first", "repeat", "hide", "cancel", "reset"].includes(cmd)) assistant.command(cmd, "ui")
+    if (cmd === "translate") assistant.startTranslation("ui")
+    else if (cmd === "translateStop") assistant.stopTranslation("ui")
+    else if (["next", "prev", "first", "repeat", "hide", "cancel", "reset"].includes(cmd)) assistant.command(cmd, "ui")
     return assistant.snapshot()
   })
 

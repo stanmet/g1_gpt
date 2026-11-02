@@ -5,16 +5,25 @@
  *   ▲                                                                           │
  *   └──────────── "скрой" / timeout / новый вопрос ◀───────────────────────────┘
  */
-import {fitScreen, paginate, sanitizeForG1} from "./g1text"
+import {fitScreen, G1_LINES, paginate, sanitizeForG1, wrapLines} from "./g1text"
 import {askOpenAI, explainError, OpenAIError, type FetchLike} from "./openai"
 import {normalizeSettings, Store, type Message, type Settings} from "./store"
-import {detectLang, detectWake, isCommandPrefix, isMeaningful, normalize, parseCommand, type VoiceCommand} from "./voice"
+import {
+  detectLang,
+  detectWake,
+  isCommandPrefix,
+  isMeaningful,
+  normalize,
+  parseCommand,
+  parseTranslateCommand,
+  type VoiceCommand,
+} from "./voice"
 
-export type Phase = "idle" | "capturing" | "thinking" | "answering"
+export type Phase = "idle" | "capturing" | "thinking" | "answering" | "translating"
 
 export interface LogEntry {
   t: number
-  kind: "stt" | "wake" | "cmd" | "ask" | "openai" | "display" | "error" | "info" | "touch"
+  kind: "stt" | "wake" | "cmd" | "ask" | "openai" | "display" | "error" | "info" | "touch" | "translate"
   msg: string
 }
 
@@ -24,8 +33,21 @@ export interface DisplayResultInfo {
   reason?: string
 }
 
+/** One live-translation result from Mentra (interim results are replaced by the final one). */
+export interface TranslationEvent {
+  text: string
+  isFinal: boolean
+  sourceLanguage?: string
+  targetLanguage?: string
+  originalText?: string
+  utteranceId?: string
+  speakerId?: string
+}
+
 export interface AssistantDeps {
   show(text: string): Promise<DisplayResultInfo | void> | void
+  /** Subscribe to live translation of everything the glasses hear into `target`; returns unsubscribe. */
+  startTranslation?: (target: string, handler: (ev: TranslationEvent) => void) => () => void
   clear(): void
   fetch: FetchLike
   store: Store
@@ -37,6 +59,21 @@ export interface AssistantDeps {
 
 /** How long a pause in speech ends a question. */
 export const SILENCE_MS = 1600
+/** In translation mode, clear the glasses after this much silence (mode stays on). */
+export const TRANSLATE_IDLE_MS = 20_000
+const TRANSLATE_RENDER_MS = 350
+const TRANSLATE_KEEP = 12
+
+function primaryLang(tag?: string): string {
+  return String(tag ?? "").toLowerCase().split(/[-_]/)[0]
+}
+
+/** Speech already in the target language (e.g. the wearer's own Russian) — not a translation. */
+export function isPassthrough(ev: TranslationEvent, target: string): boolean {
+  const src = primaryLang(ev.sourceLanguage)
+  if (src && src !== "auto") return src === primaryLang(target)
+  return !ev.originalText
+}
 /** After an answer that ends with a question, accept the reply without the wake phrase for this long. */
 export const REPLY_WINDOW_SEC = 25
 
@@ -73,6 +110,14 @@ export class Assistant {
   private requestSeq = 0
   private followUpUntil = 0
   private captureIsReply = false
+  // live translation state
+  private translateUnsub: (() => void) | null = null
+  private trFinals: string[] = []
+  private trInterim: {id: string; text: string} | null = null
+  private trLastRender = 0
+  private trRenderTimer: unknown = null
+  private trIdleTimer: unknown = null
+  translationScreen = ""
   /** The answer was removed by the clear timer (not by the user), so paging may bring it back. */
   private autoHidden = false
   private displayChecked = false
@@ -188,6 +233,11 @@ export class Assistant {
       this.addLog("stt", t)
     }
 
+    if (this.phase === "translating") {
+      if (isFinal) this.onTranscriptWhileTranslating(t)
+      return
+    }
+
     if (this.phase === "capturing") {
       this.captureText(t, isFinal)
       return
@@ -210,6 +260,11 @@ export class Assistant {
 
     const wake = detectWake(t, this.settings.wakeWords)
     const body = wake.matched ? wake.rest : t
+
+    if (parseTranslateCommand(body) === "start") {
+      this.startTranslation("voice")
+      return
+    }
 
     const cmd = parseCommand(body)
     if (cmd && (wake.matched || this.commandRelevant(cmd))) {
@@ -298,6 +353,13 @@ export class Assistant {
   private captureText(t: string, isFinal: boolean): void {
     const clean = this.stripWake(t)
     if (isFinal) {
+      if (this.committed.length === 0 && parseTranslateCommand(clean) === "start") {
+        this.cancelTimer("silenceTimer")
+        this.cancelTimer("wakeTimer")
+        this.interim = ""
+        this.startTranslation("voice")
+        return
+      }
       // "Ассистент, дальше" or "отмена" said while capturing is a command, not a question
       const cmd = parseCommand(clean)
       if (cmd && (this.committed.length === 0 || cmd === "cancel" || cmd === "hide")) {
@@ -356,6 +418,7 @@ export class Assistant {
   async ask(question: string, source: "voice" | "ui" | "touch"): Promise<void> {
     const q = question.trim()
     if (!q) return
+    if (this.phase === "translating") this.stopTranslation("question", false)
     const seq = ++this.requestSeq
     this.cancelTimer("silenceTimer")
     this.cancelTimer("wakeTimer")
@@ -455,8 +518,166 @@ export class Assistant {
     this.changed()
   }
 
+  // ───────────────────────────── live translation ─────────────────────────────
+
+  get translating(): boolean {
+    return this.phase === "translating"
+  }
+
+  startTranslation(source: "voice" | "ui"): void {
+    if (!this.deps.startTranslation) {
+      this.addLog("error", "Перевод недоступен в этой версии Mentra")
+      this.flash("Перевод недоступен.", 3000)
+      return
+    }
+    if (this.phase === "thinking") this.requestSeq++
+    for (const t of ["silenceTimer", "wakeTimer", "pageTimer", "clearTimer_"] as const) this.cancelTimer(t)
+    this.stopTranslationStream()
+    this.committed = []
+    this.interim = ""
+    this.trFinals = []
+    this.trInterim = null
+    this.translationScreen = ""
+    this.phase = "translating"
+    const target = this.settings.translateTo
+    try {
+      this.translateUnsub = this.deps.startTranslation(target, (ev) => this.onTranslation(ev))
+    } catch (e) {
+      this.phase = "idle"
+      this.addLog("error", `Не удалось включить перевод: ${String((e as Error)?.message ?? e)}`)
+      this.flash("Не удалось включить перевод.", 3000)
+      return
+    }
+    const ru = target === "ru-RU"
+    this.addLog("translate", `Перевод включён (${source === "ui" ? "с телефона" : "голосом"}) → ${ru ? "русский" : "английский"}`)
+    this.show(ru ? "Перевод включён → русский\nВыключить: «стоп перевод»" : "Translation on → English\nTo stop: «стоп перевод»")
+    this.armTranslateIdle()
+    this.changed()
+  }
+
+  stopTranslation(source: "voice" | "ui" | "question", announce = true): void {
+    if (this.phase !== "translating") return
+    this.stopTranslationStream()
+    this.phase = "idle"
+    this.translationScreen = ""
+    this.addLog("translate", `Перевод выключен (${source === "ui" ? "с телефона" : source === "question" ? "задан вопрос" : "голосом"})`)
+    if (announce) this.flash("Перевод выключен.", 1500)
+    else this.clearDisplay()
+    this.changed()
+  }
+
+  private stopTranslationStream(): void {
+    if (this.translateUnsub) {
+      try {
+        this.translateUnsub()
+      } catch {
+        // ignore
+      }
+      this.translateUnsub = null
+    }
+    if (this.trRenderTimer != null) {
+      this.clearTimerFn(this.trRenderTimer)
+      this.trRenderTimer = null
+    }
+    if (this.trIdleTimer != null) {
+      this.clearTimerFn(this.trIdleTimer)
+      this.trIdleTimer = null
+    }
+  }
+
+  private onTranscriptWhileTranslating(t: string): void {
+    const wake = detectWake(t, this.settings.wakeWords)
+    const body = wake.matched ? wake.rest : t
+    const tcmd = parseTranslateCommand(body)
+    if (tcmd === "stop") {
+      this.stopTranslation("voice")
+      return
+    }
+    if (tcmd === "start") return // already translating
+    // "скрой"/"отмена" in Russian also stop; bare English "stop" may come from people around.
+    const cmd = parseCommand(body)
+    if ((cmd === "hide" || cmd === "cancel") && (wake.matched || detectLang(body) === "ru")) {
+      this.stopTranslation("voice")
+      return
+    }
+    // "Вопрос, …" leaves translation and asks the assistant.
+    if (wake.matched && isMeaningful(body) && !cmd) {
+      this.stopTranslation("question", false)
+      this.startCapture(false)
+      this.captureText(body, true)
+    }
+  }
+
+  private onTranslation(ev: TranslationEvent): void {
+    if (this.phase !== "translating") return
+    const text = sanitizeForG1(String(ev?.text ?? "")).replace(/\n+/g, " ").trim()
+    if (!text) return
+    if (isPassthrough(ev, this.settings.translateTo)) return
+    const id = ev.utteranceId ?? "_"
+    if (ev.isFinal) {
+      this.trFinals.push(text)
+      if (this.trFinals.length > TRANSLATE_KEEP) this.trFinals.splice(0, this.trFinals.length - TRANSLATE_KEEP)
+      if (!this.trInterim || this.trInterim.id === id) this.trInterim = null
+      this.addLog("translate", `${ev.sourceLanguage ? "[" + primaryLang(ev.sourceLanguage) + "] " : ""}${text}`)
+    } else {
+      this.trInterim = {id, text}
+    }
+    this.armTranslateIdle()
+    this.scheduleTranslationRender(ev.isFinal)
+  }
+
+  private scheduleTranslationRender(immediate: boolean): void {
+    const now = this.now()
+    const due = immediate || now - this.trLastRender >= TRANSLATE_RENDER_MS
+    if (due) {
+      if (this.trRenderTimer != null) {
+        this.clearTimerFn(this.trRenderTimer)
+        this.trRenderTimer = null
+      }
+      this.renderTranslation()
+    } else if (this.trRenderTimer == null) {
+      this.trRenderTimer = this.setTimer(() => {
+        this.trRenderTimer = null
+        this.renderTranslation()
+      }, TRANSLATE_RENDER_MS - (now - this.trLastRender))
+    }
+  }
+
+  private renderTranslation(): void {
+    if (this.phase !== "translating") return
+    const parts = [...this.trFinals]
+    if (this.trInterim) parts.push(this.trInterim.text)
+    const lines = wrapLines(parts.join(" "))
+    const screen = lines.slice(-G1_LINES).join("\n")
+    this.trLastRender = this.now()
+    if (screen && screen !== this.translationScreen) {
+      this.translationScreen = screen
+      this.show(screen)
+      this.changed()
+    }
+  }
+
+  private armTranslateIdle(): void {
+    if (this.trIdleTimer != null) this.clearTimerFn(this.trIdleTimer)
+    this.trIdleTimer = this.setTimer(() => {
+      this.trIdleTimer = null
+      if (this.phase !== "translating") return
+      // silence: clear the glasses, start the next phrase on a clean screen
+      this.trFinals = []
+      this.trInterim = null
+      this.translationScreen = ""
+      this.clearDisplay()
+      this.changed()
+    }, TRANSLATE_IDLE_MS)
+  }
+
   command(cmd: VoiceCommand, source: "voice" | "ui" | "touch"): void {
     this.addLog("cmd", `${cmd} (${source})`)
+    if (this.phase === "translating") {
+      if (cmd === "hide" || cmd === "cancel") this.stopTranslation(source === "ui" ? "ui" : "voice")
+      else if (cmd === "reset") this.resetConversation(false)
+      return
+    }
     if (!this.pages.length && (cmd === "next" || cmd === "prev" || cmd === "first" || cmd === "repeat")) {
       if (this.phase === "idle") this.clearDisplay()
       return
@@ -506,7 +727,8 @@ export class Assistant {
       phase: this.phase,
       page: this.page,
       pages: this.pages.length,
-      currentScreen: this.pages[this.page] ?? "",
+      currentScreen: this.phase === "translating" ? this.translationScreen : this.pages[this.page] ?? "",
+      translating: this.phase === "translating",
       lastTranscript: this.lastTranscript,
       lastQuestion: this.lastQuestion,
       lastAnswer: this.lastAnswer,

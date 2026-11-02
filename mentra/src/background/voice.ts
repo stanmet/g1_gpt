@@ -150,3 +150,35 @@ export function detectLang(text: string): Lang {
   }
   return lat > cyr ? "en" : "ru"
 }
+
+export type TranslateCommand = "start" | "stop"
+
+const TRANSLATE_START = [
+  "транслейт", "трансляйт", "транслэйт", "translate", "переводи", "переводчик", "перевод", "режим перевода",
+  "включи перевод", "включи переводчик", "начни перевод", "переводи мне", "translation", "translation mode",
+  "start translation", "start translating", "translate mode",
+]
+const TRANSLATE_STOP = [
+  "стоп перевод", "стоп", "хватит", "хватит переводить", "выключи перевод", "выключи переводчик", "закончи перевод",
+  "конец перевода", "перестань переводить", "отключи перевод", "останови перевод", "транслейт стоп", "стоп транслейт",
+  "stop translation", "stop translating", "translation off", "end translation",
+]
+const TRANSLATE_LOOKUP = new Map<string, TranslateCommand>()
+for (const p of TRANSLATE_START) TRANSLATE_LOOKUP.set(normalize(p), "start")
+for (const p of TRANSLATE_STOP) TRANSLATE_LOOKUP.set(normalize(p), "stop")
+
+/**
+ * "транслейт" / "translate" (whole utterance) starts live translation;
+ * "стоп перевод" / "хватит переводить" stops it. Bare English "stop" is NOT a stop
+ * phrase: while translating, other people around may say it.
+ */
+export function parseTranslateCommand(text: string): TranslateCommand | null {
+  const n = normalize(text)
+  if (!n) return null
+  const FILLERS = /^(пожалуйста|ну|так|давай|а|и|окей|ок|please|ok|okay)$/
+  let words = n.split(" ").filter(Boolean)
+  while (words.length > 1 && FILLERS.test(words[0])) words = words.slice(1)
+  while (words.length > 1 && FILLERS.test(words[words.length - 1])) words = words.slice(0, -1)
+  if (words.length > 4) return null
+  return TRANSLATE_LOOKUP.get(words.join(" ")) ?? null
+}
