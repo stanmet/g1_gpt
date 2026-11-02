@@ -4,10 +4,19 @@ export type ListenMode = "wake" | "always" | "off"
 export type Effort = "auto" | "none" | "low" | "medium" | "high"
 export type SttLanguage = "ru-RU" | "auto"
 export type TranslateTarget = "ru-RU" | "en-US"
+export type ProviderId = "openai" | "anthropic" | "gemini"
 
 export interface Settings {
+  /** Which AI answers by default: ChatGPT, Claude or Gemini. */
+  provider: ProviderId
+  /** OpenAI key (name kept for compatibility with saved settings). */
   apiKey: string
+  anthropicKey: string
+  geminiKey: string
+  /** OpenAI model. */
   model: string
+  anthropicModel: string
+  geminiModel: string
   effort: Effort
   aboutMe: string
   instructions: string
@@ -34,8 +43,13 @@ export const SETTINGS_VERSION = 2
 const OLD_DEFAULT_WAKE = ["вопрос", "ассистент", "джипити", "чат джипити", "чат gpt", "chat gpt", "chatgpt", "гпт"]
 
 export const DEFAULT_SETTINGS: Settings = {
+  provider: "openai",
   apiKey: "",
+  anthropicKey: "",
+  geminiKey: "",
   model: "gpt-6.1-terra",
+  anthropicModel: "claude-haiku-5-5",
+  geminiModel: "gemini-3.8-flash",
   effort: "auto",
   aboutMe: "",
   instructions: "",
@@ -73,6 +87,8 @@ export interface Message {
   role: "user" | "assistant"
   content: string
   at: number
+  /** Which AI wrote an assistant message ("openai" | "anthropic" | "gemini"). */
+  by?: ProviderId
 }
 
 export interface KV {
@@ -101,9 +117,15 @@ export function normalizeSettings(raw: Partial<Settings> | null | undefined, bas
   const listenMode = pick("listenMode")
   const effort = pick("effort")
   const stt = pick("sttLanguage")
+  const provider = pick("provider")
   return {
+    provider: provider === "anthropic" || provider === "gemini" ? provider : "openai",
     apiKey: String(pick("apiKey") ?? "").trim(),
+    anthropicKey: String(pick("anthropicKey") ?? "").trim(),
+    geminiKey: String(pick("geminiKey") ?? "").trim(),
     model: String(pick("model") || DEFAULT_SETTINGS.model).trim(),
+    anthropicModel: String(pick("anthropicModel") || DEFAULT_SETTINGS.anthropicModel).trim(),
+    geminiModel: String(pick("geminiModel") || DEFAULT_SETTINGS.geminiModel).trim(),
     effort: (["auto", "none", "low", "medium", "high"] as Effort[]).includes(effort) ? effort : "auto",
     aboutMe: String(pick("aboutMe") ?? "").slice(0, 4000),
     instructions: String(pick("instructions") ?? "").slice(0, 4000),

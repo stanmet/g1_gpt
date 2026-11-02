@@ -6,7 +6,8 @@
  *   └──────────── "скрой" / timeout / новый вопрос ◀───────────────────────────┘
  */
 import {fitScreen, G1_LINES, paginate, sanitizeForG1, wrapLines} from "./g1text"
-import {askOpenAI, explainError, OpenAIError, type FetchLike} from "./openai"
+import {askLLM, asProvider, displayName, explainLLMError, keyFor, LLMError, PROVIDERS, type Provider} from "./llm"
+import type {FetchLike} from "./openai"
 import {normalizeSettings, Store, type Message, type Settings} from "./store"
 import {
   detectLang,
@@ -15,7 +16,10 @@ import {
   isMeaningful,
   normalize,
   parseCommand,
+  parseSwitchCommand,
   parseTranslateCommand,
+  aiForWakePhrase,
+  AI_WAKE_WORDS,
   type VoiceCommand,
 } from "./voice"
 
@@ -110,6 +114,10 @@ export class Assistant {
   private requestSeq = 0
   private followUpUntil = 0
   private captureIsReply = false
+  /** AI chosen for the question being captured ("Клод, …"), or null for the default. */
+  private captureProvider: Provider | null = null
+  /** AI that wrote the last answer — a reply to its counter-question goes back to it. */
+  private lastProvider: Provider | null = null
   // live translation state
   private translateUnsub: (() => void) | null = null
   private trFinals: string[] = []
@@ -195,6 +203,8 @@ export class Assistant {
     const merged = normalizeSettings({...this.settings, ...patch})
     // an empty apiKey in a patch means "keep the stored key" unless clearing explicitly
     if (patch.apiKey === undefined || patch.apiKey === null) merged.apiKey = this.settings.apiKey
+    if (patch.anthropicKey === undefined || patch.anthropicKey === null) merged.anthropicKey = this.settings.anthropicKey
+    if (patch.geminiKey === undefined || patch.geminiKey === null) merged.geminiKey = this.settings.geminiKey
     this.settings = merged
     this.deps.store.saveSettings(merged)
     this.addLog("info", "Настройки сохранены")
@@ -224,6 +234,15 @@ export class Assistant {
 
   // ───────────────────────────── input ─────────────────────────────
 
+  /** User activators plus AI names («Клод», «Джемини», «Чат GPT»). */
+  private wakeWords(): string[] {
+    return [...this.settings.wakeWords, ...AI_WAKE_WORDS]
+  }
+
+  private wake(t: string) {
+    return detectWake(t, this.wakeWords())
+  }
+
   onTranscript(text: string, isFinal: boolean): void {
     if (this.settings.listenMode === "off") return
     const t = String(text ?? "").trim()
@@ -247,22 +266,30 @@ export class Assistant {
       // Show early feedback as soon as the wake phrase is heard,
       // or as soon as the user starts replying to a counter-question.
       const inReplyWindow = this.now() < this.followUpUntil && this.phase === "answering"
+      const w = this.wake(t)
       if (
-        (this.settings.listenMode === "wake" && detectWake(t, this.settings.wakeWords).matched) ||
+        (this.settings.listenMode === "wake" && w.matched) ||
         (inReplyWindow && isMeaningful(t) && !parseCommand(t) && !isCommandPrefix(t))
       ) {
-        if (inReplyWindow) this.addLog("wake", "Ответ на встречный вопрос / уточнение без активатора")
-        this.startCapture(true, inReplyWindow)
+        if (inReplyWindow && !w.matched) this.addLog("wake", "Ответ на встречный вопрос / уточнение без активатора")
+        this.startCapture(true, inReplyWindow && !w.matched)
+        this.captureProvider = w.matched ? aiForWakePhrase(w.phrase) : inReplyWindow ? this.lastProvider : null
         this.captureText(t, false)
       }
       return
     }
 
-    const wake = detectWake(t, this.settings.wakeWords)
+    const wake = this.wake(t)
     const body = wake.matched ? wake.rest : t
 
     if (parseTranslateCommand(body) === "start") {
       this.startTranslation("voice")
+      return
+    }
+
+    const switchTo = parseSwitchCommand(body)
+    if (switchTo) {
+      this.switchProvider(switchTo, "voice")
       return
     }
 
@@ -277,7 +304,12 @@ export class Assistant {
       wake.matched || this.settings.listenMode === "always" || (followUp && this.phase !== "thinking")
 
     if (!accept) return
-    if (wake.matched) this.addLog("wake", wake.rest ? `Фраза-активатор, вопрос: «${wake.rest}»` : "Фраза-активатор")
+    const named = wake.matched ? aiForWakePhrase(wake.phrase) : null
+    if (wake.matched)
+      this.addLog(
+        "wake",
+        `${named ? `Вопрос для ${PROVIDERS[named].label}` : "Фраза-активатор"}${wake.rest ? `: «${wake.rest}»` : ""}`,
+      )
     else if (followUp) this.addLog("wake", "Уточнение без активатора")
 
     // A reply to a counter-question may be very short ("да", "в евро").
@@ -285,10 +317,12 @@ export class Assistant {
     if (!body || (!isMeaningful(body) && !shortReplyOk)) {
       if (wake.matched) {
         this.startCapture(false)
+        this.captureProvider = named
       }
       return
     }
     this.startCapture(false, !wake.matched && followUp)
+    this.captureProvider = named ?? (!wake.matched && followUp ? this.lastProvider : null)
     this.captureText(body, true)
   }
 
@@ -316,6 +350,7 @@ export class Assistant {
     if (this.phase === "thinking") this.requestSeq++ // a new question supersedes the pending one
     this.phase = "capturing"
     this.captureIsReply = isReply
+    this.captureProvider = null
     this.committed = []
     this.interim = ""
     this.cancelTimer("pageTimer")
@@ -338,8 +373,11 @@ export class Assistant {
 
   /** Strip a repeated wake phrase at the start (the final repeats what the interim already showed). */
   private stripWake(t: string): string {
-    const w = detectWake(t, this.settings.wakeWords)
-    return w.matched ? w.rest : t
+    const w = this.wake(t)
+    if (!w.matched) return t
+    const named = aiForWakePhrase(w.phrase)
+    if (named) this.captureProvider = named
+    return w.rest
   }
 
   private captured(): string {
@@ -353,6 +391,15 @@ export class Assistant {
   private captureText(t: string, isFinal: boolean): void {
     const clean = this.stripWake(t)
     if (isFinal) {
+      const sw = this.committed.length === 0 ? parseSwitchCommand(clean) : null
+      if (sw) {
+        this.cancelTimer("silenceTimer")
+        this.cancelTimer("wakeTimer")
+        this.interim = ""
+        this.phase = this.pages.length ? "answering" : "idle"
+        this.switchProvider(sw, "voice")
+        return
+      }
       if (this.committed.length === 0 && parseTranslateCommand(clean) === "start") {
         this.cancelTimer("silenceTimer")
         this.cancelTimer("wakeTimer")
@@ -410,12 +457,23 @@ export class Assistant {
       this.changed()
       return
     }
-    void this.ask(q, "voice")
+    void this.ask(q, "voice", this.captureProvider ?? undefined)
+  }
+
+  /** Make another AI the default (voice: «переключись на Клода», or from the phone). */
+  switchProvider(p: Provider, source: "voice" | "ui"): void {
+    this.updateSettings({provider: p})
+    const name = displayName(this.settings, p)
+    const hasKey = Boolean(keyFor(this.settings, p))
+    this.addLog("cmd", `Теперь отвечает ${name} (${source === "ui" ? "с телефона" : "голосом"})`)
+    if (source === "voice" || this.phase === "idle") {
+      this.flash(hasKey ? `Теперь отвечает ${name}.` : `Теперь отвечает ${name}.\nНет ключа ${PROVIDERS[p].label} — добавьте в приложении.`, 3000)
+    }
   }
 
   // ───────────────────────────── asking ─────────────────────────────
 
-  async ask(question: string, source: "voice" | "ui" | "touch"): Promise<void> {
+  async ask(question: string, source: "voice" | "ui" | "touch", providerOverride?: Provider): Promise<void> {
     const q = question.trim()
     if (!q) return
     if (this.phase === "translating") this.stopTranslation("question", false)
@@ -427,16 +485,18 @@ export class Assistant {
     this.phase = "thinking"
     this.lastQuestion = q
     this.lastError = ""
-    this.addLog("ask", `${source === "ui" ? "[с телефона] " : ""}${q}`)
+    const provider = providerOverride ?? asProvider(this.settings.provider)
+    const label = PROVIDERS[provider].label
+    this.addLog("ask", `${source === "ui" ? "[с телефона] " : ""}${providerOverride ? `[${label}] ` : ""}${q}`)
 
-    if (!this.settings.apiKey) {
-      this.fail("Нет ключа OpenAI. Откройте приложение на телефоне и вставьте ключ.", seq)
+    if (!keyFor(this.settings, provider)) {
+      this.fail(explainLLMError(provider, 401, "no_key", ""), seq)
       return
     }
-    this.show(fitScreen(`» ${q}\n…думаю`))
+    this.show(fitScreen(`» ${q}\n…${providerOverride || provider !== "openai" ? label + " " : ""}думает`))
 
     try {
-      const res = await askOpenAI(this.deps.fetch, this.settings, this.history, q, {
+      const res = await askLLM(this.deps.fetch, this.settings, provider, this.history, q, {
         setTimer: ((fn: () => void, ms: number) => this.setTimer(fn, ms)) as unknown as typeof setTimeout,
         now: this.now,
       })
@@ -445,9 +505,10 @@ export class Assistant {
         return
       }
       const usage = res.usage ? `, токены ${res.usage.input_tokens ?? "?"}→${res.usage.output_tokens ?? "?"}` : ""
-      this.addLog("openai", `Ответ за ${(res.ms / 1000).toFixed(1)} с (${res.model}${usage})`)
+      this.addLog("openai", `${label}: ответ за ${(res.ms / 1000).toFixed(1)} с (${res.model}${usage})`)
       const at = this.now()
-      this.history.push({role: "user", content: q, at}, {role: "assistant", content: res.text, at})
+      this.history.push({role: "user", content: q, at}, {role: "assistant", content: res.text, at, by: provider})
+      this.lastProvider = provider
       this.deps.store.saveHistory(this.history)
       this.lastAnswer = res.text
       const clean = sanitizeForG1(res.text)
@@ -466,10 +527,10 @@ export class Assistant {
       this.showPage(0)
     } catch (e) {
       if (seq !== this.requestSeq) return
-      const err = e as OpenAIError
+      const err = e as LLMError
       const status = typeof err?.status === "number" ? err.status : 0
       const code = String(err?.code ?? "")
-      const human = code === "timeout" ? "OpenAI не ответил вовремя. Повторите вопрос." : explainError(status, code, err?.message ?? "")
+      const human = explainLLMError(err?.provider ?? provider, status, code, err?.message ?? "")
       this.addLog("error", `${human} [${status} ${code}] ${String(err?.message ?? "").slice(0, 160)}`)
       this.fail(human, seq)
     }
@@ -586,7 +647,7 @@ export class Assistant {
   }
 
   private onTranscriptWhileTranslating(t: string): void {
-    const wake = detectWake(t, this.settings.wakeWords)
+    const wake = this.wake(t)
     const body = wake.matched ? wake.rest : t
     const tcmd = parseTranslateCommand(body)
     if (tcmd === "stop") {
@@ -604,6 +665,7 @@ export class Assistant {
     if (wake.matched && isMeaningful(body) && !cmd) {
       this.stopTranslation("question", false)
       this.startCapture(false)
+      this.captureProvider = aiForWakePhrase(wake.phrase)
       this.captureText(body, true)
     }
   }
@@ -722,7 +784,9 @@ export class Assistant {
   // ───────────────────────────── state for the phone UI ─────────────────────────────
 
   snapshot() {
-    const key = this.settings.apiKey
+    const hint = (k: string) => (k ? `${k.slice(0, k.startsWith("sk-ant-") ? 7 : 3)}…${k.slice(-4)}` : "")
+    const provider = asProvider(this.settings.provider)
+    const key = keyFor(this.settings, provider)
     return {
       phase: this.phase,
       page: this.page,
@@ -734,7 +798,20 @@ export class Assistant {
       lastAnswer: this.lastAnswer,
       lastError: this.lastError,
       glassesConnected: this.glassesConnected,
-      settings: {...this.settings, apiKey: "", hasKey: Boolean(key), keyHint: key ? `${key.slice(0, 3)}…${key.slice(-4)}` : ""},
+      settings: {
+        ...this.settings,
+        apiKey: "",
+        anthropicKey: "",
+        geminiKey: "",
+        hasKey: Boolean(key),
+        keyHint: hint(key),
+        keys: {
+          openai: {has: Boolean(this.settings.apiKey), hint: hint(this.settings.apiKey)},
+          anthropic: {has: Boolean(this.settings.anthropicKey), hint: hint(this.settings.anthropicKey)},
+          gemini: {has: Boolean(this.settings.geminiKey), hint: hint(this.settings.geminiKey)},
+        },
+        aiName: displayName(this.settings, provider),
+      },
       historyCount: this.history.length,
       history: this.history.slice(-40),
       log: this.log.slice(-60),

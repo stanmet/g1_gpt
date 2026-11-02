@@ -28,7 +28,7 @@ describe("wake phrase", () => {
   })
 
   test("custom wake word", () => {
-    expect(detectWake("Джарвис, который час?", ["джарвис"])).toEqual({matched: true, rest: "который час?"})
+    expect(detectWake("Джарвис, который час?", ["джарвис"])).toEqual({matched: true, rest: "который час?", phrase: "джарвис"})
   })
 })
 

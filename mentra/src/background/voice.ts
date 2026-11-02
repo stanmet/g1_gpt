@@ -21,6 +21,8 @@ export interface WakeResult {
   matched: boolean
   /** Text after the wake phrase, in the original spelling (punctuation trimmed). */
   rest: string
+  /** The wake phrase that matched, normalized ("вопрос", "клод"). */
+  phrase?: string
 }
 
 /** Original-text words with their normalized forms, so we can cut the original string. */
@@ -70,7 +72,7 @@ export function detectWake(text: string, wakePhrases: string[]): WakeResult {
           .join(" ")
           .replace(/^[\s,.:;!?—–-]+/, "")
           .trim()
-        return {matched: true, rest}
+        return {matched: true, rest, phrase: phrase.join(" ")}
       }
     }
     // only allow one unknown filler word before the wake phrase
@@ -181,4 +183,47 @@ export function parseTranslateCommand(text: string): TranslateCommand | null {
   while (words.length > 1 && FILLERS.test(words[words.length - 1])) words = words.slice(0, -1)
   if (words.length > 4) return null
   return TRANSLATE_LOOKUP.get(words.join(" ")) ?? null
+}
+
+// ───────────────────────── AI names ─────────────────────────
+
+export type AiName = "openai" | "anthropic" | "gemini"
+
+/** Names that work as activators AND pick that AI for the question: «Клод, …», «Джемини, …». */
+export const AI_WAKE: Record<AiName, string[]> = {
+  openai: ["чат gpt", "chat gpt", "chatgpt", "чатгпт", "чат джипити", "джипити", "гпт", "gpt", "openai", "опенай"],
+  anthropic: ["клод", "claude", "клауд", "клоуд", "клот"],
+  gemini: ["джемини", "джемени", "гемини", "джеминай", "джимини", "gemini"],
+}
+
+const AI_BY_PHRASE = new Map<string, AiName>()
+for (const [ai, names] of Object.entries(AI_WAKE) as [AiName, string[]][]) for (const n of names) AI_BY_PHRASE.set(normalize(n), ai)
+
+/** All AI names, to append to the user's activators. */
+export const AI_WAKE_WORDS: string[] = Object.values(AI_WAKE).flat()
+
+/** The AI a matched wake phrase refers to, or null for a generic activator ("вопрос"). */
+export function aiForWakePhrase(phrase: string | undefined): AiName | null {
+  return phrase ? AI_BY_PHRASE.get(normalize(phrase)) ?? null : null
+}
+
+// declensions people use after "переключись на …" / "спроси …"
+const AI_FORMS: Record<AiName, string[]> = {
+  openai: [...AI_WAKE.openai, "чат gpt", "чатгпт", "gpt", "джипити", "open ai", "openai"],
+  anthropic: [...AI_WAKE.anthropic, "клода", "клоду", "клодом", "клоде", "claude"],
+  gemini: [...AI_WAKE.gemini, "gemini", "джемини", "гугл", "google"],
+}
+const AI_BY_FORM = new Map<string, AiName>()
+for (const [ai, forms] of Object.entries(AI_FORMS) as [AiName, string[]][]) for (const f of forms) AI_BY_FORM.set(normalize(f), ai)
+
+/**
+ * "Переключись на Клода", "используй джемини", "switch to ChatGPT" → that AI becomes the default.
+ * Whole short utterance only.
+ */
+export function parseSwitchCommand(text: string): AiName | null {
+  const n = normalize(text)
+  if (!n || n.split(" ").length > 6) return null
+  const m = /^(?:(?:ну |давай |пожалуйста )*)(?:переключись|переключи|переключиться|перейди|используй|включи|поставь|switch|use|change)(?: на| to)? (.+)$/.exec(n)
+  if (!m) return null
+  return AI_BY_FORM.get(m[1].trim()) ?? null
 }

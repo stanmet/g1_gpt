@@ -4,6 +4,7 @@
  */
 import {registerMiniapp} from "@mentra/miniapp/background"
 import {Assistant} from "./assistant"
+import {asProvider} from "./llm"
 import type {FetchLike} from "./openai"
 import {Store, type KV, type Settings} from "./store"
 
@@ -144,9 +145,10 @@ registerMiniapp((session: any) => {
     return snap()
   })
 
-  session.ui.handle("command", (p: {cmd: string}) => {
+  session.ui.handle("command", (p: {cmd: string; provider?: string}) => {
     const cmd = String(p?.cmd ?? "") as any
-    if (cmd === "translate") assistant.startTranslation("ui")
+    if (cmd === "provider") assistant.switchProvider(asProvider(p?.provider), "ui")
+    else if (cmd === "translate") assistant.startTranslation("ui")
     else if (cmd === "translateStop") assistant.stopTranslation("ui")
     else if (["next", "prev", "first", "repeat", "hide", "cancel", "reset"].includes(cmd)) assistant.command(cmd, "ui")
     return snap()

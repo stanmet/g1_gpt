@@ -4745,7 +4745,7 @@
         }
         if (ok) {
           const rest = tokens.slice(offset + phrase.length).map((t) => t.orig).filter(Boolean).join(" ").replace(/^[\s,.:;!?—–-]+/, "").trim();
-          return { matched: true, rest };
+          return { matched: true, rest, phrase: phrase.join(" ") };
         }
       }
       if (offset > start)
@@ -4930,6 +4930,37 @@
       return null;
     return TRANSLATE_LOOKUP.get(words.join(" ")) ?? null;
   }
+  var AI_WAKE = {
+    openai: ["чат gpt", "chat gpt", "chatgpt", "чатгпт", "чат джипити", "джипити", "гпт", "gpt", "openai", "опенай"],
+    anthropic: ["клод", "claude", "клауд", "клоуд", "клот"],
+    gemini: ["джемини", "джемени", "гемини", "джеминай", "джимини", "gemini"]
+  };
+  var AI_BY_PHRASE = new Map;
+  for (const [ai, names] of Object.entries(AI_WAKE))
+    for (const n of names)
+      AI_BY_PHRASE.set(normalize(n), ai);
+  var AI_WAKE_WORDS = Object.values(AI_WAKE).flat();
+  function aiForWakePhrase(phrase) {
+    return phrase ? AI_BY_PHRASE.get(normalize(phrase)) ?? null : null;
+  }
+  var AI_FORMS = {
+    openai: [...AI_WAKE.openai, "чат gpt", "чатгпт", "gpt", "джипити", "open ai", "openai"],
+    anthropic: [...AI_WAKE.anthropic, "клода", "клоду", "клодом", "клоде", "claude"],
+    gemini: [...AI_WAKE.gemini, "gemini", "джемини", "гугл", "google"]
+  };
+  var AI_BY_FORM = new Map;
+  for (const [ai, forms] of Object.entries(AI_FORMS))
+    for (const f of forms)
+      AI_BY_FORM.set(normalize(f), ai);
+  function parseSwitchCommand(text) {
+    const n = normalize(text);
+    if (!n || n.split(" ").length > 6)
+      return null;
+    const m = /^(?:(?:ну |давай |пожалуйста )*)(?:переключись|переключи|переключиться|перейди|используй|включи|поставь|switch|use|change)(?: на| to)? (.+)$/.exec(n);
+    if (!m)
+      return null;
+    return AI_BY_FORM.get(m[1].trim()) ?? null;
+  }
 
   // src/background/openai.ts
   var OPENAI_URL = "https://api.openai.com/v1/responses";
@@ -5024,24 +5055,6 @@ ${s.instructions.trim()}`);
       this.name = "OpenAIError";
     }
   }
-  function explainError(status, code, message) {
-    const m = (message || "").toLowerCase();
-    if (status === 0)
-      return "Нет связи с OpenAI. Проверьте интернет на телефоне.";
-    if (status === 401)
-      return "Ключ OpenAI не принят. Проверьте ключ в настройках.";
-    if (code === "insufficient_quota" || m.includes("quota") || m.includes("billing"))
-      return "На счёте OpenAI API нет средств. Пополните баланс на platform.openai.com.";
-    if (status === 429)
-      return "OpenAI просит подождать (лимит запросов). Повторите через минуту.";
-    if (status === 404 || code === "model_not_found")
-      return "Модель недоступна для вашего ключа. Выберите другую в настройках.";
-    if (status === 403)
-      return "Доступ запрещён: проверьте права ключа и проекта OpenAI.";
-    if (status >= 500)
-      return "Сбой на стороне OpenAI. Повторите вопрос.";
-    return `Ошибка OpenAI ${status}${code ? " (" + code + ")" : ""}.`;
-  }
   function parseError(status, raw) {
     let code = "";
     let message = raw.slice(0, 300);
@@ -5107,12 +5120,310 @@ ${s.instructions.trim()}`);
     return { text, ms: now() - started, model: String(data?.model ?? s.model), usage: data?.usage };
   }
 
+  // src/background/llm.ts
+  var PROVIDERS = {
+    openai: {
+      label: "ChatGPT",
+      company: "OpenAI",
+      keyField: "apiKey",
+      modelField: "model",
+      keyPlaceholder: "sk-…",
+      keyWhere: "platform.openai.com → API keys",
+      models: [
+        { id: "gpt-6.1-terra", label: "GPT‑6.1 Terra" },
+        { id: "gpt-6-luna", label: "GPT‑6 Luna" },
+        { id: "gpt-6.1-sol", label: "GPT‑6.1 Sol" },
+        { id: "gpt-6-astra", label: "GPT‑6 Astra" }
+      ]
+    },
+    anthropic: {
+      label: "Claude",
+      company: "Anthropic",
+      keyField: "anthropicKey",
+      modelField: "anthropicModel",
+      keyPlaceholder: "sk-ant-…",
+      keyWhere: "console.anthropic.com → API Keys",
+      models: [
+        { id: "claude-haiku-5-5", label: "Haiku 5.5" },
+        { id: "claude-sonnet-5-5", label: "Sonnet 5.5" },
+        { id: "claude-opus-5-5", label: "Opus 5.5" },
+        { id: "claude-fable-5-1", label: "Fable 5.1" }
+      ]
+    },
+    gemini: {
+      label: "Gemini",
+      company: "Google",
+      keyField: "geminiKey",
+      modelField: "geminiModel",
+      keyPlaceholder: "AIza…",
+      keyWhere: "aistudio.google.com → Get API key",
+      models: [
+        { id: "gemini-3.8-flash", label: "3.8 Flash" },
+        { id: "gemini-3.5-flash-lite", label: "3.5 Flash‑Lite" },
+        { id: "gemini-4-argon", label: "4 Argon" }
+      ]
+    }
+  };
+  function asProvider(v) {
+    return v === "anthropic" || v === "gemini" ? v : "openai";
+  }
+  function keyFor(s, p) {
+    return String(s[PROVIDERS[p].keyField] ?? "");
+  }
+  function modelFor(s, p) {
+    return String(s[PROVIDERS[p].modelField] ?? "");
+  }
+  function modelLabel(p, id) {
+    return PROVIDERS[p].models.find((m) => m.id === id)?.label ?? id;
+  }
+  function displayName(s, p) {
+    return `${PROVIDERS[p].label} ${modelLabel(p, modelFor(s, p))}`;
+  }
+
+  class LLMError extends Error {
+    provider;
+    status;
+    code;
+    constructor(message, provider, status, code) {
+      super(message);
+      this.provider = provider;
+      this.status = status;
+      this.code = code;
+      this.name = "LLMError";
+    }
+  }
+  function explainLLMError(p, status, code, message) {
+    const name = p === "openai" ? "OpenAI" : PROVIDERS[p].label;
+    const m = (message || "").toLowerCase();
+    const c = (code || "").toLowerCase();
+    if (c === "no_key")
+      return `Нет ключа ${name}. Добавьте его в настройках приложения.`;
+    if (c === "timeout")
+      return `${name} не ответил вовремя. Повторите вопрос.`;
+    if (status === 0)
+      return `Нет связи с ${name}. Проверьте интернет на телефоне.`;
+    if (status === 401 || c === "authentication_error" || /api key not valid|invalid api key|invalid x-api-key/.test(m))
+      return `Ключ ${name} не принят. Проверьте ключ в настройках.`;
+    if (c === "insufficient_quota" || /credit balance|billing|insufficient.*(funds|credit)/.test(m) || p === "openai" && m.includes("quota"))
+      return p === "openai" ? "На счёте OpenAI API нет средств. Пополните баланс на platform.openai.com." : `На счёте ${name} нет средств. Пополните баланс у ${PROVIDERS[p].company}.`;
+    if (p === "gemini" && (status === 429 || c === "resource_exhausted"))
+      return "Лимит Gemini исчерпан. Подождите минуту или подключите оплату в Google AI Studio.";
+    if (status === 529 || c === "overloaded_error")
+      return `${name} сейчас перегружен. Повторите через минуту.`;
+    if (status === 429)
+      return `${name} просит подождать (лимит запросов). Повторите через минуту.`;
+    if (status === 404 || c === "model_not_found" || c === "not_found_error" || c === "not_found")
+      return "Модель недоступна для вашего ключа. Выберите другую в настройках.";
+    if (status === 403)
+      return `Доступ запрещён: проверьте ключ и права ${name}.`;
+    if (status >= 500)
+      return `Сбой на стороне ${name}. Повторите вопрос.`;
+    return `Ошибка ${name} ${status}${code ? " (" + code + ")" : ""}.`;
+  }
+  function alternatingHistory(history, limit) {
+    const recent = limit > 0 ? history.slice(-limit) : [];
+    const out = [];
+    for (const m of recent) {
+      if (!out.length && m.role !== "user")
+        continue;
+      if (out.length && out[out.length - 1].role === m.role) {
+        out[out.length - 1] = { ...out[out.length - 1], content: out[out.length - 1].content + `
+` + m.content };
+      } else
+        out.push(m);
+    }
+    if (out.length && out[out.length - 1].role === "user")
+      out.pop();
+    return out;
+  }
+  function maxTokens(s) {
+    const base = Math.min(8000, Math.max(1024, s.answerWords * 12));
+    if (s.effort === "high")
+      return Math.max(base, 16000);
+    if (s.effort === "medium")
+      return Math.max(base, 8000);
+    return base;
+  }
+  async function post(p, fetchFn, url, headers, body, opts) {
+    const setTimer = opts.setTimer ?? setTimeout;
+    const req = fetchFn(url, { method: "POST", headers, body: JSON.stringify(body) });
+    let res;
+    try {
+      res = await new Promise((resolve, reject) => {
+        const t = setTimer(() => reject(new LLMError("timeout", p, 0, "timeout")), opts.timeoutMs ?? 60000);
+        req.then((v) => {
+          clearTimeout(t);
+          resolve(v);
+        }, (e) => {
+          clearTimeout(t);
+          reject(e);
+        });
+      });
+    } catch (e) {
+      if (e instanceof LLMError)
+        throw e;
+      throw new LLMError(String(e?.message ?? e), p, 0, "network");
+    }
+    return { ok: res.ok, status: res.status, raw: await res.text() };
+  }
+  function parseJson(p, status, raw) {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      throw new LLMError(`bad json: ${raw.slice(0, 200)}`, p, status, "bad_json");
+    }
+  }
+  var ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
+  var ANTHROPIC_VERSION = "2023-06-01";
+  function anthropicReasoning(s) {
+    const m = s.anthropicModel.toLowerCase();
+    if (s.effort === "auto" || s.effort === "none") {
+      if (m.includes("haiku"))
+        return { thinking: { type: "disabled" }, output_config: { effort: "low" } };
+      if (m.includes("sonnet"))
+        return { thinking: { type: "between_tools" }, output_config: { effort: "low" } };
+      return { output_config: { effort: "low" } };
+    }
+    return { output_config: { effort: s.effort } };
+  }
+  function buildAnthropicBody(s, history, question, opts = {}) {
+    const body = {
+      model: s.anthropicModel,
+      max_tokens: maxTokens(s),
+      system: buildInstructions(s, opts.now, detectLang(question)),
+      messages: [
+        ...alternatingHistory(history, s.historyMessages).map((m) => ({ role: m.role, content: m.content })),
+        { role: "user", content: question }
+      ]
+    };
+    if (opts.includeReasoning !== false)
+      Object.assign(body, anthropicReasoning(s));
+    if (s.webSearch)
+      body.tools = [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }];
+    return body;
+  }
+  function extractAnthropicText(data) {
+    const blocks = Array.isArray(data?.content) ? data.content : [];
+    let start = 0;
+    blocks.forEach((b, i) => {
+      if (b?.type === "web_search_tool_result")
+        start = i + 1;
+    });
+    const tail = blocks.slice(start).filter((b) => b?.type === "text" && typeof b.text === "string");
+    const use = tail.length ? tail : blocks.filter((b) => b?.type === "text" && typeof b.text === "string");
+    return use.map((b) => b.text).join("").trim();
+  }
+  async function askAnthropic(fetchFn, s, history, q, opts) {
+    const key = s.anthropicKey;
+    if (!key)
+      throw new LLMError("no key", "anthropic", 401, "no_key");
+    const headers = { "content-type": "application/json", "x-api-key": key, "anthropic-version": ANTHROPIC_VERSION };
+    let r = await post("anthropic", fetchFn, ANTHROPIC_URL, headers, buildAnthropicBody(s, history, q), opts);
+    if (!r.ok && r.status === 400 && /thinking|effort|output_config/i.test(r.raw)) {
+      r = await post("anthropic", fetchFn, ANTHROPIC_URL, headers, buildAnthropicBody(s, history, q, { includeReasoning: false }), opts);
+    }
+    const data = parseJson("anthropic", r.status, r.raw);
+    if (!r.ok) {
+      throw new LLMError(String(data?.error?.message ?? r.raw.slice(0, 300)), "anthropic", r.status, String(data?.error?.type ?? ""));
+    }
+    const text = extractAnthropicText(data);
+    if (!text)
+      throw new LLMError(`empty answer (${data?.stop_reason ?? "?"})`, "anthropic", r.status, "empty");
+    return {
+      text,
+      ms: 0,
+      model: String(data?.model ?? s.anthropicModel),
+      usage: { input_tokens: data?.usage?.input_tokens, output_tokens: data?.usage?.output_tokens }
+    };
+  }
+  var GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
+  function geminiThinkingLevel(s) {
+    if (s.effort === "low" || s.effort === "medium" || s.effort === "high")
+      return s.effort;
+    return s.geminiModel.toLowerCase().includes("lite") ? "minimal" : "low";
+  }
+  function buildGeminiBody(s, history, question, opts = {}) {
+    const generationConfig = { maxOutputTokens: maxTokens(s) };
+    if (opts.includeReasoning !== false)
+      generationConfig.thinkingConfig = { thinkingLevel: geminiThinkingLevel(s) };
+    const body = {
+      systemInstruction: { parts: [{ text: buildInstructions(s, opts.now, detectLang(question)) }] },
+      contents: [
+        ...alternatingHistory(history, s.historyMessages).map((m) => ({
+          role: m.role === "assistant" ? "model" : "user",
+          parts: [{ text: m.content }]
+        })),
+        { role: "user", parts: [{ text: question }] }
+      ],
+      generationConfig
+    };
+    if (s.webSearch)
+      body.tools = [{ google_search: {} }];
+    return body;
+  }
+  function extractGeminiText(data) {
+    const parts = data?.candidates?.[0]?.content?.parts ?? [];
+    return parts.filter((p) => p && !p.thought && typeof p.text === "string").map((p) => p.text).join("").trim();
+  }
+  async function askGemini(fetchFn, s, history, q, opts) {
+    const key = s.geminiKey;
+    if (!key)
+      throw new LLMError("no key", "gemini", 401, "no_key");
+    const url = `${GEMINI_BASE}${encodeURIComponent(s.geminiModel)}:generateContent`;
+    const headers = { "Content-Type": "application/json", "x-goog-api-key": key };
+    let r = await post("gemini", fetchFn, url, headers, buildGeminiBody(s, history, q), opts);
+    if (!r.ok && r.status === 400 && /thinking/i.test(r.raw)) {
+      r = await post("gemini", fetchFn, url, headers, buildGeminiBody(s, history, q, { includeReasoning: false }), opts);
+    }
+    const data = parseJson("gemini", r.status, r.raw);
+    if (!r.ok) {
+      throw new LLMError(String(data?.error?.message ?? r.raw.slice(0, 300)), "gemini", r.status, String(data?.error?.status ?? ""));
+    }
+    const text = extractGeminiText(data);
+    if (!text) {
+      const reason = data?.promptFeedback?.blockReason ?? data?.candidates?.[0]?.finishReason ?? "?";
+      throw new LLMError(`empty answer (${reason})`, "gemini", r.status, "empty");
+    }
+    const u = data?.usageMetadata ?? {};
+    return {
+      text,
+      ms: 0,
+      model: String(data?.modelVersion ?? s.geminiModel),
+      usage: { input_tokens: u.promptTokenCount, output_tokens: (u.candidatesTokenCount ?? 0) + (u.thoughtsTokenCount ?? 0) }
+    };
+  }
+  async function askLLM(fetchFn, s, provider, history, question, opts = {}) {
+    const now = opts.now ?? Date.now;
+    const started = now();
+    try {
+      let res;
+      if (provider === "anthropic")
+        res = await askAnthropic(fetchFn, s, history, question, opts);
+      else if (provider === "gemini")
+        res = await askGemini(fetchFn, s, history, question, opts);
+      else
+        res = await askOpenAI(fetchFn, s, history, question, opts);
+      return { ...res, ms: now() - started, provider };
+    } catch (e) {
+      if (e instanceof LLMError)
+        throw e;
+      if (e instanceof OpenAIError)
+        throw new LLMError(e.message, "openai", e.status, e.code);
+      throw new LLMError(String(e?.message ?? e), provider, 0, "network");
+    }
+  }
+
   // src/background/store.ts
   var SETTINGS_VERSION = 2;
   var OLD_DEFAULT_WAKE = ["вопрос", "ассистент", "джипити", "чат джипити", "чат gpt", "chat gpt", "chatgpt", "гпт"];
   var DEFAULT_SETTINGS = {
+    provider: "openai",
     apiKey: "",
+    anthropicKey: "",
+    geminiKey: "",
     model: "gpt-6.1-terra",
+    anthropicModel: "claude-haiku-5-5",
+    geminiModel: "gemini-3.8-flash",
     effort: "auto",
     aboutMe: "",
     instructions: "",
@@ -5159,9 +5470,15 @@ ${s.instructions.trim()}`);
     const listenMode = pick("listenMode");
     const effort = pick("effort");
     const stt = pick("sttLanguage");
+    const provider = pick("provider");
     return {
+      provider: provider === "anthropic" || provider === "gemini" ? provider : "openai",
       apiKey: String(pick("apiKey") ?? "").trim(),
+      anthropicKey: String(pick("anthropicKey") ?? "").trim(),
+      geminiKey: String(pick("geminiKey") ?? "").trim(),
       model: String(pick("model") || DEFAULT_SETTINGS.model).trim(),
+      anthropicModel: String(pick("anthropicModel") || DEFAULT_SETTINGS.anthropicModel).trim(),
+      geminiModel: String(pick("geminiModel") || DEFAULT_SETTINGS.geminiModel).trim(),
       effort: ["auto", "none", "low", "medium", "high"].includes(effort) ? effort : "auto",
       aboutMe: String(pick("aboutMe") ?? "").slice(0, 4000),
       instructions: String(pick("instructions") ?? "").slice(0, 4000),
@@ -5258,6 +5575,8 @@ ${s.instructions.trim()}`);
     requestSeq = 0;
     followUpUntil = 0;
     captureIsReply = false;
+    captureProvider = null;
+    lastProvider = null;
     translateUnsub = null;
     trFinals = [];
     trInterim = null;
@@ -5325,6 +5644,10 @@ ${s.instructions.trim()}`);
       const merged = normalizeSettings({ ...this.settings, ...patch });
       if (patch.apiKey === undefined || patch.apiKey === null)
         merged.apiKey = this.settings.apiKey;
+      if (patch.anthropicKey === undefined || patch.anthropicKey === null)
+        merged.anthropicKey = this.settings.anthropicKey;
+      if (patch.geminiKey === undefined || patch.geminiKey === null)
+        merged.geminiKey = this.settings.geminiKey;
       this.settings = merged;
       this.deps.store.saveSettings(merged);
       this.addLog("info", "Настройки сохранены");
@@ -5353,6 +5676,12 @@ ${s.instructions.trim()}`);
           this.showPage(this.page);
       }, ms);
     }
+    wakeWords() {
+      return [...this.settings.wakeWords, ...AI_WAKE_WORDS];
+    }
+    wake(t) {
+      return detectWake(t, this.wakeWords());
+    }
     onTranscript(text, isFinal) {
       if (this.settings.listenMode === "off")
         return;
@@ -5374,18 +5703,25 @@ ${s.instructions.trim()}`);
       }
       if (!isFinal) {
         const inReplyWindow = this.now() < this.followUpUntil && this.phase === "answering";
-        if (this.settings.listenMode === "wake" && detectWake(t, this.settings.wakeWords).matched || inReplyWindow && isMeaningful(t) && !parseCommand(t) && !isCommandPrefix(t)) {
-          if (inReplyWindow)
+        const w = this.wake(t);
+        if (this.settings.listenMode === "wake" && w.matched || inReplyWindow && isMeaningful(t) && !parseCommand(t) && !isCommandPrefix(t)) {
+          if (inReplyWindow && !w.matched)
             this.addLog("wake", "Ответ на встречный вопрос / уточнение без активатора");
-          this.startCapture(true, inReplyWindow);
+          this.startCapture(true, inReplyWindow && !w.matched);
+          this.captureProvider = w.matched ? aiForWakePhrase(w.phrase) : inReplyWindow ? this.lastProvider : null;
           this.captureText(t, false);
         }
         return;
       }
-      const wake = detectWake(t, this.settings.wakeWords);
+      const wake = this.wake(t);
       const body = wake.matched ? wake.rest : t;
       if (parseTranslateCommand(body) === "start") {
         this.startTranslation("voice");
+        return;
+      }
+      const switchTo = parseSwitchCommand(body);
+      if (switchTo) {
+        this.switchProvider(switchTo, "voice");
         return;
       }
       const cmd = parseCommand(body);
@@ -5397,18 +5733,21 @@ ${s.instructions.trim()}`);
       const accept = wake.matched || this.settings.listenMode === "always" || followUp && this.phase !== "thinking";
       if (!accept)
         return;
+      const named = wake.matched ? aiForWakePhrase(wake.phrase) : null;
       if (wake.matched)
-        this.addLog("wake", wake.rest ? `Фраза-активатор, вопрос: «${wake.rest}»` : "Фраза-активатор");
+        this.addLog("wake", `${named ? `Вопрос для ${PROVIDERS[named].label}` : "Фраза-активатор"}${wake.rest ? `: «${wake.rest}»` : ""}`);
       else if (followUp)
         this.addLog("wake", "Уточнение без активатора");
       const shortReplyOk = !wake.matched && followUp && normalize(body).length > 0;
       if (!body || !isMeaningful(body) && !shortReplyOk) {
         if (wake.matched) {
           this.startCapture(false);
+          this.captureProvider = named;
         }
         return;
       }
       this.startCapture(false, !wake.matched && followUp);
+      this.captureProvider = named ?? (!wake.matched && followUp ? this.lastProvider : null);
       this.captureText(body, true);
     }
     commandRelevant(cmd) {
@@ -5438,6 +5777,7 @@ ${s.instructions.trim()}`);
         this.requestSeq++;
       this.phase = "capturing";
       this.captureIsReply = isReply;
+      this.captureProvider = null;
       this.committed = [];
       this.interim = "";
       this.cancelTimer("pageTimer");
@@ -5459,8 +5799,13 @@ ${s.instructions.trim()}`);
       this.changed();
     }
     stripWake(t) {
-      const w = detectWake(t, this.settings.wakeWords);
-      return w.matched ? w.rest : t;
+      const w = this.wake(t);
+      if (!w.matched)
+        return t;
+      const named = aiForWakePhrase(w.phrase);
+      if (named)
+        this.captureProvider = named;
+      return w.rest;
     }
     captured() {
       return [...this.committed, this.interim].map((s) => s.trim()).filter(Boolean).join(" ").trim();
@@ -5468,6 +5813,15 @@ ${s.instructions.trim()}`);
     captureText(t, isFinal) {
       const clean = this.stripWake(t);
       if (isFinal) {
+        const sw = this.committed.length === 0 ? parseSwitchCommand(clean) : null;
+        if (sw) {
+          this.cancelTimer("silenceTimer");
+          this.cancelTimer("wakeTimer");
+          this.interim = "";
+          this.phase = this.pages.length ? "answering" : "idle";
+          this.switchProvider(sw, "voice");
+          return;
+        }
         if (this.committed.length === 0 && parseTranslateCommand(clean) === "start") {
           this.cancelTimer("silenceTimer");
           this.cancelTimer("wakeTimer");
@@ -5522,9 +5876,19 @@ ${s.instructions.trim()}`);
         this.changed();
         return;
       }
-      this.ask(q, "voice");
+      this.ask(q, "voice", this.captureProvider ?? undefined);
     }
-    async ask(question, source) {
+    switchProvider(p, source) {
+      this.updateSettings({ provider: p });
+      const name = displayName(this.settings, p);
+      const hasKey = Boolean(keyFor(this.settings, p));
+      this.addLog("cmd", `Теперь отвечает ${name} (${source === "ui" ? "с телефона" : "голосом"})`);
+      if (source === "voice" || this.phase === "idle") {
+        this.flash(hasKey ? `Теперь отвечает ${name}.` : `Теперь отвечает ${name}.
+Нет ключа ${PROVIDERS[p].label} — добавьте в приложении.`, 3000);
+      }
+    }
+    async ask(question, source, providerOverride) {
       const q = question.trim();
       if (!q)
         return;
@@ -5538,15 +5902,17 @@ ${s.instructions.trim()}`);
       this.phase = "thinking";
       this.lastQuestion = q;
       this.lastError = "";
-      this.addLog("ask", `${source === "ui" ? "[с телефона] " : ""}${q}`);
-      if (!this.settings.apiKey) {
-        this.fail("Нет ключа OpenAI. Откройте приложение на телефоне и вставьте ключ.", seq);
+      const provider = providerOverride ?? asProvider(this.settings.provider);
+      const label = PROVIDERS[provider].label;
+      this.addLog("ask", `${source === "ui" ? "[с телефона] " : ""}${providerOverride ? `[${label}] ` : ""}${q}`);
+      if (!keyFor(this.settings, provider)) {
+        this.fail(explainLLMError(provider, 401, "no_key", ""), seq);
         return;
       }
       this.show(fitScreen(`» ${q}
-…думаю`));
+…${providerOverride || provider !== "openai" ? label + " " : ""}думает`));
       try {
-        const res = await askOpenAI(this.deps.fetch, this.settings, this.history, q, {
+        const res = await askLLM(this.deps.fetch, this.settings, provider, this.history, q, {
           setTimer: (fn, ms) => this.setTimer(fn, ms),
           now: this.now
         });
@@ -5555,9 +5921,10 @@ ${s.instructions.trim()}`);
           return;
         }
         const usage = res.usage ? `, токены ${res.usage.input_tokens ?? "?"}→${res.usage.output_tokens ?? "?"}` : "";
-        this.addLog("openai", `Ответ за ${(res.ms / 1000).toFixed(1)} с (${res.model}${usage})`);
+        this.addLog("openai", `${label}: ответ за ${(res.ms / 1000).toFixed(1)} с (${res.model}${usage})`);
         const at = this.now();
-        this.history.push({ role: "user", content: q, at }, { role: "assistant", content: res.text, at });
+        this.history.push({ role: "user", content: q, at }, { role: "assistant", content: res.text, at, by: provider });
+        this.lastProvider = provider;
         this.deps.store.saveHistory(this.history);
         this.lastAnswer = res.text;
         const clean = sanitizeForG1(res.text);
@@ -5581,7 +5948,7 @@ ${s.instructions.trim()}`);
         const err = e;
         const status = typeof err?.status === "number" ? err.status : 0;
         const code = String(err?.code ?? "");
-        const human = code === "timeout" ? "OpenAI не ответил вовремя. Повторите вопрос." : explainError(status, code, err?.message ?? "");
+        const human = explainLLMError(err?.provider ?? provider, status, code, err?.message ?? "");
         this.addLog("error", `${human} [${status} ${code}] ${String(err?.message ?? "").slice(0, 160)}`);
         this.fail(human, seq);
       }
@@ -5693,7 +6060,7 @@ To stop: «стоп перевод»`);
       }
     }
     onTranscriptWhileTranslating(t) {
-      const wake = detectWake(t, this.settings.wakeWords);
+      const wake = this.wake(t);
       const body = wake.matched ? wake.rest : t;
       const tcmd = parseTranslateCommand(body);
       if (tcmd === "stop") {
@@ -5710,6 +6077,7 @@ To stop: «стоп перевод»`);
       if (wake.matched && isMeaningful(body) && !cmd) {
         this.stopTranslation("question", false);
         this.startCapture(false);
+        this.captureProvider = aiForWakePhrase(wake.phrase);
         this.captureText(body, true);
       }
     }
@@ -5836,7 +6204,9 @@ To stop: «стоп перевод»`);
       }
     }
     snapshot() {
-      const key = this.settings.apiKey;
+      const hint = (k) => k ? `${k.slice(0, k.startsWith("sk-ant-") ? 7 : 3)}…${k.slice(-4)}` : "";
+      const provider = asProvider(this.settings.provider);
+      const key = keyFor(this.settings, provider);
       return {
         phase: this.phase,
         page: this.page,
@@ -5848,7 +6218,20 @@ To stop: «стоп перевод»`);
         lastAnswer: this.lastAnswer,
         lastError: this.lastError,
         glassesConnected: this.glassesConnected,
-        settings: { ...this.settings, apiKey: "", hasKey: Boolean(key), keyHint: key ? `${key.slice(0, 3)}…${key.slice(-4)}` : "" },
+        settings: {
+          ...this.settings,
+          apiKey: "",
+          anthropicKey: "",
+          geminiKey: "",
+          hasKey: Boolean(key),
+          keyHint: hint(key),
+          keys: {
+            openai: { has: Boolean(this.settings.apiKey), hint: hint(this.settings.apiKey) },
+            anthropic: { has: Boolean(this.settings.anthropicKey), hint: hint(this.settings.anthropicKey) },
+            gemini: { has: Boolean(this.settings.geminiKey), hint: hint(this.settings.geminiKey) }
+          },
+          aiName: displayName(this.settings, provider)
+        },
         historyCount: this.history.length,
         history: this.history.slice(-40),
         log: this.log.slice(-60)
@@ -5857,7 +6240,7 @@ To stop: «стоп перевод»`);
   }
 
   // src/background/index.ts
-  var APP_VERSION = "1.4.0";
+  var APP_VERSION = "1.5.0";
   function getKV() {
     try {
       const ls = globalThis.localStorage;
@@ -5969,7 +6352,9 @@ To stop: «стоп перевод»`);
     });
     session.ui.handle("command", (p) => {
       const cmd = String(p?.cmd ?? "");
-      if (cmd === "translate")
+      if (cmd === "provider")
+        assistant.switchProvider(asProvider(p?.provider), "ui");
+      else if (cmd === "translate")
         assistant.startTranslation("ui");
       else if (cmd === "translateStop")
         assistant.stopTranslation("ui");

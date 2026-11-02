@@ -61,6 +61,18 @@
 
 Аккаунт и память ChatGPT через API недоступны. Вместо этого используется поле «Обо мне». Можно спросить ChatGPT «Что ты обо мне помнишь? Выведи списком» и вставить ответ туда.
 
+## Нейросети: ChatGPT, Claude, Gemini
+
+В версии для Mentra (1.5.0+) ответ может давать любая из трёх нейросетей. Ключи хранятся только на телефоне, история разговора общая.
+
+| | Ключ | Модели | Цена |
+|---|---|---|---|
+| ChatGPT (OpenAI) | platform.openai.com → API keys | GPT‑6.1 Terra, 6 Luna, 6.1 Sol, 6 Astra | Terra ≈ $0.002–0.005 за вопрос |
+| Claude (Anthropic) | console.anthropic.com → API Keys | Haiku 5.5, Sonnet 5.5, Opus 5.5, Fable 5.1 | Haiku от $0.10/$0.50 за 1 млн токенов |
+| Gemini (Google) | aistudio.google.com → Get API key | 3.8 Flash, 3.5 Flash‑Lite, 4 Argon | у Flash есть бесплатный лимит |
+
+Голосом: «Клод, …», «Джемини, …», «Чат GPT, …» — спросить конкретную нейросеть; «Переключись на Клода» — сделать её основной.
+
 ## Структура
 
 - `ios-app/` — приложение на Flutter. Изменённые файлы: `lib/services/{evenai,openai_service,settings,g1_text}.dart`, `lib/ble_manager.dart`, `lib/views/home_page.dart`, `ios/Runner/{AppDelegate,BluetoothManager,SpeechStreamRecognizer}.swift`.

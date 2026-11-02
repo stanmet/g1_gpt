@@ -21,7 +21,16 @@ declare global {
   }
 }
 
-const KNOWN_MODELS = ["gpt-6.1-terra", "gpt-6-luna", "gpt-6.1-sol", "gpt-6-astra"]
+import {PROVIDERS, type Provider} from "../background/llm"
+
+const AI_FOOTER: Record<Provider, string> = {
+  openai: "GPT‑6.1 Terra отвечает быстро и стоит доли цента за вопрос. Sol и Astra умнее, но дороже.",
+  anthropic: "Haiku 5.5 — самый быстрый и недорогой Claude. Sonnet 5.5 и Opus 5.5 умнее, но дольше думают и стоят дороже.",
+  gemini: "3.8 Flash быстрый, у Google есть бесплатный лимит. Flash‑Lite ещё дешевле, 4 Argon — самый умный, только платно.",
+}
+const asP = (v: unknown): Provider => (v === "anthropic" || v === "gemini" ? v : "openai")
+let modelOptionsFor: Provider | null = null
+let sheetProvider: Provider = "openai"
 const TABS = ["glasses", "chat", "settings", "log"] as const
 type Tab = (typeof TABS)[number]
 
@@ -62,18 +71,28 @@ function previewBridge(): Bridge {
       autoAdvanceSec: 0,
       clearAfterSec: 90,
       translateTo: "ru-RU",
+      provider: "anthropic",
+      anthropicModel: "claude-haiku-5-5",
+      geminiModel: "gemini-3.8-flash",
       hasKey: true,
-      keyHint: "sk-…bl8A",
+      keyHint: "sk-ant-…x9Qa",
+      aiName: "Claude Haiku 5.5",
+      keys: {
+        openai: {has: true, hint: "sk-…bl8A"},
+        anthropic: {has: true, hint: "sk-ant-…x9Qa"},
+        gemini: {has: false, hint: ""},
+      },
     },
     historyCount: 4,
     history: [
       {role: "user", content: "Сколько лететь до Рима?", at: now - 120000},
-      {role: "assistant", content: "Из какого города вы вылетаете?", at: now - 118000},
+      {role: "assistant", content: "Из какого города вы вылетаете?", at: now - 118000, by: "openai"},
       {role: "user", content: "Из Дублина.", at: now - 90000},
       {
         role: "assistant",
         content: "Из Дублина до Рима около 3 ч прямым рейсом. Ryanair и Aer Lingus летают каждый день, билеты от 40 евро.",
         at: now - 88000,
+        by: "anthropic",
       },
     ],
     log: [
@@ -87,6 +106,7 @@ function previewBridge(): Bridge {
     ready() {},
     async request(channel: string, payload: any) {
       if (channel === "saveSettings") Object.assign(state.settings, payload ?? {})
+      if (channel === "command" && payload?.cmd === "provider") state.settings.provider = payload.provider
       if (channel === "command" && payload?.cmd === "translate") state.translating = true
       if (channel === "command" && payload?.cmd === "translateStop") state.translating = false
       return state
@@ -231,7 +251,14 @@ function renderGlasses(s: any, st: any) {
   document.querySelector<HTMLButtonElement>('.lens-toolbar [data-cmd="prev"]')!.disabled = !paging || s.page === 0
   document.querySelector<HTMLButtonElement>('.lens-toolbar [data-cmd="next"]')!.disabled = !paging || s.page >= s.pages - 1
 
+  const p = asP(st.provider)
+  const quick = $<HTMLSelectElement>("quickProvider")
+  if (document.activeElement !== quick) quick.value = p
+  $("aiName").textContent = st.aiName ?? PROVIDERS[p].label
+  $("aiIcon").className = `cell-icon ai-${p}`
   $("keyWarn").hidden = Boolean(st.hasKey)
+  $("keyWarnTitle").textContent = `Добавьте ключ ${PROVIDERS[p].label}`
+  $("keyWarnBtn").dataset.provider = p
 }
 
 function renderChat(s: any) {
@@ -253,6 +280,12 @@ function renderChat(s: any) {
     b.className = `bubble ${m.role === "user" ? "user" : "assistant"}`
     b.textContent = m.content
     chat.appendChild(b)
+    if (m.role === "assistant" && m.by) {
+      const by = document.createElement("div")
+      by.className = "bubble-by"
+      by.textContent = PROVIDERS[asP(m.by)].label
+      chat.appendChild(by)
+    }
   }
   if (s.phase === "thinking") {
     if (s.lastQuestion && !history.some((m) => m.role === "user" && m.content === s.lastQuestion && history.at(-1) === m)) {
@@ -298,10 +331,21 @@ function setStep(name: string, value: number) {
 }
 
 function renderSettings(s: any, st: any) {
-  const known = KNOWN_MODELS.includes(st.model)
-  setSelect("modelChoice", known ? st.model : "custom")
+  const p = asP(st.provider)
+  setSelect("provider", p)
+  fillModelOptions(p)
+  const model = String(st[PROVIDERS[p].modelField] ?? "")
+  const known = PROVIDERS[p].models.some((m) => m.id === model)
+  setSelect("modelChoice", known ? model : "custom")
   $("customModelCell").hidden = known
-  if (!known) setText("customModel", st.model ?? "")
+  if (!known) setText("customModel", model)
+  $("aiFooter").textContent = `${AI_FOOTER[p]} Поиск добавляет свежие факты, за него берут плату. Чем глубже размышления, тем дольше ответ.`
+  for (const id of ["openai", "anthropic", "gemini"] as Provider[]) {
+    const k = st.keys?.[id]
+    const el = document.querySelector<HTMLElement>(`[data-key-of="${id}"]`)!
+    el.textContent = k?.has ? k.hint || "Сохранён" : "Не задан"
+    el.style.color = k?.has || id !== p ? "" : "var(--red)"
+  }
   setSelect("effort", st.effort ?? "auto")
   const web = field<HTMLInputElement>("webSearch")
   if (document.activeElement !== web) web.checked = Boolean(st.webSearch)
@@ -317,11 +361,18 @@ function renderSettings(s: any, st: any) {
   setStep("autoAdvanceSec", st.autoAdvanceSec ?? 0)
   setStep("clearAfterSec", st.clearAfterSec ?? 90)
 
-  $("keyValue").textContent = st.hasKey ? st.keyHint || "Сохранён" : "Не задан"
-  $("keyValue").style.color = st.hasKey ? "" : "var(--red)"
-  $("keyState").textContent = st.hasKey ? `Сейчас сохранён ключ ${st.keyHint}. Вставьте новый, чтобы заменить.` : "Ключ пока не задан."
-  $("removeKeyGroup").hidden = !st.hasKey
+  if (!$("keySheet").hidden) fillKeySheet()
   $("versionText").textContent = s.version ? `Версия ${s.version}.` : ""
+}
+
+function fillModelOptions(p: Provider) {
+  if (modelOptionsFor === p) return
+  const sel = field<HTMLSelectElement>("modelChoice")
+  sel.textContent = ""
+  for (const m of PROVIDERS[p].models) sel.add(new Option(m.label, m.id))
+  sel.add(new Option("Другая…", "custom"))
+  field<HTMLInputElement>("customModel").placeholder = PROVIDERS[p].models[0].id
+  modelOptionsFor = p
 }
 
 function fmtTime(t: number) {
@@ -393,10 +444,15 @@ async function flushSave() {
   if (s) for (const k of Object.keys(patch)) dirty.delete(k)
 }
 
+function currentProvider(): Provider {
+  return asP(field<HTMLSelectElement>("provider").value || current?.settings?.provider)
+}
+
 function modelFromForm(): string {
+  const p = currentProvider()
   const choice = field<HTMLSelectElement>("modelChoice").value
   if (choice !== "custom") return choice
-  return field<HTMLInputElement>("customModel").value.trim() || current?.settings?.model || "gpt-6.1-terra"
+  return field<HTMLInputElement>("customModel").value.trim() || PROVIDERS[p].models[0].id
 }
 
 function wireSettings() {
@@ -407,6 +463,12 @@ function wireSettings() {
     const el = e.target as HTMLInputElement | HTMLSelectElement
     const name = el.name
     if (!name) return
+    if (name === "provider") {
+      const p = asP(el.value)
+      setSelect("provider", p)
+      queueSave({provider: p}, 0)
+      return
+    }
     if (name === "modelChoice") {
       const custom = el.value === "custom"
       $("customModelCell").hidden = !custom
@@ -415,7 +477,7 @@ function wireSettings() {
         field<HTMLInputElement>("customModel").focus()
         return
       }
-      queueSave({model: el.value}, 0)
+      queueSave({[PROVIDERS[currentProvider()].modelField]: el.value}, 0)
       return
     }
     if (name === "webSearch") return queueSave({webSearch: (el as HTMLInputElement).checked}, 0)
@@ -430,7 +492,7 @@ function wireSettings() {
     const name = el.name
     if (!name || el instanceof HTMLSelectElement || name === "webSearch") return
     dirty.add(name)
-    if (name === "customModel") return queueSave({model: modelFromForm()}, 800)
+    if (name === "customModel") return queueSave({[PROVIDERS[currentProvider()].modelField]: modelFromForm()}, 800)
     if (name === "wakeWords") {
       const words = el.value
         .split(",")
@@ -467,7 +529,27 @@ function wireSettings() {
 
 // ───────────────────────── key sheet ─────────────────────────
 
-function openKeySheet() {
+const KEY_DOMAIN: Record<Provider, string> = {openai: "api.openai.com", anthropic: "api.anthropic.com", gemini: "generativelanguage.googleapis.com"}
+const KEY_SHAPE: Record<Provider, RegExp> = {
+  openai: /^sk-[A-Za-z0-9_\-]{16,}$/,
+  anthropic: /^sk-ant-[A-Za-z0-9_\-]{16,}$/,
+  gemini: /^AIza[A-Za-z0-9_\-]{20,}$/,
+}
+
+function fillKeySheet() {
+  const p = sheetProvider
+  const info = PROVIDERS[p]
+  const k = current?.settings?.keys?.[p]
+  $("keySheetTitle").textContent = `Ключ ${info.label}`
+  $<HTMLInputElement>("apiKey").placeholder = info.keyPlaceholder
+  $("keyState").textContent = k?.has ? `Сейчас сохранён ключ ${k.hint}. Вставьте новый, чтобы заменить.` : "Ключ пока не задан."
+  $("keyHelp").textContent = `Где взять: ${info.keyWhere}. Ключ хранится только в этом приложении на телефоне и отправляется только в ${KEY_DOMAIN[p]}.`
+  $("removeKeyGroup").hidden = !k?.has
+}
+
+function openKeySheet(p?: Provider) {
+  sheetProvider = p ?? asP(current?.settings?.provider)
+  fillKeySheet()
   $("keySheet").hidden = false
   setTimeout(() => $<HTMLInputElement>("apiKey").focus(), 250)
 }
@@ -480,8 +562,9 @@ async function saveKey() {
   const input = $<HTMLInputElement>("apiKey")
   const key = input.value.trim()
   if (!key) return closeKeySheet()
-  if (!/^sk-[A-Za-z0-9_\-]{16,}$/.test(key) && !confirm("Это не похоже на ключ OpenAI — обычно он начинается с sk-. Сохранить всё равно?")) return
-  const s = await call("saveSettings", {apiKey: key})
+  const info = PROVIDERS[sheetProvider]
+  if (!KEY_SHAPE[sheetProvider].test(key) && !confirm(`Это не похоже на ключ ${info.label} — обычно он начинается с ${info.keyPlaceholder.replace("…", "")}. Сохранить всё равно?`)) return
+  const s = await call("saveSettings", {[info.keyField]: key})
   if (s) {
     closeKeySheet()
     toast("Ключ сохранён")
@@ -514,7 +597,14 @@ function wire() {
       }),
     )
 
-  document.querySelectorAll<HTMLElement>('[data-open="key"]').forEach((b) => b.addEventListener("click", openKeySheet))
+  document
+    .querySelectorAll<HTMLElement>('[data-open="key"]')
+    .forEach((b) => b.addEventListener("click", () => openKeySheet(b.dataset.provider ? asP(b.dataset.provider) : undefined)))
+
+  $<HTMLSelectElement>("quickProvider").addEventListener("change", (e) => {
+    const p = asP((e.target as HTMLSelectElement).value)
+    call("command", {cmd: "provider", provider: p})
+  })
   $("keySheet").addEventListener("click", (e) => {
     if (e.target === $("keySheet")) closeKeySheet()
   })
@@ -524,8 +614,9 @@ function wire() {
     if ((e as KeyboardEvent).key === "Enter") saveKey()
   })
   $("removeKey").addEventListener("click", async () => {
-    if (!confirm("Удалить ключ OpenAI с этого телефона?")) return
-    await call("saveSettings", {apiKey: ""})
+    const info = PROVIDERS[sheetProvider]
+    if (!confirm(`Удалить ключ ${info.label} с этого телефона?`)) return
+    await call("saveSettings", {[info.keyField]: ""})
     closeKeySheet()
     toast("Ключ удалён")
   })

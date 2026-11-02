@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light dark" />
     <title>GPT для G1</title>
     
-  <link rel="stylesheet" crossorigin href="./chunk-vkv2krxg.css"><script type="module" crossorigin src="./chunk-c4smaa7e.js"></script></head>
+  <link rel="stylesheet" crossorigin href="./chunk-we2pyjyt.css"><script type="module" crossorigin src="./chunk-7d5fr2wm.js"></script></head>
   <body>
     <!-- ───────────── Очки ───────────── -->
     <section class="screen" id="screen-glasses" aria-labelledby="t-glasses">
@@ -46,14 +46,30 @@
 
 
       <div class="group" id="keyWarn" hidden>
-        <button class="cell cell-link" data-open="key">
+        <button class="cell cell-link" data-open="key" id="keyWarnBtn">
           <span class="cell-icon tint-red">
             <svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="4" /><path d="M11 12l8-8M16 7l2 2M14 9l2 2" /></svg>
           </span>
-          <span class="cell-main"><span class="cell-title">Добавьте ключ OpenAI</span>
+          <span class="cell-main"><span class="cell-title" id="keyWarnTitle">Добавьте ключ</span>
             <span class="cell-sub">Без него помощник не сможет отвечать</span></span>
           <svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" /></svg>
         </button>
+      </div>
+
+      <div class="group ai-pick">
+        <label class="cell cell-link">
+          <span class="cell-icon" id="aiIcon">
+            <svg viewBox="0 0 24 24"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z" /><path d="M18 15l.8 2.2L21 18l-2.2.8L18 21l-.8-2.2L15 18l2.2-.8z" /></svg>
+          </span>
+          <span class="cell-main"><span class="cell-title">Отвечает</span>
+            <span class="cell-sub" id="aiName"></span></span>
+          <svg class="chev chev-ud" viewBox="0 0 24 24"><path d="M8 10l4-4 4 4M8 14l4 4 4-4" /></svg>
+          <select id="quickProvider" class="overlay-select" aria-label="Какая нейросеть отвечает">
+            <option value="openai">ChatGPT</option>
+            <option value="anthropic">Claude</option>
+            <option value="gemini">Gemini</option>
+          </select>
+        </label>
       </div>
 
       <h2 class="group-header" id="howHeader">Как говорить</h2>
@@ -78,6 +94,13 @@
           </span>
           <span class="cell-main"><span class="cell-title">Уточняйте как в разговоре</span>
             <span class="cell-sub">Помощник помнит прошлые вопросы. На встречный вопрос отвечайте сразу, без активатора. «Новый разговор» — начать заново.</span></span>
+        </div>
+        <div class="cell">
+          <span class="cell-icon tint-orange">
+            <svg viewBox="0 0 24 24"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z" /></svg>
+          </span>
+          <span class="cell-main"><span class="cell-title">«Клод, …», «Джемини, …», «Чат GPT, …»</span>
+            <span class="cell-sub">Спросить конкретную нейросеть. «Переключись на Клода» — сделать её основной.</span></span>
         </div>
         <div class="cell">
           <span class="cell-icon tint-indigo">
@@ -112,28 +135,27 @@
     <section class="screen" id="screen-settings" aria-labelledby="t-settings" hidden>
       <header class="large-title"><h1 id="t-settings">Настройки</h1></header>
       <form id="settingsForm" autocomplete="off">
-        <h2 class="group-header">OpenAI</h2>
+        <h2 class="group-header">Нейросеть</h2>
         <div class="group">
-          <button type="button" class="cell cell-link" data-open="key">
-            <span class="cell-title">Ключ API</span>
-            <span class="cell-value" id="keyValue">Не задан</span>
-            <svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" /></svg>
-          </button>
+          <label class="cell cell-link">
+            <span class="cell-title">Отвечает</span>
+            <span class="cell-value" data-value-of="provider"></span>
+            <svg class="chev chev-ud" viewBox="0 0 24 24"><path d="M8 10l4-4 4 4M8 14l4 4 4-4" /></svg>
+            <select name="provider" class="overlay-select">
+              <option value="openai">ChatGPT</option>
+              <option value="anthropic">Claude</option>
+              <option value="gemini">Gemini</option>
+            </select>
+          </label>
           <label class="cell cell-link">
             <span class="cell-title">Модель</span>
             <span class="cell-value" data-value-of="modelChoice"></span>
             <svg class="chev chev-ud" viewBox="0 0 24 24"><path d="M8 10l4-4 4 4M8 14l4 4 4-4" /></svg>
-            <select name="modelChoice" class="overlay-select">
-              <option value="gpt-6.1-terra">GPT‑6.1 Terra</option>
-              <option value="gpt-6-luna">GPT‑6 Luna</option>
-              <option value="gpt-6.1-sol">GPT‑6.1 Sol</option>
-              <option value="gpt-6-astra">GPT‑6 Astra</option>
-              <option value="custom">Другая…</option>
-            </select>
+            <select name="modelChoice" class="overlay-select"></select>
           </label>
           <label class="cell" id="customModelCell" hidden>
             <span class="cell-title">ID модели</span>
-            <input name="customModel" type="text" class="cell-input" placeholder="gpt-5.4-mini" autocapitalize="off" spellcheck="false" />
+            <input name="customModel" type="text" class="cell-input" autocapitalize="off" spellcheck="false" />
           </label>
           <label class="cell cell-link">
             <span class="cell-title">Размышления</span>
@@ -152,7 +174,27 @@
             <input name="webSearch" type="checkbox" class="switch" />
           </label>
         </div>
-        <p class="group-footer">Terra отвечает быстро и стоит доли цента за вопрос. Поиск добавляет свежие факты, $0.01 за каждый поиск. Чем глубже размышления, тем дольше ответ.</p>
+        <p class="group-footer" id="aiFooter"></p>
+
+        <h2 class="group-header">Ключи API</h2>
+        <div class="group">
+          <button type="button" class="cell cell-link" data-open="key" data-provider="openai">
+            <span class="cell-title">ChatGPT</span>
+            <span class="cell-value" data-key-of="openai">Не задан</span>
+            <svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" /></svg>
+          </button>
+          <button type="button" class="cell cell-link" data-open="key" data-provider="anthropic">
+            <span class="cell-title">Claude</span>
+            <span class="cell-value" data-key-of="anthropic">Не задан</span>
+            <svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" /></svg>
+          </button>
+          <button type="button" class="cell cell-link" data-open="key" data-provider="gemini">
+            <span class="cell-title">Gemini</span>
+            <span class="cell-value" data-key-of="gemini">Не задан</span>
+            <svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" /></svg>
+          </button>
+        </div>
+        <p class="group-footer">Ключ нужен только для тех нейросетей, которыми пользуетесь. Ключи хранятся только на этом телефоне.</p>
 
         <h2 class="group-header">Ответы</h2>
         <div class="group">
@@ -305,7 +347,7 @@
       <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="keySheetTitle">
         <div class="sheet-bar">
           <button class="nav-action plain" data-close>Отмена</button>
-          <h2 id="keySheetTitle">Ключ OpenAI</h2>
+          <h2 id="keySheetTitle">Ключ</h2>
           <button class="nav-action strong" id="saveKey">Готово</button>
         </div>
         <p class="sheet-note" id="keyState">Ключ не задан.</p>
@@ -314,7 +356,7 @@
             <input id="apiKey" type="password" class="cell-input full" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-…" aria-label="Ключ API" />
           </label>
         </div>
-        <p class="group-footer">Создайте ключ на platform.openai.com в разделе API keys и вставьте сюда. Ключ хранится только в этом приложении на телефоне и отправляется только в api.openai.com.</p>
+        <p class="group-footer" id="keyHelp"></p>
         <div class="group sheet-danger" id="removeKeyGroup">
           <button class="cell cell-center destructive" id="removeKey">Удалить ключ</button>
         </div>
