@@ -320,6 +320,66 @@ describe("counter-question from the assistant", () => {
   })
 })
 
+describe("answer language follows the question", () => {
+  test("English after the Russian wake word → English instruction and footer", async () => {
+    const long = "Tokyo is 9 hours ahead of Dublin, so it is evening there now. ".repeat(8)
+    const e = setup([long])
+    e.a.onTranscript("Вопрос, what time is it in Tokyo right now?", true)
+    await e.clock.advance(SILENCE_MS + 10)
+    expect(e.requests[0].body.input.at(-1).content).toBe("what time is it in Tokyo right now?")
+    expect(e.requests[0].body.instructions).toContain("Answer in English")
+    expect(e.a.pages[0].split("\n").at(-1)).toMatch(/· next$/)
+    e.a.onTranscript("Next.", true)
+    expect(e.a.page).toBe(1)
+  })
+
+  test("Russian question → Russian instruction, even with English terms", async () => {
+    const e = setup(["Это система оркестрации контейнеров."])
+    e.a.onTranscript("Вопрос, что такое Kubernetes и зачем он нужен?", true)
+    await e.clock.advance(SILENCE_MS + 10)
+    expect(e.requests[0].body.instructions).toContain("Последний вопрос задан по-русски")
+    expect(e.requests[0].body.instructions).not.toContain("Answer in English")
+  })
+
+  test("English wake word 'Question' works too", async () => {
+    const e = setup(["Canberra."])
+    e.a.onTranscript("Question, what is the capital of Australia?", true)
+    await e.clock.advance(SILENCE_MS + 10)
+    expect(e.requests.length).toBe(1)
+    expect(e.requests[0].body.input.at(-1).content).toBe("what is the capital of Australia?")
+  })
+
+  test("English counter-question shows English reply hint", async () => {
+    const e = setup(["Which city are you flying from?", "About 2 h 50 min."])
+    e.a.onTranscript("Вопрос, how long is the flight to Rome?", true)
+    await e.clock.advance(SILENCE_MS + 10)
+    expect(e.shown.at(-1)).toContain("reply by voice")
+    e.a.onTranscript("From Dublin.", true)
+    await e.clock.advance(SILENCE_MS + 10)
+    expect(e.requests.length).toBe(2)
+  })
+})
+
+describe("settings migration", () => {
+  test("v1 settings (Russian-only STT, old wake words) upgrade to bilingual", () => {
+    const kv = new MemKV()
+    const old = {...DEFAULT_SETTINGS, apiKey: "sk-x", sttLanguage: "ru-RU", v: undefined,
+      wakeWords: ["вопрос", "ассистент", "джипити", "чат джипити", "чат gpt", "chat gpt", "chatgpt", "гпт"]}
+    kv.setItem("g1gpt.settings.v1", JSON.stringify(old))
+    const s = new Store(kv).loadSettings()
+    expect(s.sttLanguage).toBe("auto")
+    expect(s.wakeWords).toContain("question")
+    expect(s.apiKey).toBe("sk-x")
+    expect(s.v).toBe(2)
+  })
+
+  test("a deliberate 'Russian only' choice in v2 is kept", () => {
+    const kv = new MemKV()
+    kv.setItem("g1gpt.settings.v1", JSON.stringify({...DEFAULT_SETTINGS, sttLanguage: "ru-RU", v: 2}))
+    expect(new Store(kv).loadSettings().sttLanguage).toBe("ru-RU")
+  })
+})
+
 describe("errors are explained on the glasses", () => {
   test("no key", async () => {
     const e = setup([], {apiKey: ""})

@@ -92,7 +92,7 @@ registerMiniapp((session: any) => {
     try {
       unsubscribeStt =
         s.sttLanguage === "auto" ? session.transcription.on(handler) : session.transcription.forLanguage("ru-RU", handler)
-      assistant.addLog("info", `Слушаю (${s.sttLanguage === "auto" ? "автоопределение языка" : "русский"})`)
+      assistant.addLog("info", `Слушаю (${s.sttLanguage === "auto" ? "русский + английский" : "только русский"})`)
     } catch (e) {
       assistant.addLog("error", `Не удалось включить распознавание: ${String((e as Error)?.message ?? e)}`)
     }

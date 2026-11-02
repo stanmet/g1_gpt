@@ -155,6 +155,13 @@ export function wrapLines(text: string, maxPx: number = G1_LINE_PX): string[] {
 export interface PaginateOptions {
   linesPerScreen?: number
   maxPx?: number
+  /** Language of the footer hints ("дальше" / "next"). */
+  lang?: "ru" | "en"
+}
+
+const FOOTER = {
+  ru: {next: "дальше", last: "назад · сначала"},
+  en: {next: "next", last: "back · first page"},
 }
 
 /**
@@ -173,7 +180,8 @@ export function paginate(text: string, opts: PaginateOptions = {}): string[] {
   const pages: string[] = []
   for (let i = 0; i < total; i++) {
     const chunk = lines.slice(i * perPage, (i + 1) * perPage)
-    const hint = i === total - 1 ? (total > 1 ? "назад · сначала" : "") : "дальше"
+    const words = FOOTER[opts.lang ?? "ru"]
+    const hint = i === total - 1 ? words.last : words.next
     const footer = `${i + 1}/${total} · ${hint}`
     pages.push([...chunk, footer].join("\n"))
   }

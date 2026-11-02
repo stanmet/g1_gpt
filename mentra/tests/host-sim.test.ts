@@ -99,7 +99,10 @@ test("built bundle: G1 transcript → OpenAI → render, follow-up keeps context
   // handshake + subscriptions
   expect(h.sent[0].payload.type).toBe("miniapp_connect")
   const subs = h.sent.filter((e) => e.payload.type === "miniapp_subscribe").at(-1)!.payload.subscriptions
-  expect(subs).toContain("transcription:ru-RU")
+  // bilingual recognition: auto-detect with Russian + English hints
+  expect(subs).toContain("transcription:auto")
+  const cfg = h.sent.find((e) => e.payload.type === "miniapp_transcription_config")
+  expect(cfg?.payload.config.languageHints).toEqual(["ru", "en"])
 
   // phone UI: save the API key (RPC over the _ui stream)
   h.ev("_ui", {type: "UI_OPEN"})

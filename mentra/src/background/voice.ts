@@ -15,7 +15,7 @@ export function normalize(s: string): string {
 }
 
 /** Words people often say before the wake phrase. */
-const LEAD_INS = new Set(["эй", "ну", "окей", "ок", "хей", "алло", "так", "слушай", "hey", "ok", "okay"])
+const LEAD_INS = new Set(["эй", "ну", "окей", "ок", "хей", "алло", "так", "слушай", "hey", "ok", "okay", "so", "um", "uh"])
 
 export interface WakeResult {
   matched: boolean
@@ -82,13 +82,17 @@ export function detectWake(text: string, wakePhrases: string[]): WakeResult {
 export type VoiceCommand = "next" | "prev" | "first" | "repeat" | "hide" | "cancel" | "reset"
 
 const COMMANDS: [VoiceCommand, string[]][] = [
-  ["next", ["дальше", "далее", "следующая", "следующий", "следующая страница", "листай", "вперед", "еще", "продолжай", "next"]],
-  ["prev", ["назад", "предыдущая", "предыдущий", "предыдущая страница", "обратно", "back"]],
-  ["first", ["сначала", "с начала", "в начало", "первая страница", "к началу"]],
-  ["repeat", ["повтори", "покажи снова", "покажи еще раз", "покажи ответ", "еще раз"]],
-  ["hide", ["скрой", "скрыть", "убери", "убрать", "закрой", "закрыть", "спрячь", "очисти", "хватит", "достаточно"]],
-  ["cancel", ["стоп", "отмена", "отмени", "отменить", "не надо"]],
-  ["reset", ["новый разговор", "новый чат", "начни заново", "забудь разговор", "сбрось контекст", "очисти историю", "новая тема"]],
+  ["next", ["дальше", "далее", "следующая", "следующий", "следующая страница", "листай", "вперед", "еще", "продолжай",
+    "next", "next page", "continue", "go on", "more"]],
+  ["prev", ["назад", "предыдущая", "предыдущий", "предыдущая страница", "обратно",
+    "back", "go back", "previous", "previous page"]],
+  ["first", ["сначала", "с начала", "в начало", "первая страница", "к началу", "first page", "from the start", "from the beginning"]],
+  ["repeat", ["повтори", "покажи снова", "покажи еще раз", "покажи ответ", "еще раз", "repeat", "again", "show again"]],
+  ["hide", ["скрой", "скрыть", "убери", "убрать", "закрой", "закрыть", "спрячь", "очисти", "хватит", "достаточно",
+    "hide", "close", "clear", "dismiss"]],
+  ["cancel", ["стоп", "отмена", "отмени", "отменить", "не надо", "stop", "cancel", "never mind", "nevermind"]],
+  ["reset", ["новый разговор", "новый чат", "начни заново", "забудь разговор", "сбрось контекст", "очисти историю", "новая тема",
+    "new conversation", "new chat", "new topic", "start over", "reset", "forget it"]],
 ]
 
 const COMMAND_LOOKUP = new Map<string, VoiceCommand>()
@@ -101,7 +105,9 @@ for (const [cmd, phrases] of COMMANDS) for (const p of phrases) COMMAND_LOOKUP.s
 export function parseCommand(text: string): VoiceCommand | null {
   let n = normalize(text)
   if (!n) return null
-  n = n.replace(/^(пожалуйста|ну|так|давай|а)\s+/, "").replace(/\s+(пожалуйста|давай)$/, "")
+  n = n
+    .replace(/^(пожалуйста|ну|так|давай|а|please|ok|okay)\s+/, "")
+    .replace(/\s+(пожалуйста|давай|please)$/, "")
   const words = n.split(" ")
   if (words.length > 4) return null
   return COMMAND_LOOKUP.get(n) ?? null
@@ -111,4 +117,24 @@ export function parseCommand(text: string): VoiceCommand | null {
 export function isMeaningful(text: string): boolean {
   const n = normalize(text)
   return n.replace(/\s/g, "").length >= 3
+}
+
+export type Lang = "ru" | "en"
+
+/**
+ * Language of a question or answer by its letters: mostly Latin → English,
+ * otherwise Russian. "Что такое Kubernetes?" stays Russian; "What is the time in Moscow" is English.
+ */
+export function detectLang(text: string): Lang {
+  // Count words, not letters: one long English term must not flip a Russian sentence.
+  let cyr = 0
+  let lat = 0
+  for (const word of String(text ?? "").split(/\s+/)) {
+    const c = (word.match(/[а-яё]/gi) ?? []).length
+    const l = (word.match(/[a-z]/gi) ?? []).length
+    if (c === 0 && l === 0) continue
+    if (c >= l) cyr++
+    else lat++
+  }
+  return lat > cyr ? "en" : "ru"
 }

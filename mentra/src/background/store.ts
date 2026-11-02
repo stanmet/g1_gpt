@@ -22,7 +22,13 @@ export interface Settings {
   clearAfterSec: number
   /** Seconds after an answer during which a question needs no wake phrase; 0 = off. */
   followUpSec: number
+  /** Settings schema version, for one-time migrations of stored settings. */
+  v: number
 }
+
+export const SETTINGS_VERSION = 2
+
+const OLD_DEFAULT_WAKE = ["вопрос", "ассистент", "джипити", "чат джипити", "чат gpt", "chat gpt", "chatgpt", "гпт"]
 
 export const DEFAULT_SETTINGS: Settings = {
   apiKey: "",
@@ -30,15 +36,33 @@ export const DEFAULT_SETTINGS: Settings = {
   effort: "auto",
   aboutMe: "",
   instructions: "",
-  wakeWords: ["вопрос", "ассистент", "джипити", "чат джипити", "чат gpt", "chat gpt", "chatgpt", "гпт"],
+  wakeWords: ["вопрос", "ассистент", "джипити", "чат джипити", "чат gpt", "chat gpt", "chatgpt", "гпт", "question"],
   listenMode: "wake",
-  sttLanguage: "ru-RU",
+  // Russian + English with automatic detection, so questions in either language are recognized.
+  sttLanguage: "auto",
   answerWords: 60,
   historyMessages: 20,
   webSearch: false,
   autoAdvanceSec: 0,
   clearAfterSec: 90,
   followUpSec: 0,
+  v: SETTINGS_VERSION,
+}
+
+/** One-time upgrades of settings saved by older versions. */
+export function migrateSettings(raw: Partial<Settings> | null | undefined): Partial<Settings> | null | undefined {
+  if (!raw) return raw
+  const r: Partial<Settings> = {...raw}
+  if ((r.v ?? 1) < 2) {
+    // v1 defaulted to Russian-only recognition; v2 understands English questions too.
+    if (r.sttLanguage === "ru-RU" || r.sttLanguage === undefined) r.sttLanguage = "auto"
+    const wake = Array.isArray(r.wakeWords) ? r.wakeWords : null
+    if (wake && wake.length === OLD_DEFAULT_WAKE.length && wake.every((w, i) => w === OLD_DEFAULT_WAKE[i])) {
+      r.wakeWords = [...wake, "question"]
+    }
+  }
+  r.v = SETTINGS_VERSION
+  return r
 }
 
 export interface Message {
@@ -81,13 +105,14 @@ export function normalizeSettings(raw: Partial<Settings> | null | undefined, bas
     instructions: String(pick("instructions") ?? "").slice(0, 4000),
     wakeWords: wakeWords.length ? wakeWords : DEFAULT_SETTINGS.wakeWords,
     listenMode: (["wake", "always", "off"] as ListenMode[]).includes(listenMode) ? listenMode : "wake",
-    sttLanguage: stt === "auto" ? "auto" : "ru-RU",
+    sttLanguage: stt === "ru-RU" ? "ru-RU" : "auto",
     answerWords: clampInt(pick("answerWords"), 15, 400, DEFAULT_SETTINGS.answerWords),
     historyMessages: clampInt(pick("historyMessages"), 0, 60, DEFAULT_SETTINGS.historyMessages),
     webSearch: Boolean(pick("webSearch")),
     autoAdvanceSec: clampInt(pick("autoAdvanceSec"), 0, 60, 0),
     clearAfterSec: clampInt(pick("clearAfterSec"), 0, 3600, DEFAULT_SETTINGS.clearAfterSec),
     followUpSec: clampInt(pick("followUpSec"), 0, 120, 0),
+    v: SETTINGS_VERSION,
   }
 }
 
@@ -112,7 +137,7 @@ export class Store {
   }
 
   loadSettings(): Settings {
-    return normalizeSettings(this.read<Partial<Settings>>(SETTINGS_KEY))
+    return normalizeSettings(migrateSettings(this.read<Partial<Settings>>(SETTINGS_KEY)))
   }
 
   saveSettings(s: Settings): void {

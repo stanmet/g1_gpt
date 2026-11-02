@@ -4676,6 +4676,10 @@
     }
     return lines;
   }
+  var FOOTER = {
+    ru: { next: "дальше", last: "назад · сначала" },
+    en: { next: "next", last: "back · first page" }
+  };
   function paginate(text, opts = {}) {
     const linesPerScreen = opts.linesPerScreen ?? G1_LINES;
     const maxPx = opts.maxPx ?? G1_LINE_PX;
@@ -4690,7 +4694,8 @@
     const pages = [];
     for (let i = 0;i < total; i++) {
       const chunk = lines.slice(i * perPage, (i + 1) * perPage);
-      const hint = i === total - 1 ? total > 1 ? "назад · сначала" : "" : "дальше";
+      const words = FOOTER[opts.lang ?? "ru"];
+      const hint = i === total - 1 ? words.last : words.next;
       const footer = `${i + 1}/${total} · ${hint}`;
       pages.push([...chunk, footer].join(`
 `));
@@ -4708,6 +4713,143 @@
 `);
   }
 
+  // src/background/voice.ts
+  function normalize(s) {
+    return String(s ?? "").toLowerCase().replace(/ё/g, "е").replace(/[^\p{L}\p{N}\s-]/gu, " ").replace(/-/g, " ").replace(/\s+/g, " ").trim();
+  }
+  var LEAD_INS = new Set(["эй", "ну", "окей", "ок", "хей", "алло", "так", "слушай", "hey", "ok", "okay", "so", "um", "uh"]);
+  function tokenize(text) {
+    return String(text ?? "").split(/\s+/).filter(Boolean).map((orig) => ({ orig, norm: normalize(orig) })).flatMap((t) => {
+      const parts = t.norm.split(" ").filter(Boolean);
+      if (parts.length <= 1)
+        return [{ orig: t.orig, norm: t.norm }];
+      return parts.map((p, i) => ({ orig: i === parts.length - 1 ? t.orig : "", norm: p }));
+    }).filter((t) => t.norm.length > 0);
+  }
+  function detectWake(text, wakePhrases) {
+    const tokens = tokenize(text);
+    const phrases = wakePhrases.map((p) => normalize(p).split(" ").filter(Boolean)).filter((p) => p.length > 0).sort((a, b) => b.length - a.length);
+    let start = 0;
+    while (start < tokens.length && start < 2 && LEAD_INS.has(tokens[start].norm))
+      start++;
+    for (let offset = start;offset <= Math.min(start + 1, tokens.length - 1); offset++) {
+      for (const phrase of phrases) {
+        if (offset + phrase.length > tokens.length)
+          continue;
+        let ok = true;
+        for (let j = 0;j < phrase.length; j++) {
+          if (tokens[offset + j].norm !== phrase[j]) {
+            ok = false;
+            break;
+          }
+        }
+        if (ok) {
+          const rest = tokens.slice(offset + phrase.length).map((t) => t.orig).filter(Boolean).join(" ").replace(/^[\s,.:;!?—–-]+/, "").trim();
+          return { matched: true, rest };
+        }
+      }
+      if (offset > start)
+        break;
+    }
+    return { matched: false, rest: "" };
+  }
+  var COMMANDS = [
+    ["next", [
+      "дальше",
+      "далее",
+      "следующая",
+      "следующий",
+      "следующая страница",
+      "листай",
+      "вперед",
+      "еще",
+      "продолжай",
+      "next",
+      "next page",
+      "continue",
+      "go on",
+      "more"
+    ]],
+    ["prev", [
+      "назад",
+      "предыдущая",
+      "предыдущий",
+      "предыдущая страница",
+      "обратно",
+      "back",
+      "go back",
+      "previous",
+      "previous page"
+    ]],
+    ["first", ["сначала", "с начала", "в начало", "первая страница", "к началу", "first page", "from the start", "from the beginning"]],
+    ["repeat", ["повтори", "покажи снова", "покажи еще раз", "покажи ответ", "еще раз", "repeat", "again", "show again"]],
+    ["hide", [
+      "скрой",
+      "скрыть",
+      "убери",
+      "убрать",
+      "закрой",
+      "закрыть",
+      "спрячь",
+      "очисти",
+      "хватит",
+      "достаточно",
+      "hide",
+      "close",
+      "clear",
+      "dismiss"
+    ]],
+    ["cancel", ["стоп", "отмена", "отмени", "отменить", "не надо", "stop", "cancel", "never mind", "nevermind"]],
+    ["reset", [
+      "новый разговор",
+      "новый чат",
+      "начни заново",
+      "забудь разговор",
+      "сбрось контекст",
+      "очисти историю",
+      "новая тема",
+      "new conversation",
+      "new chat",
+      "new topic",
+      "start over",
+      "reset",
+      "forget it"
+    ]]
+  ];
+  var COMMAND_LOOKUP = new Map;
+  for (const [cmd, phrases] of COMMANDS)
+    for (const p of phrases)
+      COMMAND_LOOKUP.set(normalize(p), cmd);
+  function parseCommand(text) {
+    let n = normalize(text);
+    if (!n)
+      return null;
+    n = n.replace(/^(пожалуйста|ну|так|давай|а|please|ok|okay)\s+/, "").replace(/\s+(пожалуйста|давай|please)$/, "");
+    const words = n.split(" ");
+    if (words.length > 4)
+      return null;
+    return COMMAND_LOOKUP.get(n) ?? null;
+  }
+  function isMeaningful(text) {
+    const n = normalize(text);
+    return n.replace(/\s/g, "").length >= 3;
+  }
+  function detectLang(text) {
+    let cyr = 0;
+    let lat = 0;
+    for (const word of String(text ?? "").split(/\s+/)) {
+      const c = (word.match(/[а-яё]/gi) ?? []).length;
+      const l = (word.match(/[a-z]/gi) ?? []).length;
+      if (c === 0 && l === 0)
+        continue;
+      if (c >= l)
+        cyr++;
+      else
+        lat++;
+    }
+    return lat > cyr ? "en" : "ru";
+  }
+
   // src/background/openai.ts
   var OPENAI_URL = "https://api.openai.com/v1/responses";
   function pad(n) {
@@ -4720,10 +4862,10 @@
     const tz = `UTC${sign}${pad(Math.floor(Math.abs(off) / 60))}:${pad(Math.abs(off) % 60)}`;
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())} (${days[d.getDay()]}, ${tz})`;
   }
-  function buildInstructions(s, now = new Date) {
+  function buildInstructions(s, now = new Date, questionLang = "ru") {
     const parts = [
       "Ты — голосовой помощник. Твои ответы показываются на крошечном дисплее умных очков Even Realities G1: 5 строк примерно по 30 символов, монохромный текст. Пользователь не видит телефон.",
-      "Отвечай по-русски, если пользователь явно не попросил другой язык.",
+      "Отвечай на том же языке, на котором задан последний вопрос: на русский вопрос — по-русски, на английский — по-английски (English question → answer in English). Если пользователь прямо попросил другой язык — используй его.",
       "Пиши обычным текстом без Markdown: без заголовков, звёздочек, таблиц, ссылок, эмодзи и блоков кода.",
       `Начинай сразу с сути, без вступлений и повторения вопроса. По умолчанию уложись примерно в ${s.answerWords} слов. Если пользователь просит подробнее или вопрос этого требует — можно длиннее, короткими абзацами.`,
       "Списки оформляй короткими строками, каждая начинается с «• ». Числа пиши цифрами.",
@@ -4738,6 +4880,7 @@ ${s.aboutMe.trim()}`);
     if (s.instructions.trim())
       parts.push(`Дополнительные пожелания пользователя:
 ${s.instructions.trim()}`);
+    parts.push(questionLang === "en" ? "The latest question was asked in English. Answer in English (unless the user explicitly asks for another language)." : "Последний вопрос задан по-русски — отвечай по-русски (если пользователь прямо не попросил другой язык).");
     return parts.join(`
 
 `);
@@ -4760,7 +4903,7 @@ ${s.instructions.trim()}`);
     ];
     const body = {
       model: s.model,
-      instructions: buildInstructions(s, opts.now),
+      instructions: buildInstructions(s, opts.now, detectLang(question)),
       input,
       store: false,
       max_output_tokens: Math.min(8000, Math.max(600, s.answerWords * 12))
@@ -4884,22 +5027,40 @@ ${s.instructions.trim()}`);
   }
 
   // src/background/store.ts
+  var SETTINGS_VERSION = 2;
+  var OLD_DEFAULT_WAKE = ["вопрос", "ассистент", "джипити", "чат джипити", "чат gpt", "chat gpt", "chatgpt", "гпт"];
   var DEFAULT_SETTINGS = {
     apiKey: "",
     model: "gpt-6.1-terra",
     effort: "auto",
     aboutMe: "",
     instructions: "",
-    wakeWords: ["вопрос", "ассистент", "джипити", "чат джипити", "чат gpt", "chat gpt", "chatgpt", "гпт"],
+    wakeWords: ["вопрос", "ассистент", "джипити", "чат джипити", "чат gpt", "chat gpt", "chatgpt", "гпт", "question"],
     listenMode: "wake",
-    sttLanguage: "ru-RU",
+    sttLanguage: "auto",
     answerWords: 60,
     historyMessages: 20,
     webSearch: false,
     autoAdvanceSec: 0,
     clearAfterSec: 90,
-    followUpSec: 0
+    followUpSec: 0,
+    v: SETTINGS_VERSION
   };
+  function migrateSettings(raw) {
+    if (!raw)
+      return raw;
+    const r = { ...raw };
+    if ((r.v ?? 1) < 2) {
+      if (r.sttLanguage === "ru-RU" || r.sttLanguage === undefined)
+        r.sttLanguage = "auto";
+      const wake = Array.isArray(r.wakeWords) ? r.wakeWords : null;
+      if (wake && wake.length === OLD_DEFAULT_WAKE.length && wake.every((w, i) => w === OLD_DEFAULT_WAKE[i])) {
+        r.wakeWords = [...wake, "question"];
+      }
+    }
+    r.v = SETTINGS_VERSION;
+    return r;
+  }
   var SETTINGS_KEY = "g1gpt.settings.v1";
   var HISTORY_KEY = "g1gpt.history.v1";
   function clampInt(v, min, max, dflt) {
@@ -4924,13 +5085,14 @@ ${s.instructions.trim()}`);
       instructions: String(pick("instructions") ?? "").slice(0, 4000),
       wakeWords: wakeWords.length ? wakeWords : DEFAULT_SETTINGS.wakeWords,
       listenMode: ["wake", "always", "off"].includes(listenMode) ? listenMode : "wake",
-      sttLanguage: stt === "auto" ? "auto" : "ru-RU",
+      sttLanguage: stt === "ru-RU" ? "ru-RU" : "auto",
       answerWords: clampInt(pick("answerWords"), 15, 400, DEFAULT_SETTINGS.answerWords),
       historyMessages: clampInt(pick("historyMessages"), 0, 60, DEFAULT_SETTINGS.historyMessages),
       webSearch: Boolean(pick("webSearch")),
       autoAdvanceSec: clampInt(pick("autoAdvanceSec"), 0, 60, 0),
       clearAfterSec: clampInt(pick("clearAfterSec"), 0, 3600, DEFAULT_SETTINGS.clearAfterSec),
-      followUpSec: clampInt(pick("followUpSec"), 0, 120, 0)
+      followUpSec: clampInt(pick("followUpSec"), 0, 120, 0),
+      v: SETTINGS_VERSION
     };
   }
 
@@ -4953,7 +5115,7 @@ ${s.instructions.trim()}`);
       } catch {}
     }
     loadSettings() {
-      return normalizeSettings(this.read(SETTINGS_KEY));
+      return normalizeSettings(migrateSettings(this.read(SETTINGS_KEY)));
     }
     saveSettings(s) {
       this.write(SETTINGS_KEY, s);
@@ -4965,74 +5127,6 @@ ${s.instructions.trim()}`);
     saveHistory(h) {
       this.write(HISTORY_KEY, h.slice(-200));
     }
-  }
-
-  // src/background/voice.ts
-  function normalize(s) {
-    return String(s ?? "").toLowerCase().replace(/ё/g, "е").replace(/[^\p{L}\p{N}\s-]/gu, " ").replace(/-/g, " ").replace(/\s+/g, " ").trim();
-  }
-  var LEAD_INS = new Set(["эй", "ну", "окей", "ок", "хей", "алло", "так", "слушай", "hey", "ok", "okay"]);
-  function tokenize(text) {
-    return String(text ?? "").split(/\s+/).filter(Boolean).map((orig) => ({ orig, norm: normalize(orig) })).flatMap((t) => {
-      const parts = t.norm.split(" ").filter(Boolean);
-      if (parts.length <= 1)
-        return [{ orig: t.orig, norm: t.norm }];
-      return parts.map((p, i) => ({ orig: i === parts.length - 1 ? t.orig : "", norm: p }));
-    }).filter((t) => t.norm.length > 0);
-  }
-  function detectWake(text, wakePhrases) {
-    const tokens = tokenize(text);
-    const phrases = wakePhrases.map((p) => normalize(p).split(" ").filter(Boolean)).filter((p) => p.length > 0).sort((a, b) => b.length - a.length);
-    let start = 0;
-    while (start < tokens.length && start < 2 && LEAD_INS.has(tokens[start].norm))
-      start++;
-    for (let offset = start;offset <= Math.min(start + 1, tokens.length - 1); offset++) {
-      for (const phrase of phrases) {
-        if (offset + phrase.length > tokens.length)
-          continue;
-        let ok = true;
-        for (let j = 0;j < phrase.length; j++) {
-          if (tokens[offset + j].norm !== phrase[j]) {
-            ok = false;
-            break;
-          }
-        }
-        if (ok) {
-          const rest = tokens.slice(offset + phrase.length).map((t) => t.orig).filter(Boolean).join(" ").replace(/^[\s,.:;!?—–-]+/, "").trim();
-          return { matched: true, rest };
-        }
-      }
-      if (offset > start)
-        break;
-    }
-    return { matched: false, rest: "" };
-  }
-  var COMMANDS = [
-    ["next", ["дальше", "далее", "следующая", "следующий", "следующая страница", "листай", "вперед", "еще", "продолжай", "next"]],
-    ["prev", ["назад", "предыдущая", "предыдущий", "предыдущая страница", "обратно", "back"]],
-    ["first", ["сначала", "с начала", "в начало", "первая страница", "к началу"]],
-    ["repeat", ["повтори", "покажи снова", "покажи еще раз", "покажи ответ", "еще раз"]],
-    ["hide", ["скрой", "скрыть", "убери", "убрать", "закрой", "закрыть", "спрячь", "очисти", "хватит", "достаточно"]],
-    ["cancel", ["стоп", "отмена", "отмени", "отменить", "не надо"]],
-    ["reset", ["новый разговор", "новый чат", "начни заново", "забудь разговор", "сбрось контекст", "очисти историю", "новая тема"]]
-  ];
-  var COMMAND_LOOKUP = new Map;
-  for (const [cmd, phrases] of COMMANDS)
-    for (const p of phrases)
-      COMMAND_LOOKUP.set(normalize(p), cmd);
-  function parseCommand(text) {
-    let n = normalize(text);
-    if (!n)
-      return null;
-    n = n.replace(/^(пожалуйста|ну|так|давай|а)\s+/, "").replace(/\s+(пожалуйста|давай)$/, "");
-    const words = n.split(" ");
-    if (words.length > 4)
-      return null;
-    return COMMAND_LOOKUP.get(n) ?? null;
-  }
-  function isMeaningful(text) {
-    const n = normalize(text);
-    return n.replace(/\s/g, "").length >= 3;
   }
 
   // src/background/assistant.ts
@@ -5347,8 +5441,11 @@ ${s.instructions.trim()}`);
         this.lastAnswer = res.text;
         const clean = sanitizeForG1(res.text);
         const asksBack = endsWithQuestion(clean);
-        this.pages = paginate(clean.length ? clean + (asksBack ? `
-» ответьте голосом` : "") : "(пустой ответ)");
+        const lang = detectLang(clean);
+        const replyHint = lang === "en" ? `
+» reply by voice` : `
+» ответьте голосом`;
+        this.pages = paginate(clean.length ? clean + (asksBack ? replyHint : "") : "(пустой ответ)", { lang });
         this.page = 0;
         this.phase = "answering";
         const windowSec = Math.max(this.settings.followUpSec, asksBack ? REPLY_WINDOW_SEC : 0);
@@ -5472,7 +5569,7 @@ ${s.instructions.trim()}`);
   }
 
   // src/background/index.ts
-  var APP_VERSION = "1.0.2";
+  var APP_VERSION = "1.1.0";
   function getKV() {
     try {
       const ls = globalThis.localStorage;
@@ -5545,7 +5642,7 @@ ${s.instructions.trim()}`);
       const handler = (data) => assistant.onTranscript(data?.text ?? "", Boolean(data?.isFinal));
       try {
         unsubscribeStt = s.sttLanguage === "auto" ? session.transcription.on(handler) : session.transcription.forLanguage("ru-RU", handler);
-        assistant.addLog("info", `Слушаю (${s.sttLanguage === "auto" ? "автоопределение языка" : "русский"})`);
+        assistant.addLog("info", `Слушаю (${s.sttLanguage === "auto" ? "русский + английский" : "только русский"})`);
       } catch (e) {
         assistant.addLog("error", `Не удалось включить распознавание: ${String(e?.message ?? e)}`);
       }

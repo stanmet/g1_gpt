@@ -62,11 +62,29 @@ class OpenAIService {
         '(${days[d.weekday - 1]}, UTC$sign${_two(mins ~/ 60)}:${_two(mins % 60)})';
   }
 
-  static String buildInstructions(AppSettings s, DateTime now) {
+  /// "en" if most words of [text] are Latin-script, otherwise "ru".
+  static String detectLang(String text) {
+    var cyr = 0;
+    var lat = 0;
+    for (final word in text.split(RegExp(r'\s+'))) {
+      final c = RegExp(r'[а-яёА-ЯЁ]').allMatches(word).length;
+      final l = RegExp(r'[a-zA-Z]').allMatches(word).length;
+      if (c == 0 && l == 0) continue;
+      if (c >= l) {
+        cyr++;
+      } else {
+        lat++;
+      }
+    }
+    return lat > cyr ? 'en' : 'ru';
+  }
+
+  static String buildInstructions(AppSettings s, DateTime now, [String questionLang = 'ru']) {
     final parts = <String>[
       'Ты — голосовой помощник. Твои ответы показываются на крошечном дисплее умных очков Even Realities G1: '
           'экран из 5 строк примерно по 26 символов, монохромный текст. Пользователь не видит телефон.',
-      'Отвечай по-русски, если пользователь явно не попросил другой язык.',
+      'Отвечай на том же языке, на котором задан последний вопрос: на русский вопрос — по-русски, '
+          'на английский — по-английски. Если пользователь прямо попросил другой язык — используй его.',
       'Пиши обычным текстом без Markdown: без заголовков, звёздочек, таблиц, ссылок, эмодзи и блоков кода.',
       'Начинай сразу с сути, без вступлений и повторения вопроса. По умолчанию уложись примерно в '
           '${s.answerWords} слов. Если пользователь просит подробнее или вопрос этого требует — можно длиннее, короткими абзацами.',
@@ -84,6 +102,9 @@ class OpenAIService {
     if (s.instructions.trim().isNotEmpty) {
       parts.add('Дополнительные пожелания пользователя:\n${s.instructions.trim()}');
     }
+    parts.add(questionLang == 'en'
+        ? 'The latest question was asked in English. Answer in English (unless the user explicitly asks for another language).'
+        : 'Последний вопрос задан по-русски — отвечай по-русски (если пользователь прямо не попросил другой язык).');
     return parts.join('\n\n');
   }
 
@@ -106,7 +127,7 @@ class OpenAIService {
     if (maxTokens > 8000) maxTokens = 8000;
     final body = <String, dynamic>{
       'model': s.model,
-      'instructions': buildInstructions(s, now ?? DateTime.now()),
+      'instructions': buildInstructions(s, now ?? DateTime.now(), detectLang(question)),
       'input': input,
       'store': false,
       'max_output_tokens': maxTokens,

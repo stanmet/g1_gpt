@@ -8,7 +8,7 @@
 import {fitScreen, paginate, sanitizeForG1} from "./g1text"
 import {askOpenAI, explainError, OpenAIError, type FetchLike} from "./openai"
 import {normalizeSettings, Store, type Message, type Settings} from "./store"
-import {detectWake, isMeaningful, normalize, parseCommand, type VoiceCommand} from "./voice"
+import {detectLang, detectWake, isMeaningful, normalize, parseCommand, type VoiceCommand} from "./voice"
 
 export type Phase = "idle" | "capturing" | "thinking" | "answering"
 
@@ -387,7 +387,9 @@ export class Assistant {
       // If the assistant asked something back ("Из какого города?"), the user's reply
       // must be accepted without the wake phrase.
       const asksBack = endsWithQuestion(clean)
-      this.pages = paginate(clean.length ? clean + (asksBack ? "\n» ответьте голосом" : "") : "(пустой ответ)")
+      const lang = detectLang(clean)
+      const replyHint = lang === "en" ? "\n» reply by voice" : "\n» ответьте голосом"
+      this.pages = paginate(clean.length ? clean + (asksBack ? replyHint : "") : "(пустой ответ)", {lang})
       this.page = 0
       this.phase = "answering"
       const windowSec = Math.max(this.settings.followUpSec, asksBack ? REPLY_WINDOW_SEC : 0)

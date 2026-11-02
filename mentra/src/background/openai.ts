@@ -1,5 +1,6 @@
 /** OpenAI Responses API call, made directly from the phone (no server in between). */
 import type {Message, Settings} from "./store"
+import {detectLang, type Lang} from "./voice"
 
 export const OPENAI_URL = "https://api.openai.com/v1/responses"
 
@@ -21,10 +22,10 @@ export function localDateTime(d: Date = new Date()): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())} (${days[d.getDay()]}, ${tz})`
 }
 
-export function buildInstructions(s: Settings, now: Date = new Date()): string {
+export function buildInstructions(s: Settings, now: Date = new Date(), questionLang: Lang = "ru"): string {
   const parts = [
     "Ты — голосовой помощник. Твои ответы показываются на крошечном дисплее умных очков Even Realities G1: 5 строк примерно по 30 символов, монохромный текст. Пользователь не видит телефон.",
-    "Отвечай по-русски, если пользователь явно не попросил другой язык.",
+    "Отвечай на том же языке, на котором задан последний вопрос: на русский вопрос — по-русски, на английский — по-английски (English question → answer in English). Если пользователь прямо попросил другой язык — используй его.",
     "Пиши обычным текстом без Markdown: без заголовков, звёздочек, таблиц, ссылок, эмодзи и блоков кода.",
     `Начинай сразу с сути, без вступлений и повторения вопроса. По умолчанию уложись примерно в ${s.answerWords} слов. Если пользователь просит подробнее или вопрос этого требует — можно длиннее, короткими абзацами.`,
     "Списки оформляй короткими строками, каждая начинается с «• ». Числа пиши цифрами.",
@@ -35,6 +36,12 @@ export function buildInstructions(s: Settings, now: Date = new Date()): string {
   ]
   if (s.aboutMe.trim()) parts.push(`Что известно о пользователе (учитывай, когда уместно):\n${s.aboutMe.trim()}`)
   if (s.instructions.trim()) parts.push(`Дополнительные пожелания пользователя:\n${s.instructions.trim()}`)
+  // Explicit per-question language, so a Russian system prompt never pulls an English answer into Russian.
+  parts.push(
+    questionLang === "en"
+      ? "The latest question was asked in English. Answer in English (unless the user explicitly asks for another language)."
+      : "Последний вопрос задан по-русски — отвечай по-русски (если пользователь прямо не попросил другой язык).",
+  )
   return parts.join("\n\n")
 }
 
@@ -61,7 +68,7 @@ export function buildRequestBody(
   ]
   const body: Record<string, unknown> = {
     model: s.model,
-    instructions: buildInstructions(s, opts.now),
+    instructions: buildInstructions(s, opts.now, detectLang(question)),
     input,
     store: false,
     max_output_tokens: Math.min(8000, Math.max(600, s.answerWords * 12)),
