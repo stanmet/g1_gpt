@@ -5568,6 +5568,9 @@ ${s.instructions.trim()}`);
   var INTERIM_THROTTLE_MS = 450;
   var LOG_MAX = 80;
   var NOD_DEBOUNCE_MS = 1200;
+  var HEAD_UP_HIDES_MS = 4000;
+  var DASHBOARD_WARN_EVERY_MS = 60000;
+  var DASHBOARD_WARNING = "Mentra считает, что голова поднята, и показывает свою панель (время, заряд) вместо ответа. " + "Опустите голову. Если не помогает: Mentra → Settings → Dashboard → выключите Contextual Dashboard " + "или увеличьте Adjust Head-Up Angle.";
 
   class Assistant {
     deps;
@@ -5603,6 +5606,9 @@ ${s.instructions.trim()}`);
     translationScreen = "";
     autoHidden = false;
     lastNodAt = 0;
+    headUp = false;
+    headUpSince = 0;
+    lastDashboardWarnAt = -Infinity;
     displayChecked = false;
     now;
     setTimer;
@@ -5986,6 +5992,7 @@ ${s.instructions.trim()}`);
       this.page = Math.max(0, Math.min(this.pages.length - 1, i));
       this.phase = "answering";
       this.show(this.pages[this.page]);
+      this.warnIfDashboard();
       this.cancelTimer("pageTimer");
       this.cancelTimer("clearTimer_");
       const last = this.page >= this.pages.length - 1;
@@ -6168,7 +6175,18 @@ To stop: «стоп перевод»`);
       }, TRANSLATE_IDLE_MS);
     }
     onHeadPosition(position) {
-      if (position !== "up" || !this.settings.headNod)
+      if (position !== "up" && position !== "down")
+        return;
+      const up = position === "up";
+      if (up !== this.headUp) {
+        this.headUp = up;
+        this.headUpSince = this.now();
+        this.addLog("head", up ? "Голова поднята" : "Голова опущена");
+        if (!up && this.phase === "answering" && this.pages.length)
+          this.show(this.pages[this.page]);
+        this.changed();
+      }
+      if (!up || !this.settings.headNod)
         return;
       if (this.phase !== "answering" || this.page >= this.pages.length - 1)
         return;
@@ -6177,6 +6195,18 @@ To stop: «стоп перевод»`);
         return;
       this.lastNodAt = now;
       this.command("next", "head");
+    }
+    dashboardLikely() {
+      return this.headUp && this.now() - this.headUpSince >= HEAD_UP_HIDES_MS;
+    }
+    warnIfDashboard() {
+      if (!this.dashboardLikely())
+        return;
+      const now = this.now();
+      if (now - this.lastDashboardWarnAt < DASHBOARD_WARN_EVERY_MS)
+        return;
+      this.lastDashboardWarnAt = now;
+      this.addLog("error", DASHBOARD_WARNING);
     }
     command(cmd, source) {
       this.addLog("cmd", `${cmd} (${source})`);
@@ -6246,6 +6276,7 @@ To stop: «стоп перевод»`);
         lastQuestion: this.lastQuestion,
         lastAnswer: this.lastAnswer,
         lastError: this.lastError,
+        dashboardLikely: this.dashboardLikely(),
         glassesConnected: this.glassesConnected,
         settings: {
           ...this.settings,
@@ -6269,7 +6300,7 @@ To stop: «стоп перевод»`);
   }
 
   // src/background/index.ts
-  var APP_VERSION = "1.6.0";
+  var APP_VERSION = "1.6.1";
   function getKV() {
     try {
       const ls = globalThis.localStorage;

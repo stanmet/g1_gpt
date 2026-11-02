@@ -772,6 +772,7 @@ textarea::placeholder {
   background: var(--teal);
 }
 .kind.cmd,
+.kind.head,
 .kind.touch {
   background: var(--orange);
 }
@@ -912,4 +913,9 @@ textarea::placeholder {
     animation: none !important;
     transition: none !important;
   }
+}
+
+.lens-warning {
+  margin: 10px 16px 0;
+  color: var(--orange, #ff9500);
 }

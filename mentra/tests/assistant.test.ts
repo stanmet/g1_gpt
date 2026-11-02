@@ -1,5 +1,5 @@
 import {beforeEach, describe, expect, test} from "bun:test"
-import {Assistant, SILENCE_MS, TRANSLATE_IDLE_MS} from "../src/background/assistant"
+import {Assistant, DASHBOARD_WARNING, HEAD_UP_HIDES_MS, SILENCE_MS, TRANSLATE_IDLE_MS} from "../src/background/assistant"
 import {buildRequestBody, effortFor, extractText} from "../src/background/openai"
 import {DEFAULT_SETTINGS, Store, type KV} from "../src/background/store"
 
@@ -508,6 +508,31 @@ describe("looking up turns the page (G1 head-up sensor)", () => {
     expect(on.a.phase).toBe("capturing")
     on.a.onHeadPosition("up")
     expect(on.a.phase).toBe("capturing")
+  })
+})
+
+describe("Mentra dashboard hides answers while the head is up", () => {
+  test("warns once when an answer is shown while the head has been up; repaints on head down", async () => {
+    const e = setup(["Колизей открыт с 9 до 19.", "Да."])
+    e.a.onHeadPosition("up")
+    expect(e.a.dashboardLikely()).toBe(false) // a quick glance up is normal
+    await e.clock.advance(HEAD_UP_HIDES_MS + 100)
+    expect(e.a.dashboardLikely()).toBe(true)
+    expect(e.a.snapshot().dashboardLikely).toBe(true)
+
+    e.a.onTranscript("Вопрос, во сколько открывается Колизей?", true)
+    await e.clock.advance(SILENCE_MS + 10)
+    expect(e.a.log.filter((l) => l.msg === DASHBOARD_WARNING).length).toBe(1)
+    e.a.onTranscript("Вопрос, а в понедельник?", true)
+    await e.clock.advance(SILENCE_MS + 10)
+    expect(e.a.log.filter((l) => l.msg === DASHBOARD_WARNING).length).toBe(1) // not every answer
+
+    const before = e.shown.length
+    e.a.onHeadPosition("down")
+    expect(e.a.dashboardLikely()).toBe(false)
+    expect(e.shown.length).toBe(before + 1)
+    expect(e.shown.at(-1)).toBe("Да.")
+    expect(e.a.log.some((l) => l.kind === "head" && l.msg === "Голова опущена")).toBe(true)
   })
 })
 

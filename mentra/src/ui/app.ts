@@ -237,6 +237,8 @@ function renderGlasses(s: any, st: any) {
   }
   lensText.classList.toggle("dim", dim)
 
+  $("dashNote").hidden = !s.dashboardLikely
+
   const target = st.translateTo === "en-US" ? "английский" : "русский"
   $("lensState").textContent =
     st.listenMode === "off" ? "Микрофон выключен" : s.translating ? `Перевод на ${target}` : (PHASE[s.phase] ?? s.phase)
@@ -396,6 +398,7 @@ const KIND_LABEL: Record<string, string> = {
   error: "ошибка",
   info: "инфо",
   touch: "касание",
+  head: "голова",
   translate: "перевод",
 }
 

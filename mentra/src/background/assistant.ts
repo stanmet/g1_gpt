@@ -27,7 +27,7 @@ export type Phase = "idle" | "capturing" | "thinking" | "answering" | "translati
 
 export interface LogEntry {
   t: number
-  kind: "stt" | "wake" | "cmd" | "ask" | "openai" | "display" | "error" | "info" | "touch" | "translate"
+  kind: "stt" | "wake" | "cmd" | "ask" | "openai" | "display" | "error" | "info" | "touch" | "translate" | "head"
   msg: string
 }
 
@@ -92,6 +92,17 @@ const INTERIM_THROTTLE_MS = 450
 const LOG_MAX = 80
 /** Ignore repeated head-up events closer than this (sensor bounce). */
 const NOD_DEBOUNCE_MS = 1200
+/**
+ * While Mentra thinks the head is up and its "Contextual Dashboard" is on, it shows its own
+ * dashboard (time, date, battery) and holds back everything apps send. Head up for longer than
+ * this means the answer the user waits for is not on the glasses.
+ */
+export const HEAD_UP_HIDES_MS = 4000
+const DASHBOARD_WARN_EVERY_MS = 60_000
+export const DASHBOARD_WARNING =
+  "Mentra считает, что голова поднята, и показывает свою панель (время, заряд) вместо ответа. " +
+  "Опустите голову. Если не помогает: Mentra → Settings → Dashboard → выключите Contextual Dashboard " +
+  "или увеличьте Adjust Head-Up Angle."
 
 /** Where a paging command came from; shown in the log. key = Bluetooth remote or keyboard. */
 export type CommandSource = "voice" | "ui" | "touch" | "head" | "key"
@@ -134,6 +145,10 @@ export class Assistant {
   /** The answer was removed by the clear timer (not by the user), so paging may bring it back. */
   private autoHidden = false
   private lastNodAt = 0
+  /** Last head position reported by Mentra (G1 head-up sensor); unknown until the first event. */
+  headUp = false
+  private headUpSince = 0
+  private lastDashboardWarnAt = -Infinity
   private displayChecked = false
 
   private readonly now: () => number
@@ -558,6 +573,7 @@ export class Assistant {
     this.page = Math.max(0, Math.min(this.pages.length - 1, i))
     this.phase = "answering"
     this.show(this.pages[this.page])
+    this.warnIfDashboard()
     this.cancelTimer("pageTimer")
     this.cancelTimer("clearTimer_")
     const last = this.page >= this.pages.length - 1
@@ -745,12 +761,34 @@ export class Assistant {
    * answer is on screen, so glancing up at other times is harmless.
    */
   onHeadPosition(position: string): void {
-    if (position !== "up" || !this.settings.headNod) return
+    if (position !== "up" && position !== "down") return
+    const up = position === "up"
+    if (up !== this.headUp) {
+      this.headUp = up
+      this.headUpSince = this.now()
+      this.addLog("head", up ? "Голова поднята" : "Голова опущена")
+      if (!up && this.phase === "answering" && this.pages.length) this.show(this.pages[this.page]) // repaint after the dashboard
+      this.changed()
+    }
+    if (!up || !this.settings.headNod) return
     if (this.phase !== "answering" || this.page >= this.pages.length - 1) return
     const now = this.now()
     if (now - this.lastNodAt < NOD_DEBOUNCE_MS) return
     this.lastNodAt = now
     this.command("next", "head")
+  }
+
+  /** True when Mentra is most likely showing its dashboard instead of what this app sends. */
+  dashboardLikely(): boolean {
+    return this.headUp && this.now() - this.headUpSince >= HEAD_UP_HIDES_MS
+  }
+
+  private warnIfDashboard(): void {
+    if (!this.dashboardLikely()) return
+    const now = this.now()
+    if (now - this.lastDashboardWarnAt < DASHBOARD_WARN_EVERY_MS) return
+    this.lastDashboardWarnAt = now
+    this.addLog("error", DASHBOARD_WARNING)
   }
 
   command(cmd: VoiceCommand, source: CommandSource): void {
@@ -817,6 +855,7 @@ export class Assistant {
       lastQuestion: this.lastQuestion,
       lastAnswer: this.lastAnswer,
       lastError: this.lastError,
+      dashboardLikely: this.dashboardLikely(),
       glassesConnected: this.glassesConnected,
       settings: {
         ...this.settings,
