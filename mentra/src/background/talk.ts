@@ -4,11 +4,14 @@
  *   someone asks a factual question («Кто такой Кант? Когда он родился?»)  ──▶ short answer on the glasses
  *   you start explaining and trail off («А категорический императив — это…») ──▶ the facts to finish with
  *
- * Every final utterance is checked locally first; only questions and trailing statements go to the
- * AI, which answers or says SKIP for small talk. Recent conversation and earlier hints go along, so
- * follow-ups («а он когда умер?») are understood. Independent of Mentra, tested with fakes.
+ *   and, every ~10 s of talk, one proactive hint toward the user's goal:
+ *     «Факт: …», «Ответ: …», «Спроси: …», «Скажи: …»
+ *
+ * Questions go through a fast lane of their own (a placeholder shows at once, the answer replaces
+ * it), checked locally first from the live transcript; proactive hints never hold them up. The
+ * glasses show a rolling feed, newest at the bottom. Independent of Mentra, tested with fakes.
  */
-import {answerScreen, LECTURE_RESUME_MS, parseAnswer, wordCount, type LectureNote, type LectureRecord} from "./lecture"
+import {feedScreen, LECTURE_RESUME_MS, parseAnswer, wordCount, type LectureNote, type LectureRecord} from "./lecture"
 import {detectLang, normalize, type Lang} from "./voice"
 
 /** A hint stays on the glasses this long, then the screen clears (the next hint replaces it sooner). */
@@ -25,6 +28,14 @@ export const TALK_SETTLE_MS = 900
 const INTRO_MS = 5000
 const CONTEXT_WORDS = 300
 const PREV_HINTS = 4
+const PREV_TIPS = 6
+/** Default and minimum interval of proactive hints, in seconds (setting «Подсказки по ходу»). */
+export const DEFAULT_TALK_TIP_SEC = 10
+export const TALK_TIP_MIN_SEC = 5
+/** A proactive hint needs at least this many new words of conversation. */
+export const TALK_TIP_MIN_WORDS = 6
+/** A fresh answer to a question is not pushed up by a proactive hint for this long. */
+export const TALK_ANSWER_PRIORITY_MS = 10_000
 const NOTES_MAX = 300
 const ERROR_SHOW_EVERY_MS = 60_000
 
@@ -152,6 +163,60 @@ export function buildTalkPrompt(
   return {system, user: `${ctx}${prev}${label}: «${trigger.text.trim()}»`}
 }
 
+// ───────────────────────── proactive hints ─────────────────────────
+
+export type TipLabel = "fact" | "answer" | "ask" | "say"
+
+const TIP_LABELS: Record<Lang, Record<TipLabel, string>> = {
+  ru: {fact: "Факт", answer: "Ответ", ask: "Спроси", say: "Скажи"},
+  en: {fact: "Fact", answer: "Answer", ask: "Ask", say: "Say"},
+}
+const TIP_BY_WORD: Record<string, TipLabel> = {
+  факт: "fact", ответ: "answer", ответь: "answer", спроси: "ask", вопрос: "ask", скажи: "say", идея: "say", мысль: "say",
+  fact: "fact", answer: "answer", ask: "ask", say: "say", idea: "say",
+}
+
+export function buildTipPrompt(
+  context: string,
+  prevTips: string[],
+  goal: string,
+  lang: Lang,
+): {system: string; user: string} {
+  const L = TIP_LABELS[lang]
+  const system = [
+    "Ты — суфлёр в умных очках и помогаешь пользователю вести живой разговор. Тебе дают свежую расшифровку речи (возможны ошибки, неизвестно, кто говорит). Подсказка показывается на крошечном дисплее и должна читаться за секунду.",
+    `Цель пользователя в разговоре: ${goal.trim() || "поддерживать интересный и содержательный разговор"}.`,
+    "Дай ОДНУ самую полезную прямо сейчас подсказку, до 15 слов, ровно в одной строке одного из видов:",
+    `${L.fact}: <точная справка о только что упомянутом человеке, месте, термине, событии, числе>`,
+    `${L.answer}: <что ответить, если пользователю только что задали вопрос>`,
+    `${L.ask}: <вопрос собеседнику, который продвинет разговор к цели или углубит тему>`,
+    `${L.say}: <мысль, аргумент или пример, который стоит сказать сейчас>`,
+    "Опирайся на последние реплики. Не повторяй прошлые подсказки. Факты — только точные.",
+    `Пиши на ${lang === "en" ? "английском (English)" : "русском"} языке. Без Markdown и пояснений.`,
+    "Если сейчас добавить нечего (пауза, бытовая мелочь, всё уже подсказано) — ответь ровно SKIP.",
+  ].join("\n")
+  const prev = prevTips.length ? `Прошлые подсказки:\n${prevTips.map((t) => "— " + t).join("\n")}\n\n` : ""
+  return {system, user: `${prev}Разговор (последнее — внизу):\n«${context.trim()}»`}
+}
+
+/** {label, text} from «Спроси: …»; null for SKIP or an unknown shape. */
+export function parseTip(text: string): {label: TipLabel; text: string} | null {
+  const t = String(text ?? "").trim()
+  if (!t || /^\s*skip\b/i.test(t)) return null
+  const m = /^\s*[•*\-–—]?\s*([A-Za-zА-Яа-яЁё]+)\s*[:：]\s*(.+)$/m.exec(t)
+  if (!m) return null
+  const label = TIP_BY_WORD[m[1].toLowerCase()]
+  const body = m[2].replace(/\*\*/g, "").trim()
+  if (!label || !body || /^skip\b/i.test(body)) return null
+  return {label, text: body}
+}
+
+export function tipLine(label: TipLabel, text: string, lang: Lang): string {
+  return `${TIP_LABELS[lang][label]}: ${text}`
+}
+
+// ───────────────────────── the mode itself ─────────────────────────
+
 export interface TalkDeps {
   complete(system: string, user: string): Promise<string>
   explainError(e: unknown): string
@@ -163,6 +228,15 @@ export interface TalkDeps {
   clearTimer(id: unknown): void
   save(record: LectureRecord): void
   onChange(): void
+  /** Proactive hints about every N seconds of conversation; 0 = only answers to questions. */
+  everySec?(): number
+  /** What the user wants from this conversation («договориться о скидке»); steers «Спроси»/«Скажи». */
+  goal?(): string
+}
+
+interface FeedItem {
+  id: number
+  text: string
 }
 
 export class Talk {
@@ -172,13 +246,22 @@ export class Talk {
 
   private session = 0
   private recent: string[] = []
-  private busy = false
-  private pending: {trigger: TalkTrigger; fromUser: boolean} | null = null
-  private screenTimer: unknown = null
-  /** Recently handled triggers (normalized), so live text and the final do not ask twice. */
-  private handled: {n: string; at: number}[] = []
   private interim = ""
   private settleTimer: unknown = null
+  /** Recently handled triggers (normalized), so live text and the final do not ask twice. */
+  private handled: {n: string; at: number}[] = []
+  // questions lane — answers to what was asked, never wait for a proactive hint
+  private qBusy = false
+  private qPending: {trigger: TalkTrigger; fromUser: boolean} | null = null
+  // proactive lane
+  private tipBusy = false
+  private lastTipAt = 0
+  private wordsSinceTip = 0
+  private lastAnswerAt = -Infinity
+  // the glasses show a rolling feed, newest at the bottom
+  private feed: FeedItem[] = []
+  private feedSeq = 0
+  private screenTimer: unknown = null
   private lastErrorShownAt = -Infinity
 
   constructor(
@@ -192,21 +275,36 @@ export class Talk {
     this.session++
     this.active = true
     this.recent = []
-    this.busy = false
-    this.pending = null
-    this.handled = []
     this.interim = ""
+    this.cancelSettle()
+    this.handled = []
+    this.qBusy = false
+    this.qPending = null
+    this.tipBusy = false
+    this.lastTipAt = this.deps.now()
+    this.wordsSinceTip = 0
+    this.lastAnswerAt = -Infinity
+    this.feed = []
     const prev = this.record
     const resume = Boolean(prev?.endedAt && this.deps.now() - prev.endedAt < LECTURE_RESUME_MS)
     if (resume && prev) delete prev.endedAt
     else this.record = {startedAt: this.deps.now(), notes: []}
     this.deps.save(this.record!)
-    this.setScreen(
-      intro.en
-        ? "Conversation mode\n• facts when someone asks\n• a prompt when you trail off\nStop: «стоп беседа»"
-        : "Режим беседы\n• факты, когда спрашивают\n• подскажу, если запнётесь\nВыключить: «стоп беседа»",
-      INTRO_MS,
-    )
+    const goal = this.deps.goal?.().trim()
+    const every = this.every()
+    const ru = [
+      "Режим беседы",
+      "• ответы на вопросы с фактами",
+      every ? `• подсказки примерно раз в ${every} с` : "• подскажу, если запнётесь",
+      goal ? `• цель: ${goal}` : "Выключить: «стоп беседа»",
+    ]
+    const en = [
+      "Conversation mode",
+      "• answers to factual questions",
+      every ? `• hints about every ${every} s` : "• a prompt when you trail off",
+      goal ? `• goal: ${goal}` : "Stop: «стоп беседа»",
+    ]
+    this.paint((intro.en ? en : ru).join("\n"), INTRO_MS)
     this.deps.log("talk", resume ? "Режим беседы включён — продолжаю прежний список" : "Режим беседы включён")
     this.deps.onChange()
   }
@@ -218,7 +316,8 @@ export class Talk {
     this.session++
     this.cancelScreenTimer()
     this.cancelSettle()
-    this.pending = null
+    this.qPending = null
+    this.feed = []
     this.screen = ""
     if (this.record) {
       this.record.endedAt = this.deps.now()
@@ -245,6 +344,7 @@ export class Talk {
       const trigger = findTalkTrigger(t)
       if (trigger) this.request(trigger, "пауза")
     }, TALK_SETTLE_MS)
+    this.maybeTip()
   }
 
   /** A final transcript of what was said (by anyone). */
@@ -257,17 +357,19 @@ export class Talk {
     this.recent.push(t)
     let words = wordCount(this.recent.join(" "))
     while (this.recent.length > 1 && words > CONTEXT_WORDS) words -= wordCount(this.recent.shift()!)
+    this.wordsSinceTip += wordCount(t)
     const trigger = findTalkTrigger(t)
     if (trigger) this.request(trigger, "")
+    this.maybeTip()
   }
 
   /** The user's own question («Вопрос, …»): always answered. */
   askUser(question: string): void {
     if (!this.active || !question.trim()) return
-    void this.hint({kind: "question", text: question.trim()}, true)
+    void this.answer({kind: "question", text: question.trim()}, true)
   }
 
-  // ── internals ──
+  // ── questions lane ──
 
   /** Asks the AI unless the same thing was just handled (from live text, a repeat, a re-send). */
   private request(trigger: TalkTrigger, via: string): void {
@@ -278,26 +380,22 @@ export class Talk {
     if (this.handled.some((h) => same(h.n, n))) return
     this.handled.push({n, at: now})
     if (via) this.deps.log("talk", `Услышал (${via}): ${trigger.text}`)
-    void this.hint(trigger, false)
+    void this.answer(trigger, false)
   }
 
-  private cancelSettle(): void {
-    if (this.settleTimer != null) this.deps.clearTimer(this.settleTimer)
-    this.settleTimer = null
-  }
-
-  private async hint(trigger: TalkTrigger, fromUser: boolean): Promise<void> {
-    if (this.busy) {
+  private async answer(trigger: TalkTrigger, fromUser: boolean): Promise<void> {
+    if (this.qBusy) {
       // in a conversation only the newest matters; the user's own question wins
-      if (fromUser || !this.pending?.fromUser) this.pending = {trigger, fromUser}
+      if (fromUser || !this.qPending?.fromUser) this.qPending = {trigger, fromUser}
       return
     }
     const session = this.session
-    this.busy = true
+    this.qBusy = true
     this.deps.log("talk", `${fromUser ? "Ваш вопрос" : trigger.kind === "prompt" ? "Подсказать" : "Вопрос"}: ${trigger.text}`)
-    if (fromUser) this.setScreen(answerScreen(trigger.text, "…думаю"))
+    // show at once that a hint is coming
+    const placeholder = this.push(`${shorten(trigger.text, 40)} …`)
     const prev = (this.record?.notes ?? []).slice(-PREV_HINTS).map((x) => ({q: x.q ?? "", a: x.text}))
-    const context = this.recent.slice(0, -1).join(" ")
+    const context = [...this.recent, this.interim].filter(Boolean).join(" ")
     const {system, user} = buildTalkPrompt(context, prev, trigger, fromUser, detectLang(trigger.text))
     try {
       const reply = await this.deps.complete(system, user)
@@ -305,24 +403,110 @@ export class Talk {
       const qa = parseAnswer(reply, trigger.text)
       if (!qa) {
         this.deps.log("talk", "Подсказка не нужна")
-        if (fromUser) this.setScreen("")
+        this.drop(placeholder)
         return
       }
       const kind: LectureNote["kind"] = fromUser ? "you" : trigger.kind === "prompt" ? "hint" : "qa"
       this.addNote({t: this.deps.now(), kind, q: qa.q, text: qa.a})
       this.deps.log("talk", `→ ${qa.a}`)
-      this.setScreen(answerScreen(qa.q, qa.a), TALK_SHOW_MS)
+      this.lastAnswerAt = this.deps.now()
+      this.replace(placeholder, `${qa.q}: ${qa.a}`)
     } catch (e) {
       if (session !== this.session) return
+      this.drop(placeholder)
       this.showError(e)
     } finally {
       if (session === this.session) {
-        this.busy = false
-        const next = this.pending
-        this.pending = null
-        if (next) void this.hint(next.trigger, next.fromUser)
+        this.qBusy = false
+        const next = this.qPending
+        this.qPending = null
+        if (next) void this.answer(next.trigger, next.fromUser)
       }
     }
+  }
+
+  // ── proactive lane ──
+
+  private every(): number {
+    const v = Math.round(Number(this.deps.everySec?.() ?? 0))
+    return v > 0 ? Math.max(TALK_TIP_MIN_SEC, Math.min(120, v)) : 0
+  }
+
+  private maybeTip(): void {
+    const every = this.every()
+    if (!every || this.tipBusy) return
+    const words = this.wordsSinceTip + (this.interim ? wordCount(this.interim) : 0)
+    if (words < TALK_TIP_MIN_WORDS || this.deps.now() - this.lastTipAt < every * 1000) return
+    void this.tip()
+  }
+
+  private async tip(): Promise<void> {
+    const session = this.session
+    this.tipBusy = true
+    this.lastTipAt = this.deps.now()
+    this.wordsSinceTip = 0
+    const context = [...this.recent, this.interim].filter(Boolean).join(" ")
+    const lang = detectLang(context.split(/\s+/).slice(-60).join(" "))
+    const prevTips = (this.record?.notes ?? []).slice(-PREV_TIPS).map((n) => `${n.q}: ${n.text}`)
+    const {system, user} = buildTipPrompt(context, prevTips, this.deps.goal?.() ?? "", lang)
+    try {
+      const reply = await this.deps.complete(system, user)
+      if (session !== this.session) return
+      const tip = parseTip(reply)
+      if (!tip) {
+        this.deps.log("talk", "Подсказка по ходу: нечего добавить")
+        return
+      }
+      const line = tipLine(tip.label, tip.text, lang)
+      const seen = (this.record?.notes ?? []).slice(-PREV_TIPS).some((n) => normalize(`${n.q}: ${n.text}`) === normalize(line))
+      if (seen) return
+      this.addNote({t: this.deps.now(), kind: "tip", q: TIP_LABELS[lang][tip.label], text: tip.text})
+      this.deps.log("talk", `Подсказка по ходу — ${line}`)
+      // a fresh answer to a question stays on top for a while
+      if (this.deps.now() - this.lastAnswerAt >= TALK_ANSWER_PRIORITY_MS) this.push(line)
+    } catch (e) {
+      if (session !== this.session) return
+      this.deps.log("error", `Беседа: ${this.deps.explainError(e)}`)
+    } finally {
+      if (session === this.session) this.tipBusy = false
+    }
+  }
+
+  // ── the glasses ──
+
+  private push(text: string): number {
+    const id = ++this.feedSeq
+    this.feed.push({id, text})
+    if (this.feed.length > 6) this.feed.splice(0, this.feed.length - 6)
+    this.renderFeed()
+    return id
+  }
+
+  private replace(id: number, text: string): void {
+    const item = this.feed.find((f) => f.id === id)
+    if (item) {
+      // the answer moves to the bottom: it is the newest thing to read
+      this.feed = this.feed.filter((f) => f.id !== id)
+      this.feed.push({id, text})
+    } else this.feed.push({id: ++this.feedSeq, text})
+    this.renderFeed()
+  }
+
+  private drop(id: number): void {
+    const before = this.feed.length
+    this.feed = this.feed.filter((f) => f.id !== id)
+    if (this.feed.length !== before) this.renderFeed()
+  }
+
+  private renderFeed(): void {
+    if (!this.feed.length) return this.paint("")
+    this.paint(
+      feedScreen(
+        this.feed.map((f) => f.text),
+        1,
+      ),
+      TALK_SHOW_MS,
+    )
   }
 
   private addNote(n: LectureNote): void {
@@ -333,8 +517,8 @@ export class Talk {
     this.deps.onChange()
   }
 
-  /** Show text; with `forMs`, clear it afterwards unless something newer replaced it. */
-  private setScreen(text: string, forMs = 0): void {
+  /** Show text; with `forMs`, clear it (and the feed) afterwards unless something newer came. */
+  private paint(text: string, forMs = 0): void {
     this.cancelScreenTimer()
     this.screen = text
     if (text) this.deps.show(text)
@@ -344,6 +528,7 @@ export class Talk {
         this.screenTimer = null
         if (this.active && this.screen === text) {
           this.screen = ""
+          this.feed = []
           this.deps.clear()
           this.deps.onChange()
         }
@@ -357,12 +542,22 @@ export class Talk {
     this.screenTimer = null
   }
 
+  private cancelSettle(): void {
+    if (this.settleTimer != null) this.deps.clearTimer(this.settleTimer)
+    this.settleTimer = null
+  }
+
   private showError(e: unknown): void {
     const human = this.deps.explainError(e)
     this.deps.log("error", `Беседа: ${human}`)
     const now = this.deps.now()
     if (now - this.lastErrorShownAt < ERROR_SHOW_EVERY_MS) return
     this.lastErrorShownAt = now
-    this.setScreen(human, TALK_SHOW_MS)
+    this.push(human)
   }
+}
+
+function shorten(s: string, max: number): string {
+  const t = s.replace(/\s+/g, " ").trim()
+  return t.length <= max ? t : t.slice(0, max).replace(/\s+\S*$/, "") + "…"
 }

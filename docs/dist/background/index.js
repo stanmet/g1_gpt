@@ -6007,6 +6007,10 @@ Stop: «стоп лекция»` : `Режим лекции
   var INTRO_MS = 5000;
   var CONTEXT_WORDS2 = 300;
   var PREV_HINTS = 4;
+  var PREV_TIPS = 6;
+  var TALK_TIP_MIN_SEC = 5;
+  var TALK_TIP_MIN_WORDS = 6;
+  var TALK_ANSWER_PRIORITY_MS = 1e4;
   var NOTES_MAX2 = 300;
   var ERROR_SHOW_EVERY_MS2 = 60000;
   var LEAD = new Set(["а", "и", "но", "так", "ну", "слушай", "скажи", "скажите", "кстати", "and", "so", "but", "well", "hey", "by"]);
@@ -6205,6 +6209,64 @@ ${prevHints.map((h) => `— ${h.q}: ${h.a}`).join(`
     const label = fromUser ? "Вопрос пользователя" : trigger.kind === "prompt" ? "Последняя реплика (оборвана)" : "Последняя реплика";
     return { system, user: `${ctx}${prev}${label}: «${trigger.text.trim()}»` };
   }
+  var TIP_LABELS = {
+    ru: { fact: "Факт", answer: "Ответ", ask: "Спроси", say: "Скажи" },
+    en: { fact: "Fact", answer: "Answer", ask: "Ask", say: "Say" }
+  };
+  var TIP_BY_WORD = {
+    факт: "fact",
+    ответ: "answer",
+    ответь: "answer",
+    спроси: "ask",
+    вопрос: "ask",
+    скажи: "say",
+    идея: "say",
+    мысль: "say",
+    fact: "fact",
+    answer: "answer",
+    ask: "ask",
+    say: "say",
+    idea: "say"
+  };
+  function buildTipPrompt(context, prevTips, goal, lang) {
+    const L = TIP_LABELS[lang];
+    const system = [
+      "Ты — суфлёр в умных очках и помогаешь пользователю вести живой разговор. Тебе дают свежую расшифровку речи (возможны ошибки, неизвестно, кто говорит). Подсказка показывается на крошечном дисплее и должна читаться за секунду.",
+      `Цель пользователя в разговоре: ${goal.trim() || "поддерживать интересный и содержательный разговор"}.`,
+      "Дай ОДНУ самую полезную прямо сейчас подсказку, до 15 слов, ровно в одной строке одного из видов:",
+      `${L.fact}: <точная справка о только что упомянутом человеке, месте, термине, событии, числе>`,
+      `${L.answer}: <что ответить, если пользователю только что задали вопрос>`,
+      `${L.ask}: <вопрос собеседнику, который продвинет разговор к цели или углубит тему>`,
+      `${L.say}: <мысль, аргумент или пример, который стоит сказать сейчас>`,
+      "Опирайся на последние реплики. Не повторяй прошлые подсказки. Факты — только точные.",
+      `Пиши на ${lang === "en" ? "английском (English)" : "русском"} языке. Без Markdown и пояснений.`,
+      "Если сейчас добавить нечего (пауза, бытовая мелочь, всё уже подсказано) — ответь ровно SKIP."
+    ].join(`
+`);
+    const prev = prevTips.length ? `Прошлые подсказки:
+${prevTips.map((t) => "— " + t).join(`
+`)}
+
+` : "";
+    return { system, user: `${prev}Разговор (последнее — внизу):
+«${context.trim()}»` };
+  }
+  function parseTip(text) {
+    const t = String(text ?? "").trim();
+    if (!t || /^\s*skip\b/i.test(t))
+      return null;
+    const m = /^\s*[•*\-–—]?\s*([A-Za-zА-Яа-яЁё]+)\s*[:：]\s*(.+)$/m.exec(t);
+    if (!m)
+      return null;
+    const label = TIP_BY_WORD[m[1].toLowerCase()];
+    const body = m[2].replace(/\*\*/g, "").trim();
+    if (!label || !body || /^skip\b/i.test(body))
+      return null;
+    return { label, text: body };
+  }
+  function tipLine(label, text, lang) {
+    return `${TIP_LABELS[lang][label]}: ${text}`;
+  }
 
   class Talk {
     deps;
@@ -6213,12 +6275,18 @@ ${prevHints.map((h) => `— ${h.q}: ${h.a}`).join(`
     screen = "";
     session = 0;
     recent = [];
-    busy = false;
-    pending = null;
-    screenTimer = null;
-    handled = [];
     interim = "";
     settleTimer = null;
+    handled = [];
+    qBusy = false;
+    qPending = null;
+    tipBusy = false;
+    lastTipAt = 0;
+    wordsSinceTip = 0;
+    lastAnswerAt = -Infinity;
+    feed = [];
+    feedSeq = 0;
+    screenTimer = null;
     lastErrorShownAt = -Infinity;
     constructor(deps, saved = null) {
       this.deps = deps;
@@ -6228,10 +6296,16 @@ ${prevHints.map((h) => `— ${h.q}: ${h.a}`).join(`
       this.session++;
       this.active = true;
       this.recent = [];
-      this.busy = false;
-      this.pending = null;
-      this.handled = [];
       this.interim = "";
+      this.cancelSettle();
+      this.handled = [];
+      this.qBusy = false;
+      this.qPending = null;
+      this.tipBusy = false;
+      this.lastTipAt = this.deps.now();
+      this.wordsSinceTip = 0;
+      this.lastAnswerAt = -Infinity;
+      this.feed = [];
       const prev = this.record;
       const resume = Boolean(prev?.endedAt && this.deps.now() - prev.endedAt < LECTURE_RESUME_MS);
       if (resume && prev)
@@ -6239,13 +6313,22 @@ ${prevHints.map((h) => `— ${h.q}: ${h.a}`).join(`
       else
         this.record = { startedAt: this.deps.now(), notes: [] };
       this.deps.save(this.record);
-      this.setScreen(intro.en ? `Conversation mode
-• facts when someone asks
-• a prompt when you trail off
-Stop: «стоп беседа»` : `Режим беседы
-• факты, когда спрашивают
-• подскажу, если запнётесь
-Выключить: «стоп беседа»`, INTRO_MS);
+      const goal = this.deps.goal?.().trim();
+      const every = this.every();
+      const ru = [
+        "Режим беседы",
+        "• ответы на вопросы с фактами",
+        every ? `• подсказки примерно раз в ${every} с` : "• подскажу, если запнётесь",
+        goal ? `• цель: ${goal}` : "Выключить: «стоп беседа»"
+      ];
+      const en = [
+        "Conversation mode",
+        "• answers to factual questions",
+        every ? `• hints about every ${every} s` : "• a prompt when you trail off",
+        goal ? `• goal: ${goal}` : "Stop: «стоп беседа»"
+      ];
+      this.paint((intro.en ? en : ru).join(`
+`), INTRO_MS);
       this.deps.log("talk", resume ? "Режим беседы включён — продолжаю прежний список" : "Режим беседы включён");
       this.deps.onChange();
     }
@@ -6257,7 +6340,8 @@ Stop: «стоп беседа»` : `Режим беседы
       this.session++;
       this.cancelScreenTimer();
       this.cancelSettle();
-      this.pending = null;
+      this.qPending = null;
+      this.feed = [];
       this.screen = "";
       if (this.record) {
         this.record.endedAt = this.deps.now();
@@ -6285,6 +6369,7 @@ Stop: «стоп беседа»` : `Режим беседы
         if (trigger)
           this.request(trigger, "пауза");
       }, TALK_SETTLE_MS);
+      this.maybeTip();
     }
     onSpeech(text) {
       if (!this.active)
@@ -6298,14 +6383,16 @@ Stop: «стоп беседа»` : `Режим беседы
       let words = wordCount(this.recent.join(" "));
       while (this.recent.length > 1 && words > CONTEXT_WORDS2)
         words -= wordCount(this.recent.shift());
+      this.wordsSinceTip += wordCount(t);
       const trigger = findTalkTrigger(t);
       if (trigger)
         this.request(trigger, "");
+      this.maybeTip();
     }
     askUser(question) {
       if (!this.active || !question.trim())
         return;
-      this.hint({ kind: "question", text: question.trim() }, true);
+      this.answer({ kind: "question", text: question.trim() }, true);
     }
     request(trigger, via) {
       const n = contentWords(normalize(trigger.text)).join(" ");
@@ -6317,26 +6404,20 @@ Stop: «стоп беседа»` : `Режим беседы
       this.handled.push({ n, at: now });
       if (via)
         this.deps.log("talk", `Услышал (${via}): ${trigger.text}`);
-      this.hint(trigger, false);
+      this.answer(trigger, false);
     }
-    cancelSettle() {
-      if (this.settleTimer != null)
-        this.deps.clearTimer(this.settleTimer);
-      this.settleTimer = null;
-    }
-    async hint(trigger, fromUser) {
-      if (this.busy) {
-        if (fromUser || !this.pending?.fromUser)
-          this.pending = { trigger, fromUser };
+    async answer(trigger, fromUser) {
+      if (this.qBusy) {
+        if (fromUser || !this.qPending?.fromUser)
+          this.qPending = { trigger, fromUser };
         return;
       }
       const session = this.session;
-      this.busy = true;
+      this.qBusy = true;
       this.deps.log("talk", `${fromUser ? "Ваш вопрос" : trigger.kind === "prompt" ? "Подсказать" : "Вопрос"}: ${trigger.text}`);
-      if (fromUser)
-        this.setScreen(answerScreen(trigger.text, "…думаю"));
+      const placeholder = this.push(`${shorten(trigger.text, 40)} …`);
       const prev = (this.record?.notes ?? []).slice(-PREV_HINTS).map((x) => ({ q: x.q ?? "", a: x.text }));
-      const context = this.recent.slice(0, -1).join(" ");
+      const context = [...this.recent, this.interim].filter(Boolean).join(" ");
       const { system, user } = buildTalkPrompt(context, prev, trigger, fromUser, detectLang(trigger.text));
       try {
         const reply = await this.deps.complete(system, user);
@@ -6345,27 +6426,104 @@ Stop: «стоп беседа»` : `Режим беседы
         const qa = parseAnswer(reply, trigger.text);
         if (!qa) {
           this.deps.log("talk", "Подсказка не нужна");
-          if (fromUser)
-            this.setScreen("");
+          this.drop(placeholder);
           return;
         }
         const kind = fromUser ? "you" : trigger.kind === "prompt" ? "hint" : "qa";
         this.addNote({ t: this.deps.now(), kind, q: qa.q, text: qa.a });
         this.deps.log("talk", `→ ${qa.a}`);
-        this.setScreen(answerScreen(qa.q, qa.a), TALK_SHOW_MS);
+        this.lastAnswerAt = this.deps.now();
+        this.replace(placeholder, `${qa.q}: ${qa.a}`);
       } catch (e) {
         if (session !== this.session)
           return;
+        this.drop(placeholder);
         this.showError(e);
       } finally {
         if (session === this.session) {
-          this.busy = false;
-          const next = this.pending;
-          this.pending = null;
+          this.qBusy = false;
+          const next = this.qPending;
+          this.qPending = null;
           if (next)
-            this.hint(next.trigger, next.fromUser);
+            this.answer(next.trigger, next.fromUser);
         }
       }
+    }
+    every() {
+      const v = Math.round(Number(this.deps.everySec?.() ?? 0));
+      return v > 0 ? Math.max(TALK_TIP_MIN_SEC, Math.min(120, v)) : 0;
+    }
+    maybeTip() {
+      const every = this.every();
+      if (!every || this.tipBusy)
+        return;
+      const words = this.wordsSinceTip + (this.interim ? wordCount(this.interim) : 0);
+      if (words < TALK_TIP_MIN_WORDS || this.deps.now() - this.lastTipAt < every * 1000)
+        return;
+      this.tip();
+    }
+    async tip() {
+      const session = this.session;
+      this.tipBusy = true;
+      this.lastTipAt = this.deps.now();
+      this.wordsSinceTip = 0;
+      const context = [...this.recent, this.interim].filter(Boolean).join(" ");
+      const lang = detectLang(context.split(/\s+/).slice(-60).join(" "));
+      const prevTips = (this.record?.notes ?? []).slice(-PREV_TIPS).map((n) => `${n.q}: ${n.text}`);
+      const { system, user } = buildTipPrompt(context, prevTips, this.deps.goal?.() ?? "", lang);
+      try {
+        const reply = await this.deps.complete(system, user);
+        if (session !== this.session)
+          return;
+        const tip = parseTip(reply);
+        if (!tip) {
+          this.deps.log("talk", "Подсказка по ходу: нечего добавить");
+          return;
+        }
+        const line = tipLine(tip.label, tip.text, lang);
+        const seen = (this.record?.notes ?? []).slice(-PREV_TIPS).some((n) => normalize(`${n.q}: ${n.text}`) === normalize(line));
+        if (seen)
+          return;
+        this.addNote({ t: this.deps.now(), kind: "tip", q: TIP_LABELS[lang][tip.label], text: tip.text });
+        this.deps.log("talk", `Подсказка по ходу — ${line}`);
+        if (this.deps.now() - this.lastAnswerAt >= TALK_ANSWER_PRIORITY_MS)
+          this.push(line);
+      } catch (e) {
+        if (session !== this.session)
+          return;
+        this.deps.log("error", `Беседа: ${this.deps.explainError(e)}`);
+      } finally {
+        if (session === this.session)
+          this.tipBusy = false;
+      }
+    }
+    push(text) {
+      const id = ++this.feedSeq;
+      this.feed.push({ id, text });
+      if (this.feed.length > 6)
+        this.feed.splice(0, this.feed.length - 6);
+      this.renderFeed();
+      return id;
+    }
+    replace(id, text) {
+      const item = this.feed.find((f) => f.id === id);
+      if (item) {
+        this.feed = this.feed.filter((f) => f.id !== id);
+        this.feed.push({ id, text });
+      } else
+        this.feed.push({ id: ++this.feedSeq, text });
+      this.renderFeed();
+    }
+    drop(id) {
+      const before = this.feed.length;
+      this.feed = this.feed.filter((f) => f.id !== id);
+      if (this.feed.length !== before)
+        this.renderFeed();
+    }
+    renderFeed() {
+      if (!this.feed.length)
+        return this.paint("");
+      this.paint(feedScreen(this.feed.map((f) => f.text), 1), TALK_SHOW_MS);
     }
     addNote(n) {
       if (!this.record)
@@ -6376,7 +6534,7 @@ Stop: «стоп беседа»` : `Режим беседы
       this.deps.save(this.record);
       this.deps.onChange();
     }
-    setScreen(text, forMs = 0) {
+    paint(text, forMs = 0) {
       this.cancelScreenTimer();
       this.screen = text;
       if (text)
@@ -6388,6 +6546,7 @@ Stop: «стоп беседа»` : `Режим беседы
           this.screenTimer = null;
           if (this.active && this.screen === text) {
             this.screen = "";
+            this.feed = [];
             this.deps.clear();
             this.deps.onChange();
           }
@@ -6400,6 +6559,11 @@ Stop: «стоп беседа»` : `Режим беседы
         this.deps.clearTimer(this.screenTimer);
       this.screenTimer = null;
     }
+    cancelSettle() {
+      if (this.settleTimer != null)
+        this.deps.clearTimer(this.settleTimer);
+      this.settleTimer = null;
+    }
     showError(e) {
       const human = this.deps.explainError(e);
       this.deps.log("error", `Беседа: ${human}`);
@@ -6407,8 +6571,12 @@ Stop: «стоп беседа»` : `Режим беседы
       if (now - this.lastErrorShownAt < ERROR_SHOW_EVERY_MS2)
         return;
       this.lastErrorShownAt = now;
-      this.setScreen(human, TALK_SHOW_MS);
+      this.push(human);
     }
+  }
+  function shorten(s, max) {
+    const t = s.replace(/\s+/g, " ").trim();
+    return t.length <= max ? t : t.slice(0, max).replace(/\s+\S*$/, "") + "…";
   }
 
   // src/background/store.ts
@@ -6437,6 +6605,8 @@ Stop: «стоп беседа»` : `Режим беседы
     followUpSec: 0,
     translateTo: "ru-RU",
     lectureEverySec: 15,
+    talkEverySec: 10,
+    talkGoal: "",
     v: SETTINGS_VERSION
   };
   function migrateSettings(raw) {
@@ -6498,6 +6668,8 @@ Stop: «стоп беседа»` : `Режим беседы
       followUpSec: clampInt(pick("followUpSec"), 0, 120, 0),
       translateTo: pick("translateTo") === "en-US" ? "en-US" : "ru-RU",
       lectureEverySec: clampInt(pick("lectureEverySec"), 10, 60, DEFAULT_SETTINGS.lectureEverySec),
+      talkEverySec: clampInt(pick("talkEverySec"), 0, 60, DEFAULT_SETTINGS.talkEverySec),
+      talkGoal: String(pick("talkGoal") ?? "").trim().slice(0, 300),
       v: SETTINGS_VERSION
     };
   }
@@ -6668,7 +6840,9 @@ Stop: «стоп беседа»` : `Режим беседы
         setTimer: (fn, ms) => this.setTimer(fn, ms),
         clearTimer: (id) => this.clearTimerFn(id),
         save: (r) => this.deps.store.saveTalk(r),
-        onChange: () => this.changed()
+        onChange: () => this.changed(),
+        everySec: () => this.settings.talkEverySec,
+        goal: () => this.settings.talkGoal
       }, deps.store.loadTalk());
     }
     async completeOnce(system, user) {
@@ -6836,6 +7010,11 @@ Stop: «стоп беседа»` : `Режим беседы
         this.startTalk("voice");
         return;
       }
+      if (wake.matched) {
+        const goal = goalIn(t);
+        if (goal !== null)
+          return this.setGoal(goal);
+      }
       const switchTo = parseSwitchCommand(body);
       if (switchTo) {
         this.switchProvider(switchTo, "voice");
@@ -6960,6 +7139,15 @@ Stop: «стоп беседа»` : `Режим беседы
           this.cancelTimer("wakeTimer");
           this.interim = "";
           this.startTalk("voice");
+          return;
+        }
+        const goal = this.committed.length === 0 ? goalIn(t) : null;
+        if (goal !== null) {
+          this.cancelTimer("silenceTimer");
+          this.cancelTimer("wakeTimer");
+          this.interim = "";
+          this.phase = this.pages.length ? "answering" : "idle";
+          this.setGoal(goal);
           return;
         }
         const cmd = parseCommand(clean);
@@ -7287,6 +7475,9 @@ Hints: ${hints}. The list is in the app.` : `Беседа выключена.
       const unambiguous = wake.matched || parseTranslateCommand(body) === "start" || normalize(body).split(" ").length >= 2;
       if (unambiguous && this.trySwitchMode(body))
         return;
+      const goal = wake.matched ? goalIn(t) : null;
+      if (goal !== null)
+        return this.setGoal(goal);
       const cmd = parseCommand(body);
       if (wake.matched && (cmd === "hide" || cmd === "cancel"))
         return this.stopTalk("voice");
@@ -7296,6 +7487,12 @@ Hints: ${hints}. The list is in the app.` : `Беседа выключена.
         return;
       }
       this.talk.onSpeech(t);
+    }
+    setGoal(goal) {
+      this.updateSettings({ talkGoal: goal });
+      this.addLog("talk", goal ? `Цель беседы: ${goal}` : "Цель беседы убрана");
+      this.flash(goal ? `Цель беседы:
+${goal}` : "Цель беседы убрана.", 3000);
     }
     trySwitchMode(body) {
       const target = parseTranslateCommand(body) === "start" ? "translating" : parseLectureCommand(body) === "start" ? "lecture" : parseTalkCommand(body) === "start" ? "talk" : null;
@@ -7587,9 +7784,30 @@ Hints: ${hints}. The list is in the app.` : `Беседа выключена.
       notes: (r?.notes ?? []).slice(-120)
     };
   }
+  function parseGoal(body) {
+    const m = /^\s*(моя\s+|my\s+)?(?:цель|goal)(\s+(?:беседы|разговора|of the conversation))?(\s*[:—–-]\s*|\s+(?:это|is)\s+|\s+)(.+)$/i.exec(body);
+    if (!m)
+      return null;
+    const [, mine, qualifier, sep, rest] = m;
+    if (!/[:—–-]/.test(sep) && !mine && !qualifier)
+      return null;
+    const g = rest.trim().replace(/[.!]+$/, "");
+    if (/^(нет|никакой|убрать|сбросить|none|no|clear)$/i.test(g))
+      return "";
+    return g.slice(0, 300);
+  }
+  function goalIn(raw) {
+    const m = /(?:^|[\s,.:;!?«"])((?:моя\s+|my\s+)?(?:цель|goal)(?![\p{L}\p{N}]))/iu.exec(raw);
+    if (!m)
+      return null;
+    const start = m.index + m[0].length - m[1].length;
+    if (normalize(raw.slice(0, start)).split(" ").filter(Boolean).length > 3)
+      return null;
+    return parseGoal(raw.slice(start));
+  }
 
   // src/background/index.ts
-  var APP_VERSION = "1.8.1";
+  var APP_VERSION = "1.9.0";
   function getKV() {
     try {
       const ls = globalThis.localStorage;

@@ -270,7 +270,7 @@ test("built bundle: conversation mode — a question in the conversation gets fa
   await sleep(60)
   expect(h.openaiCalls.length).toBe(1)
   expect(h.openaiCalls[0].body.instructions).toContain("суфлёр")
-  expect(h.renders().at(-1)).toMatch(/^\? Иммануил Кант\n→ Немецкий философ/)
+  expect(h.renders().at(-1)).toMatch(/^• Иммануил Кант: Немецкий философ/)
 
   h.ev("_ui", {type: "UI_MESSAGE", channel: "getTalk", payload: {}, seq: 3, requestId: "T1"})
   await sleep(30)

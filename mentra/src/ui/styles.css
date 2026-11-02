@@ -1007,3 +1007,10 @@ textarea::placeholder {
 .lecture-meta + .notes {
   border-top: 0.5px solid var(--sep);
 }
+.notes li.tip::before {
+  content: "›";
+  color: #e0a100;
+}
+.notes li.tip b {
+  font-weight: 600;
+}

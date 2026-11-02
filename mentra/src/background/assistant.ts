@@ -204,6 +204,8 @@ export class Assistant {
         clearTimer: (id) => this.clearTimerFn(id),
         save: (r) => this.deps.store.saveTalk(r),
         onChange: () => this.changed(),
+        everySec: () => this.settings.talkEverySec,
+        goal: () => this.settings.talkGoal,
       },
       deps.store.loadTalk(),
     )
@@ -396,6 +398,10 @@ export class Assistant {
       this.startTalk("voice")
       return
     }
+    if (wake.matched) {
+      const goal = goalIn(t)
+      if (goal !== null) return this.setGoal(goal)
+    }
 
     const switchTo = parseSwitchCommand(body)
     if (switchTo) {
@@ -530,6 +536,15 @@ export class Assistant {
         this.cancelTimer("wakeTimer")
         this.interim = ""
         this.startTalk("voice")
+        return
+      }
+      const goal = this.committed.length === 0 ? goalIn(t) : null
+      if (goal !== null) {
+        this.cancelTimer("silenceTimer")
+        this.cancelTimer("wakeTimer")
+        this.interim = ""
+        this.phase = this.pages.length ? "answering" : "idle"
+        this.setGoal(goal)
         return
       }
       // "Ассистент, дальше" or "отмена" said while capturing is a command, not a question
@@ -859,6 +874,9 @@ Notes are in the app.`
     // activator («Вопрос, стоп») or an unambiguous phrase («транслейт», «режим лекции», «стоп беседа»).
     const unambiguous = wake.matched || parseTranslateCommand(body) === "start" || normalize(body).split(" ").length >= 2
     if (unambiguous && this.trySwitchMode(body)) return
+    // «Вопрос, цель: договориться о скидке» — what the hints should steer toward
+    const goal = wake.matched ? goalIn(t) : null
+    if (goal !== null) return this.setGoal(goal)
     const cmd = parseCommand(body)
     if (wake.matched && (cmd === "hide" || cmd === "cancel")) return this.stopTalk("voice")
     if (wake.matched && isMeaningful(body) && !cmd) {
@@ -867,6 +885,13 @@ Notes are in the app.`
       return
     }
     this.talk.onSpeech(t)
+  }
+
+  /** Conversation goal, said by voice («Вопрос, цель: …») or typed in the app. */
+  setGoal(goal: string): void {
+    this.updateSettings({talkGoal: goal})
+    this.addLog("talk", goal ? `Цель беседы: ${goal}` : "Цель беседы убрана")
+    this.flash(goal ? `Цель беседы:\n${goal}` : "Цель беседы убрана.", 3000)
   }
 
   /** «Транслейт», «Лекция», «Беседа» said in another listening mode switch to that mode. */
@@ -1161,4 +1186,31 @@ function lectureSnapshot(active: boolean, r: LectureRecord | null) {
     total: r?.notes.length ?? 0,
     notes: (r?.notes ?? []).slice(-120),
   }
+}
+
+/**
+ * «цель: договориться о скидке», «цель беседы — …», «моя цель — …», «goal: …»; "" for «цель: нет»;
+ * null when it is not a goal phrase («цель жизни — это что?» is a question, not a goal).
+ */
+export function parseGoal(body: string): string | null {
+  const m = /^\s*(моя\s+|my\s+)?(?:цель|goal)(\s+(?:беседы|разговора|of the conversation))?(\s*[:—–-]\s*|\s+(?:это|is)\s+|\s+)(.+)$/i.exec(body)
+  if (!m) return null
+  const [, mine, qualifier, sep, rest] = m
+  // a bare space or «это» counts only after «моя цель» / «цель беседы»
+  if (!/[:—–-]/.test(sep) && !mine && !qualifier) return null
+  const g = rest.trim().replace(/[.!]+$/, "")
+  if (/^(нет|никакой|убрать|сбросить|none|no|clear)$/i.test(g)) return ""
+  return g.slice(0, 300)
+}
+
+/**
+ * The goal phrase right after the activator, read from the raw transcript (the activator parser
+ * drops a standalone «—», which tells «цель — …» from «цель жизни …»).
+ */
+export function goalIn(raw: string): string | null {
+  const m = /(?:^|[\s,.:;!?«"])((?:моя\s+|my\s+)?(?:цель|goal)(?![\p{L}\p{N}]))/iu.exec(raw)
+  if (!m) return null
+  const start = m.index + m[0].length - m[1].length
+  if (normalize(raw.slice(0, start)).split(" ").filter(Boolean).length > 3) return null
+  return parseGoal(raw.slice(start))
 }

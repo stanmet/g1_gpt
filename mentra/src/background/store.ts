@@ -39,6 +39,10 @@ export interface Settings {
   translateTo: TranslateTarget
   /** Lecture mode: key points about every N seconds. */
   lectureEverySec: number
+  /** Conversation mode: a proactive hint about every N seconds of talk; 0 = only answers to questions. */
+  talkEverySec: number
+  /** Conversation mode: what the user wants from the conversation; steers «Спроси»/«Скажи». */
+  talkGoal: string
   /** Settings schema version, for one-time migrations of stored settings. */
   v: number
 }
@@ -71,6 +75,8 @@ export const DEFAULT_SETTINGS: Settings = {
   followUpSec: 0,
   translateTo: "ru-RU",
   lectureEverySec: 15,
+  talkEverySec: 10,
+  talkGoal: "",
   v: SETTINGS_VERSION,
 }
 
@@ -159,6 +165,8 @@ export function normalizeSettings(raw: Partial<Settings> | null | undefined, bas
     followUpSec: clampInt(pick("followUpSec"), 0, 120, 0),
     translateTo: pick("translateTo") === "en-US" ? "en-US" : "ru-RU",
     lectureEverySec: clampInt(pick("lectureEverySec"), 10, 60, DEFAULT_SETTINGS.lectureEverySec),
+    talkEverySec: clampInt(pick("talkEverySec"), 0, 60, DEFAULT_SETTINGS.talkEverySec),
+    talkGoal: String(pick("talkGoal") ?? "").trim().slice(0, 300),
     v: SETTINGS_VERSION,
   }
 }

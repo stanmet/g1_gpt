@@ -19,7 +19,7 @@ export interface LectureNote {
    * point = key point from the lecture; qa = someone asked (the lecturer, the other person), the AI
    * answered; you = the user asked («Вопрос, …»); hint = the user trailed off («X — это…») and got a prompt.
    */
-  kind: "point" | "qa" | "you" | "hint"
+  kind: "point" | "qa" | "you" | "hint" | "tip"
   text: string
   q?: string
 }
@@ -512,6 +512,8 @@ export function notesAsText(
   if (!record?.notes.length) return ""
   const head = `${opts.title ?? "Конспект лекции"} — ${fmtTime(record.startedAt)}`
   const label = (k: LectureNote["kind"]) => (k === "you" ? "Мой вопрос" : k === "hint" ? "Подсказка" : (opts.asked ?? "Вопрос лектора"))
-  const lines = record.notes.map((n) => (n.kind === "point" ? `• ${n.text}` : `${label(n.kind)}: ${n.q ?? ""}\n  → ${n.text}`))
+  const lines = record.notes.map((n) =>
+    n.kind === "point" ? `• ${n.text}` : n.kind === "tip" ? `${n.q}: ${n.text}` : `${label(n.kind)}: ${n.q ?? ""}\n  → ${n.text}`,
+  )
   return [head, "", ...lines].join("\n")
 }

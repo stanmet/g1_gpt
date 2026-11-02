@@ -618,7 +618,7 @@ describe("conversation mode («беседа»)", () => {
     expect(e.requests.length).toBe(1)
     expect(e.requests[0].body.instructions).toContain("суфлёр")
     expect(e.requests[0].body.tools).toBeUndefined()
-    expect(e.shown.at(-1)).toContain("→ Немецкий философ")
+    expect(e.shown.at(-1)).toContain("Иммануил Кант: Немецкий философ")
 
     e.a.onTranscript("Вопрос, сколько будет", false) // own question: waits for the final, not answered from live text
     await e.clock.advance(2000)
@@ -628,13 +628,36 @@ describe("conversation mode («беседа»)", () => {
     e.a.onTranscript("А вот категорический императив это", true)
     await e.clock.advance(10)
     expect(e.requests[1].body.input[0].content).toContain("Иммануил Кант")
-    expect(e.shown.at(-1)).toContain("→ Поступай так")
+    expect(e.shown.at(-1)).toContain("Поступай так")
     expect(e.a.history.length).toBe(0)
 
     e.a.onTranscript("Стоп беседа", true)
     expect(e.a.phase).toBe("idle")
     expect(e.shown.at(-1)).toContain("Подсказок: 2")
     expect(e.store.loadTalk()!.notes.map((n) => n.kind)).toEqual(["qa", "hint"])
+  })
+
+  test("the goal is set by voice in any mode and steers proactive hints", async () => {
+    const e = setup(["Спроси: Есть ли скидка при оплате сразу?"])
+    e.a.onTranscript("Вопрос, цель — договориться о скидке", true)
+    expect(e.a.settings.talkGoal).toBe("договориться о скидке")
+    expect(e.store.loadSettings().talkGoal).toBe("договориться о скидке")
+    expect(e.requests.length).toBe(0) // not a question to the AI
+    e.a.onTranscript("Вопрос, цель жизни это что", false) // a real question still starts capturing
+    expect(e.a.phase).toBe("capturing")
+    e.a.command("cancel", "ui")
+
+    e.a.onTranscript("Беседа", true)
+    e.a.onTranscript("Мы обсуждаем ремонт кухни, бюджет около пяти тысяч евро и сроки до весны.", true)
+    await e.clock.advance(10_500)
+    e.a.onTranscript("Плитку тоже нужно поменять во всей ванной.", true)
+    await e.clock.advance(10)
+    expect(e.requests.length).toBe(1)
+    expect(e.requests[0].body.instructions).toContain("договориться о скидке")
+    expect(e.shown.at(-1)!.replace(/\n/g, " ")).toBe("• Спроси: Есть ли скидка при оплате сразу?")
+    e.a.onTranscript("Вопрос, цель: нет", true)
+    expect(e.a.settings.talkGoal).toBe("")
+    expect(e.a.phase).toBe("talk")
   })
 
   test("switching between modes; own and UI questions; snapshot", async () => {
@@ -644,11 +667,11 @@ describe("conversation mode («беседа»)", () => {
     e.a.onTranscript("Вопрос, когда родился Кант?", true)
     await e.clock.advance(10)
     expect(e.requests[0].body.instructions).toContain("ответь обязательно")
-    expect(e.shown.at(-1)).toContain("→ 1724.")
+    expect(e.shown.at(-1)).toBe("• Кант: 1724.")
     await e.a.ask("Что такое Лима?", "ui")
     await e.clock.advance(10)
     expect(e.a.phase).toBe("talk")
-    expect(e.shown.at(-1)).toContain("→ Столица Перу.")
+    expect(e.shown.at(-1)).toBe("· Кант: 1724.\n• Лима: Столица Перу.") // feed: newest at the bottom
     expect(e.a.snapshot().talk).toMatchObject({active: true, total: 2})
 
     e.a.onTranscript("Лекция", true) // one word in a conversation: not a command

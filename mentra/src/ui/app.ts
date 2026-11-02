@@ -75,6 +75,8 @@ function previewBridge(): Bridge {
       headNod: true,
       translateTo: "ru-RU",
       lectureEverySec: 15,
+      talkEverySec: 10,
+      talkGoal: "Договориться о скидке на ремонт",
       provider: "anthropic",
       anthropicModel: "claude-haiku-5-5",
       geminiModel: "gemini-3.8-flash",
@@ -133,9 +135,10 @@ function previewBridge(): Bridge {
         if (state.lecture) state.lecture = {...state.lecture, active: false, endedAt: Date.now()}
         state.phase = "talk"
         state.currentScreen = "? Кант\n→ Немецкий философ, 1724–1804.\nАвтор «Критики чистого\nразума», категорический\nимператив."
-        state.talk = {active: true, startedAt: Date.now() - 300000, endedAt: 0, total: 2, notes: [
+        state.talk = {active: true, startedAt: Date.now() - 300000, endedAt: 0, total: 3, notes: [
           {t: Date.now() - 200000, kind: "qa", q: "Кто такой Кант?", text: "Немецкий философ, 1724–1804. Автор «Критики чистого разума», категорический императив."},
           {t: Date.now() - 120000, kind: "hint", q: "Категорический императив", text: "Поступай так, чтобы правило твоего поступка могло стать всеобщим законом."},
+          {t: Date.now() - 60000, kind: "tip", q: "Спроси", text: "А как вы сами понимаете долг — как правило или как чувство?"},
         ]}
       }
       if (channel === "command" && payload?.cmd === "talkStop") {
@@ -418,6 +421,15 @@ function renderSettings(s: any, st: any) {
   setStep("lectureEverySec", every)
   $("lectureCost").textContent = `Чаще — больше запросов к нейросети: до ${Math.round(3600 / every)} в час. Пауза в речи лектора даёт тезис раньше.`
   $("lectureEveryText").textContent = `Тезисы появляются примерно раз в ${every} секунд.`
+  const tipEvery = st.talkEverySec ?? 10
+  setStep("talkEverySec", tipEvery)
+  setText("talkGoal", st.talkGoal ?? "")
+  $("talkEveryText").textContent = tipEvery
+    ? `Ещё примерно раз в ${tipEvery} секунд — подсказка, куда вести разговор${st.talkGoal ? ` (цель: ${st.talkGoal})` : ""}.`
+    : "Подсказки по ходу разговора выключены."
+  $("talkCost").textContent = tipEvery
+    ? `Кроме ответов на вопросы, очки сами подсказывают: «Факт», «Ответ», «Спроси», «Скажи» — к цели, если она задана. До ${Math.round(3600 / tipEvery)} запросов в час, пока идёт разговор. Цель можно сказать голосом: «Вопрос, цель — …».`
+    : "Только ответы на вопросы и подсказки, когда вы запнулись. Цель можно сказать голосом: «Вопрос, цель — …»."
   setStep("clearAfterSec", st.clearAfterSec ?? 90)
   const nod = field<HTMLInputElement>("headNod")
   if (document.activeElement !== nod) nod.checked = st.headNod !== false
@@ -509,7 +521,7 @@ function renderNotes(s: any) {
       : "Идёт запись"
     : `${isTalk ? "Беседа" : "Лекция"} ${fmtHM(r.startedAt)}–${r.endedAt ? fmtHM(r.endedAt) : "…"}`
   $("lectureSub").textContent = isTalk
-    ? `${answers} ${plural(answers, "подсказка", "подсказки", "подсказок")}`
+    ? `${answers} ${plural(answers, "подсказка", "подсказки", "подсказок")}${s.settings?.talkGoal ? `. Цель: ${s.settings.talkGoal}` : ""}`
     : `${points} ${plural(points, "тезис", "тезиса", "тезисов")}, ${answers} ${plural(answers, "ответ", "ответа", "ответов")}`
   const key = `${notesShown}:${r.startedAt}:${r.total}`
   if (key === notesKey) return
@@ -525,7 +537,11 @@ function renderNotes(s: any) {
     t.className = "t"
     t.textContent = fmtHM(n.t)
     li.append(t)
-    if (n.kind !== "point") {
+    if (n.kind === "tip") {
+      const b = document.createElement("b")
+      b.textContent = `${n.q}: `
+      li.append(b, n.text)
+    } else if (n.kind !== "point") {
       const q = document.createElement("span")
       q.className = "q"
       q.textContent = (who[n.kind] ?? "") + (n.q ?? "")
