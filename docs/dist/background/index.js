@@ -5850,14 +5850,14 @@ To stop: «стоп перевод»`);
         glassesConnected: this.glassesConnected,
         settings: { ...this.settings, apiKey: "", hasKey: Boolean(key), keyHint: key ? `${key.slice(0, 3)}…${key.slice(-4)}` : "" },
         historyCount: this.history.length,
-        history: this.history.slice(-10),
+        history: this.history.slice(-40),
         log: this.log.slice(-60)
       };
     }
   }
 
   // src/background/index.ts
-  var APP_VERSION = "1.3.0";
+  var APP_VERSION = "1.4.0";
   function getKV() {
     try {
       const ls = globalThis.localStorage;
@@ -5879,7 +5879,7 @@ To stop: «стоп перевод»`);
         uiTimer = null;
         try {
           if (session.ui.isOpen())
-            session.ui.send("state", assistant.snapshot());
+            session.ui.send("state", snap());
         } catch {}
       }, 250);
     };
@@ -5887,6 +5887,7 @@ To stop: «стоп перевод»`);
       const d = session.capabilities?.display;
       return { x: 0, y: 0, w: d?.width ?? 576, h: d?.height ?? 200 };
     };
+    const snap = () => ({ ...assistant.snapshot(), version: APP_VERSION });
     const assistant = new Assistant({
       store,
       fetch: (url, init) => globalThis.fetch(url, init),
@@ -5956,15 +5957,15 @@ To stop: «стоп перевод»`);
           assistant.addLog("info", `Дисплей ${d.width ?? "?"}×${d.height ?? "?"}${d.canPosition === false ? ", текстовый режим" : ""}`);
       });
     } catch {}
-    session.ui.handle("getState", () => assistant.snapshot());
+    session.ui.handle("getState", () => snap());
     session.ui.handle("saveSettings", (patch) => {
       const s = assistant.updateSettings(patch ?? {});
       subscribeStt(s);
-      return assistant.snapshot();
+      return snap();
     });
     session.ui.handle("ask", async (p) => {
       await assistant.ask(String(p?.text ?? ""), "ui");
-      return assistant.snapshot();
+      return snap();
     });
     session.ui.handle("command", (p) => {
       const cmd = String(p?.cmd ?? "");
@@ -5974,11 +5975,11 @@ To stop: «стоп перевод»`);
         assistant.stopTranslation("ui");
       else if (["next", "prev", "first", "repeat", "hide", "cancel", "reset"].includes(cmd))
         assistant.command(cmd, "ui");
-      return assistant.snapshot();
+      return snap();
     });
     session.ui.handle("simulateSpeech", (p) => {
       assistant.onTranscript(String(p?.text ?? ""), true);
-      return assistant.snapshot();
+      return snap();
     });
     session.ui.handle("testDisplay", async () => {
       const text = `Проверка дисплея G1
@@ -5995,7 +5996,7 @@ Latin text: Hello!
         assistant.addLog("error", `Тест дисплея: ${String(e?.message ?? e)}`);
       }
       assistant.addLog("display", `Тест дисплея: ${r?.status ?? "нет ответа"}${r?.degraded ? ", текстовый режим" : ""}${r?.reason ? ", " + r.reason : ""}`);
-      return assistant.snapshot();
+      return snap();
     });
     session.ui.onOpen(() => pushState());
   });

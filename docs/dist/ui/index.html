@@ -3,196 +3,325 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
     <title>GPT для G1</title>
     
-  <link rel="stylesheet" crossorigin href="./chunk-t5n2f0an.css"><script type="module" crossorigin src="./chunk-9ct2wk1a.js"></script></head>
+  <link rel="stylesheet" crossorigin href="./chunk-vkv2krxg.css"><script type="module" crossorigin src="./chunk-c4smaa7e.js"></script></head>
   <body>
-    <main id="app">
-      <header class="top">
-        <div>
-          <h1>GPT для G1</h1>
-          <p class="sub" id="sub">Голосовой помощник OpenAI</p>
+    <!-- ───────────── Очки ───────────── -->
+    <section class="screen" id="screen-glasses" aria-labelledby="t-glasses">
+      <header class="large-title"><h1 id="t-glasses">Очки</h1></header>
+
+      <div class="status-strip">
+        <span class="status-dot" id="connDot"></span>
+        <span id="connText">Очки: нет данных</span>
+      </div>
+
+      <div class="segmented" id="modeSeg" role="tablist" aria-label="Режим">
+        <button role="tab" data-mode="assistant" aria-selected="true">Помощник</button>
+        <button role="tab" data-mode="translate" aria-selected="false">Перевод</button>
+        <span class="seg-thumb" aria-hidden="true"></span>
+      </div>
+
+      <figure class="lens" id="lens" data-mode="assistant">
+        <div class="lens-glass">
+          <p class="lens-text" id="lensText"></p>
         </div>
+        <figcaption class="lens-caption">
+          <span id="lensState">Готов — слушаю</span>
+          <span class="page-dots" id="pageDots" aria-hidden="true"></span>
+        </figcaption>
+      </figure>
+
+      <div class="lens-toolbar" role="toolbar" aria-label="Управление экраном очков">
+        <button class="icon-btn" data-cmd="prev" aria-label="Предыдущая страница">
+          <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" /></svg>
+        </button>
+        <button class="text-btn" data-cmd="hide">Скрыть</button>
+        <button class="text-btn" id="testDisplay">Проверить дисплей</button>
+        <button class="icon-btn" data-cmd="next" aria-label="Следующая страница">
+          <svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" /></svg>
+        </button>
+      </div>
+
+
+      <div class="group" id="keyWarn" hidden>
+        <button class="cell cell-link" data-open="key">
+          <span class="cell-icon tint-red">
+            <svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="4" /><path d="M11 12l8-8M16 7l2 2M14 9l2 2" /></svg>
+          </span>
+          <span class="cell-main"><span class="cell-title">Добавьте ключ OpenAI</span>
+            <span class="cell-sub">Без него помощник не сможет отвечать</span></span>
+          <svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" /></svg>
+        </button>
+      </div>
+
+      <h2 class="group-header" id="howHeader">Как говорить</h2>
+      <div class="group" id="howAssistant">
+        <div class="cell">
+          <span class="cell-icon tint-green">
+            <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
+          </span>
+          <span class="cell-main"><span class="cell-title" id="wakeHint">«Вопрос, …»</span>
+            <span class="cell-sub">Задайте вопрос после этого слова. Короткая пауза — конец вопроса.</span></span>
+        </div>
+        <div class="cell">
+          <span class="cell-icon tint-gray">
+            <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h10M4 17h13" /></svg>
+          </span>
+          <span class="cell-main"><span class="cell-title">«Дальше», «назад», «повтори»</span>
+            <span class="cell-sub">Листайте длинный ответ. «Скрой» убирает текст с очков.</span></span>
+        </div>
+        <div class="cell">
+          <span class="cell-icon tint-gray">
+            <svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z" /></svg>
+          </span>
+          <span class="cell-main"><span class="cell-title">Уточняйте как в разговоре</span>
+            <span class="cell-sub">Помощник помнит прошлые вопросы. На встречный вопрос отвечайте сразу, без активатора. «Новый разговор» — начать заново.</span></span>
+        </div>
+        <div class="cell">
+          <span class="cell-icon tint-indigo">
+            <svg viewBox="0 0 24 24"><path d="M4 6h9M8.5 4v2M6 6c1 4 4 7 7 8M11 6c-1 4-3 7-6 9M13 20l4-9 4 9M14.5 17h5" /></svg>
+          </span>
+          <span class="cell-main"><span class="cell-title">«Транслейт»</span>
+            <span class="cell-sub">Всё, что звучит вокруг, переводится на очки. «Стоп перевод» — выключить.</span></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ───────────── Разговор ───────────── -->
+    <section class="screen" id="screen-chat" aria-labelledby="t-chat" hidden>
+      <header class="large-title">
+        <h1 id="t-chat">Разговор</h1>
+        <button class="nav-action" id="newChat">Новый</button>
       </header>
-
-      <section class="status">
-        <div class="pill" id="phase">…</div>
-        <div class="pill quiet" id="glasses">Очки: ?</div>
-      </section>
-
-      <section class="card hud-card">
-        <div class="card-title">Сейчас на очках</div>
-        <pre class="hud" id="hud">—</pre>
-        <div class="row nav">
-          <button data-cmd="prev" aria-label="Предыдущий экран">‹ Назад</button>
-          <span id="pageinfo" class="muted"></span>
-          <button data-cmd="next" aria-label="Следующий экран">Дальше ›</button>
-        </div>
-        <div class="row">
-          <button data-cmd="hide" class="ghost">Скрыть</button>
-          <button id="testDisplay" class="ghost">Тест дисплея</button>
-        </div>
-        <div class="row">
-          <button id="translateBtn" class="wide">Перевод: включить</button>
-        </div>
-      </section>
-
-      <section class="card" id="keyCard">
-        <div class="card-title">Ключ OpenAI API</div>
-        <p class="hint" id="keyState">Ключ не задан.</p>
-        <div class="row">
-          <input id="apiKey" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-…" />
-        </div>
-        <div class="row">
-          <button id="saveKey" class="primary">Сохранить ключ</button>
-          <button id="removeKey" class="ghost danger">Удалить</button>
-        </div>
-        <p class="hint">Ключ хранится только в этом приложении на телефоне и отправляется только в api.openai.com.</p>
-      </section>
-
-      <section class="card">
-        <div class="card-title">Проверка без голоса</div>
-        <label class="field">
-          <span>Спросить текстом (ответ появится на очках)</span>
-          <div class="row">
-            <input id="askText" type="text" placeholder="Например: сколько лететь до Рима?" />
-            <button id="askBtn" class="primary">→</button>
-          </div>
-        </label>
-        <label class="field">
-          <span>Имитировать фразу (проверка активатора и команд)</span>
-          <div class="row">
-            <input id="simText" type="text" placeholder="Вопрос, какая столица Австралии?" />
-            <button id="simBtn">▶</button>
-          </div>
-        </label>
-        <p class="hint" id="lastHeard">Последняя распознанная фраза: —</p>
-      </section>
-
-      <section class="card">
-        <div class="card-title">Как говорить</div>
-        <ul class="howto">
-          <li>Начните фразу с активатора: <b id="wakeExample">«Вопрос, …»</b> — и задайте вопрос. Пауза ~1,5 с = конец вопроса.</li>
-          <li>Можно спрашивать по-английски: <b>«Вопрос, what time is it in Tokyo?»</b> — ответ будет на английском.</li>
-          <li>Листать: <b>«дальше»</b>, <b>«назад»</b>, <b>«сначала»</b>, <b>«повтори»</b> (или next, back, repeat).</li>
-          <li><b>«Скрой»</b> — убрать текст, <b>«стоп»</b> — отменить, <b>«новый разговор»</b> — забыть контекст.</li>
-          <li>Уточнения: снова <b>«Вопрос, а …»</b> — помощник помнит разговор.</li>
-          <li><b>«Транслейт»</b> (или «переводи», «translate») — всё, что звучит вокруг, переводится на очки. Выключить: <b>«стоп перевод»</b> или «хватит». «Вопрос, …» во время перевода — выключает перевод и задаёт вопрос.</li>
-          <li>Если помощник сам спросил (на очках «» ответьте голосом»), отвечайте сразу, без активатора — 25 секунд.</li>
-        </ul>
-      </section>
-
-      <form class="card" id="settingsForm">
-        <div class="card-title">Ответы</div>
-        <label class="field">
-          <span>Модель</span>
-          <select name="modelChoice" id="modelChoice">
-            <option value="gpt-6.1-terra">GPT‑6.1 Terra — быстро и недорого (рекомендую)</option>
-            <option value="gpt-6-luna">GPT‑6 Luna — самая дешёвая</option>
-            <option value="gpt-6.1-sol">GPT‑6.1 Sol — умнее, дороже</option>
-            <option value="gpt-6-astra">GPT‑6 Astra — флагман, дорого</option>
-            <option value="custom">Другая (ввести ID)…</option>
-          </select>
-        </label>
-        <label class="field" id="customModelField" hidden>
-          <span>ID модели</span>
-          <input name="customModel" type="text" autocapitalize="off" spellcheck="false" placeholder="например gpt-5.4-mini" />
-        </label>
-        <label class="field">
-          <span>Глубина размышлений</span>
-          <select name="effort">
-            <option value="auto">Авто (быстро)</option>
-            <option value="none">Без размышлений</option>
-            <option value="low">Низкая</option>
-            <option value="medium">Средняя (медленнее)</option>
-            <option value="high">Высокая (медленно)</option>
-          </select>
-        </label>
-        <label class="field">
-          <span>Длина ответа по умолчанию, слов</span>
-          <input name="answerWords" type="number" min="15" max="400" inputmode="numeric" />
-        </label>
-        <label class="check">
-          <input name="webSearch" type="checkbox" />
-          <span>Поиск в интернете для свежих фактов (+$0.01 за поиск)</span>
-        </label>
-        <label class="field">
-          <span>Помнить реплик разговора</span>
-          <input name="historyMessages" type="number" min="0" max="60" inputmode="numeric" />
-        </label>
-
-        <div class="card-title spaced">Обо мне</div>
-        <label class="field">
-          <span>Что помощнику знать о вас (имя, город, работа, интересы…)</span>
-          <textarea name="aboutMe" rows="4" placeholder="Меня зовут …, живу в …, работаю …"></textarea>
-        </label>
-        <label class="field">
-          <span>Пожелания к ответам</span>
-          <textarea name="instructions" rows="3" placeholder="Например: обращайся на «ты», цены в евро"></textarea>
-        </label>
-
-        <div class="card-title spaced">Голос</div>
-        <label class="field">
-          <span>Режим микрофона</span>
-          <select name="listenMode">
-            <option value="wake">По фразе‑активатору (рекомендую)</option>
-            <option value="always">Каждая фраза — вопрос</option>
-            <option value="off">Выключен</option>
-          </select>
-        </label>
-        <label class="field">
-          <span>Фразы‑активаторы через запятую</span>
-          <input name="wakeWords" type="text" autocapitalize="off" />
-        </label>
-        <label class="field">
-          <span>Язык распознавания</span>
-          <select name="sttLanguage">
-            <option value="auto">Русский + английский (рекомендую)</option>
-            <option value="ru-RU">Только русский</option>
-          </select>
-        </label>
-        <label class="field">
-          <span>Уточнять без активатора после любого ответа, с (0 — выкл.; после встречного вопроса — всегда 25 с)</span>
-          <input name="followUpSec" type="number" min="0" max="120" inputmode="numeric" />
-        </label>
-
-        <label class="field">
-          <span>Перевод («транслейт») — на какой язык</span>
-          <select name="translateTo">
-            <option value="ru-RU">На русский</option>
-            <option value="en-US">На английский</option>
-          </select>
-        </label>
-
-        <div class="card-title spaced">Экран</div>
-        <label class="field">
-          <span>Автолистание: секунд на экран (0 — только голосом)</span>
-          <input name="autoAdvanceSec" type="number" min="0" max="60" inputmode="numeric" />
-        </label>
-        <label class="field">
-          <span>Убирать ответ после последней страницы через, с (0 — не убирать)</span>
-          <input name="clearAfterSec" type="number" min="0" max="3600" inputmode="numeric" />
-        </label>
-
-        <button type="submit" class="primary wide" id="saveSettings">Сохранить настройки</button>
+      <div class="chat" id="chat" aria-live="polite"></div>
+      <div class="chat-empty" id="chatEmpty">
+        <p class="empty-title">Пока пусто</p>
+        <p class="empty-sub">Спросите голосом через очки или напишите ниже — ответ появится и здесь, и на дисплее.</p>
+      </div>
+      <form class="composer" id="composer" autocomplete="off">
+        <input id="askText" type="text" enterkeyhint="send" placeholder="Спросить текстом" aria-label="Вопрос" />
+        <button type="submit" class="send" id="askBtn" aria-label="Отправить">
+          <svg viewBox="0 0 24 24"><path d="M12 19V6M6 11l6-6 6 6" /></svg>
+        </button>
       </form>
+    </section>
 
-      <section class="card">
-        <div class="card-title">Разговор</div>
-        <p class="hint" id="histCount">Сообщений: 0</p>
-        <div id="history" class="history"></div>
-        <button data-cmd="reset" class="ghost danger wide">Новый разговор (забыть контекст)</button>
-      </section>
+    <!-- ───────────── Настройки ───────────── -->
+    <section class="screen" id="screen-settings" aria-labelledby="t-settings" hidden>
+      <header class="large-title"><h1 id="t-settings">Настройки</h1></header>
+      <form id="settingsForm" autocomplete="off">
+        <h2 class="group-header">OpenAI</h2>
+        <div class="group">
+          <button type="button" class="cell cell-link" data-open="key">
+            <span class="cell-title">Ключ API</span>
+            <span class="cell-value" id="keyValue">Не задан</span>
+            <svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" /></svg>
+          </button>
+          <label class="cell cell-link">
+            <span class="cell-title">Модель</span>
+            <span class="cell-value" data-value-of="modelChoice"></span>
+            <svg class="chev chev-ud" viewBox="0 0 24 24"><path d="M8 10l4-4 4 4M8 14l4 4 4-4" /></svg>
+            <select name="modelChoice" class="overlay-select">
+              <option value="gpt-6.1-terra">GPT‑6.1 Terra</option>
+              <option value="gpt-6-luna">GPT‑6 Luna</option>
+              <option value="gpt-6.1-sol">GPT‑6.1 Sol</option>
+              <option value="gpt-6-astra">GPT‑6 Astra</option>
+              <option value="custom">Другая…</option>
+            </select>
+          </label>
+          <label class="cell" id="customModelCell" hidden>
+            <span class="cell-title">ID модели</span>
+            <input name="customModel" type="text" class="cell-input" placeholder="gpt-5.4-mini" autocapitalize="off" spellcheck="false" />
+          </label>
+          <label class="cell cell-link">
+            <span class="cell-title">Размышления</span>
+            <span class="cell-value" data-value-of="effort"></span>
+            <svg class="chev chev-ud" viewBox="0 0 24 24"><path d="M8 10l4-4 4 4M8 14l4 4 4-4" /></svg>
+            <select name="effort" class="overlay-select">
+              <option value="auto">Авто</option>
+              <option value="none">Без размышлений</option>
+              <option value="low">Немного</option>
+              <option value="medium">Средне</option>
+              <option value="high">Глубоко</option>
+            </select>
+          </label>
+          <label class="cell">
+            <span class="cell-title">Поиск в интернете</span>
+            <input name="webSearch" type="checkbox" class="switch" />
+          </label>
+        </div>
+        <p class="group-footer">Terra отвечает быстро и стоит доли цента за вопрос. Поиск добавляет свежие факты, $0.01 за каждый поиск. Чем глубже размышления, тем дольше ответ.</p>
 
-      <section class="card">
-        <div class="card-title">Журнал проверки</div>
-        <p class="hint">Каждый шаг цепочки: распознавание → активатор → запрос → ответ OpenAI → дисплей. Пришлите скриншот, если что‑то не работает.</p>
-        <div id="log" class="log"></div>
-      </section>
+        <h2 class="group-header">Ответы</h2>
+        <div class="group">
+          <div class="cell">
+            <span class="cell-title">Длина ответа</span>
+            <span class="cell-value"><output data-out="answerWords"></output> слов</span>
+            <span class="stepper" data-step="answerWords" data-min="15" data-max="400" data-by="10">
+              <button type="button" data-d="-1" aria-label="Меньше">−</button><button type="button" data-d="1" aria-label="Больше">+</button>
+            </span>
+          </div>
+          <div class="cell">
+            <span class="cell-title">Помнить реплик</span>
+            <span class="cell-value"><output data-out="historyMessages"></output></span>
+            <span class="stepper" data-step="historyMessages" data-min="0" data-max="60" data-by="2">
+              <button type="button" data-d="-1" aria-label="Меньше">−</button><button type="button" data-d="1" aria-label="Больше">+</button>
+            </span>
+          </div>
+        </div>
+        <p class="group-footer">Длина — ориентир для обычного ответа: если попросите подробнее, помощник ответит длиннее.</p>
 
-      <p class="foot muted" id="foot"></p>
-    </main>
-    <div id="toast" class="toast" hidden></div>
+        <h2 class="group-header">Обо мне</h2>
+        <div class="group">
+          <label class="cell cell-area">
+            <textarea name="aboutMe" rows="3" placeholder="Например: живу в Дублине, работаю в IT, предпочитаю короткие ответы"></textarea>
+          </label>
+        </div>
+        <p class="group-footer">Помощник учитывает это в ответах — например, считает перелёты из вашего города.</p>
+
+        <h2 class="group-header">Пожелания к ответам</h2>
+        <div class="group">
+          <label class="cell cell-area">
+            <textarea name="instructions" rows="2" placeholder="Например: обращайся на «ты», цены в евро"></textarea>
+          </label>
+        </div>
+
+        <h2 class="group-header">Голос</h2>
+        <div class="group">
+          <label class="cell cell-link">
+            <span class="cell-title">Микрофон</span>
+            <span class="cell-value" data-value-of="listenMode"></span>
+            <svg class="chev chev-ud" viewBox="0 0 24 24"><path d="M8 10l4-4 4 4M8 14l4 4 4-4" /></svg>
+            <select name="listenMode" class="overlay-select">
+              <option value="wake">По активатору</option>
+              <option value="always">Каждая фраза</option>
+              <option value="off">Выключен</option>
+            </select>
+          </label>
+          <label class="cell cell-link">
+            <span class="cell-title">Язык речи</span>
+            <span class="cell-value" data-value-of="sttLanguage"></span>
+            <svg class="chev chev-ud" viewBox="0 0 24 24"><path d="M8 10l4-4 4 4M8 14l4 4 4-4" /></svg>
+            <select name="sttLanguage" class="overlay-select">
+              <option value="auto">Русский и английский</option>
+              <option value="ru-RU">Только русский</option>
+            </select>
+          </label>
+          <label class="cell cell-stack">
+            <span class="cell-title">Активаторы</span>
+            <input name="wakeWords" type="text" class="cell-input full" autocapitalize="off" spellcheck="false" />
+          </label>
+          <div class="cell">
+            <span class="cell-title">Уточнять без активатора</span>
+            <span class="cell-value"><output data-out="followUpSec" data-zero="выкл."></output></span>
+            <span class="stepper" data-step="followUpSec" data-min="0" data-max="120" data-by="5" data-unit="с">
+              <button type="button" data-d="-1" aria-label="Меньше">−</button><button type="button" data-d="1" aria-label="Больше">+</button>
+            </span>
+          </div>
+        </div>
+        <p class="group-footer">Активаторы перечислите через запятую. После встречного вопроса помощника отвечать без активатора можно всегда — 25 секунд.</p>
+
+        <h2 class="group-header">Перевод</h2>
+        <div class="group">
+          <label class="cell cell-link">
+            <span class="cell-title">Переводить на</span>
+            <span class="cell-value" data-value-of="translateTo"></span>
+            <svg class="chev chev-ud" viewBox="0 0 24 24"><path d="M8 10l4-4 4 4M8 14l4 4 4-4" /></svg>
+            <select name="translateTo" class="overlay-select">
+              <option value="ru-RU">Русский</option>
+              <option value="en-US">Английский</option>
+            </select>
+          </label>
+        </div>
+        <p class="group-footer">Перевод выполняет Mentra, ключ OpenAI для него не нужен.</p>
+
+        <h2 class="group-header">Экран очков</h2>
+        <div class="group">
+          <div class="cell">
+            <span class="cell-title">Автолистание</span>
+            <span class="cell-value"><output data-out="autoAdvanceSec" data-zero="выкл."></output></span>
+            <span class="stepper" data-step="autoAdvanceSec" data-min="0" data-max="60" data-by="2" data-unit="с">
+              <button type="button" data-d="-1" aria-label="Меньше">−</button><button type="button" data-d="1" aria-label="Больше">+</button>
+            </span>
+          </div>
+          <div class="cell">
+            <span class="cell-title">Убирать ответ через</span>
+            <span class="cell-value"><output data-out="clearAfterSec" data-zero="никогда"></output></span>
+            <span class="stepper" data-step="clearAfterSec" data-min="0" data-max="600" data-by="15" data-unit="с">
+              <button type="button" data-d="-1" aria-label="Меньше">−</button><button type="button" data-d="1" aria-label="Больше">+</button>
+            </span>
+          </div>
+        </div>
+        <p class="group-footer">Ответ исчезает только после последней страницы. <span id="versionText"></span></p>
+      </form>
+    </section>
+
+    <!-- ───────────── Журнал ───────────── -->
+    <section class="screen" id="screen-log" aria-labelledby="t-log" hidden>
+      <header class="large-title">
+        <h1 id="t-log">Журнал</h1>
+        <button class="nav-action" id="copyLog">Копировать</button>
+      </header>
+      <h2 class="group-header">Последняя распознанная фраза</h2>
+      <div class="group"><div class="cell"><span class="cell-title quote" id="lastHeard">—</span></div></div>
+
+      <h2 class="group-header">Проверить фразу без голоса</h2>
+      <div class="group">
+        <form class="cell" id="simForm" autocomplete="off">
+          <input id="simText" type="text" class="cell-input full" enterkeyhint="go" placeholder="Вопрос, какая столица Австралии?" />
+          <button type="submit" class="inline-btn">Проверить</button>
+        </form>
+      </div>
+      <p class="group-footer">Фраза пройдёт тот же путь, что и речь из микрофона: активатор, команды, вопрос.</p>
+
+      <h2 class="group-header">События</h2>
+      <ol class="group log" id="log"></ol>
+    </section>
+
+    <!-- ───────────── Вкладки ───────────── -->
+    <nav class="tabbar" id="tabbar" aria-label="Разделы">
+      <button data-tab="glasses" aria-current="page">
+        <svg viewBox="0 0 28 28"><circle cx="8" cy="15" r="5" /><circle cx="20" cy="15" r="5" /><path d="M13 14c.6-.8 1.4-.8 2 0M3 15V9M25 15V9" /></svg>
+        <span>Очки</span>
+      </button>
+      <button data-tab="chat">
+        <svg viewBox="0 0 28 28"><path d="M5 6h18v12H12l-6 5v-5H5z" /></svg>
+        <span>Разговор</span>
+      </button>
+      <button data-tab="settings">
+        <svg viewBox="0 0 28 28"><path d="M5 8h10M19 8h4M5 14h4M13 14h10M5 20h12M21 20h2" /><circle cx="17" cy="8" r="2" /><circle cx="11" cy="14" r="2" /><circle cx="19" cy="20" r="2" /></svg>
+        <span>Настройки</span>
+      </button>
+      <button data-tab="log">
+        <svg viewBox="0 0 28 28"><path d="M10 7h13M10 14h13M10 21h13" /><circle cx="5.5" cy="7" r="1.2" /><circle cx="5.5" cy="14" r="1.2" /><circle cx="5.5" cy="21" r="1.2" /></svg>
+        <span>Журнал</span>
+      </button>
+    </nav>
+
+    <!-- ───────────── Лист: ключ OpenAI ───────────── -->
+    <div class="sheet-backdrop" id="keySheet" hidden>
+      <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="keySheetTitle">
+        <div class="sheet-bar">
+          <button class="nav-action plain" data-close>Отмена</button>
+          <h2 id="keySheetTitle">Ключ OpenAI</h2>
+          <button class="nav-action strong" id="saveKey">Готово</button>
+        </div>
+        <p class="sheet-note" id="keyState">Ключ не задан.</p>
+        <div class="group">
+          <label class="cell">
+            <input id="apiKey" type="password" class="cell-input full" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-…" aria-label="Ключ API" />
+          </label>
+        </div>
+        <p class="group-footer">Создайте ключ на platform.openai.com в разделе API keys и вставьте сюда. Ключ хранится только в этом приложении на телефоне и отправляется только в api.openai.com.</p>
+        <div class="group sheet-danger" id="removeKeyGroup">
+          <button class="cell cell-center destructive" id="removeKey">Удалить ключ</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast" role="status" hidden></div>
     
   </body>
 </html>

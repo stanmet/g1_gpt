@@ -736,7 +736,7 @@ export class Assistant {
       glassesConnected: this.glassesConnected,
       settings: {...this.settings, apiKey: "", hasKey: Boolean(key), keyHint: key ? `${key.slice(0, 3)}…${key.slice(-4)}` : ""},
       historyCount: this.history.length,
-      history: this.history.slice(-10),
+      history: this.history.slice(-40),
       log: this.log.slice(-60),
     }
   }

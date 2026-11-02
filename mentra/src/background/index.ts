@@ -29,7 +29,7 @@ registerMiniapp((session: any) => {
     uiTimer = setTimeout(() => {
       uiTimer = null
       try {
-        if (session.ui.isOpen()) session.ui.send("state", assistant.snapshot())
+        if (session.ui.isOpen()) session.ui.send("state", snap())
       } catch {
         // UI closed
       }
@@ -40,6 +40,8 @@ registerMiniapp((session: any) => {
     const d = session.capabilities?.display
     return {x: 0, y: 0, w: d?.width ?? 576, h: d?.height ?? 200}
   }
+
+  const snap = () => ({...assistant.snapshot(), version: APP_VERSION})
 
   const assistant = new Assistant({
     store,
@@ -129,17 +131,17 @@ registerMiniapp((session: any) => {
   }
 
   // ── Phone UI (settings screen) ─────────────────────────────────
-  session.ui.handle("getState", () => assistant.snapshot())
+  session.ui.handle("getState", () => snap())
 
   session.ui.handle("saveSettings", (patch: Partial<Settings>) => {
     const s = assistant.updateSettings(patch ?? {})
     subscribeStt(s)
-    return assistant.snapshot()
+    return snap()
   })
 
   session.ui.handle("ask", async (p: {text: string}) => {
     await assistant.ask(String(p?.text ?? ""), "ui")
-    return assistant.snapshot()
+    return snap()
   })
 
   session.ui.handle("command", (p: {cmd: string}) => {
@@ -147,13 +149,13 @@ registerMiniapp((session: any) => {
     if (cmd === "translate") assistant.startTranslation("ui")
     else if (cmd === "translateStop") assistant.stopTranslation("ui")
     else if (["next", "prev", "first", "repeat", "hide", "cancel", "reset"].includes(cmd)) assistant.command(cmd, "ui")
-    return assistant.snapshot()
+    return snap()
   })
 
   session.ui.handle("simulateSpeech", (p: {text: string}) => {
     // Lets you test wake phrases and commands by typing, without the glasses mic.
     assistant.onTranscript(String(p?.text ?? ""), true)
-    return assistant.snapshot()
+    return snap()
   })
 
   session.ui.handle("testDisplay", async () => {
@@ -170,7 +172,7 @@ registerMiniapp((session: any) => {
       "display",
       `Тест дисплея: ${r?.status ?? "нет ответа"}${r?.degraded ? ", текстовый режим" : ""}${r?.reason ? ", " + r.reason : ""}`,
     )
-    return assistant.snapshot()
+    return snap()
   })
 
   session.ui.onOpen(() => pushState())
