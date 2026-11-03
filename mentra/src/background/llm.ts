@@ -126,6 +126,10 @@ export function explainLLMError(p: Provider, status: number, code: string, messa
       : `На счёте ${name} нет средств. Пополните баланс у ${PROVIDERS[p].company}.`
   if (p === "gemini" && (status === 429 || c === "resource_exhausted"))
     return "Лимит Gemini исчерпан. Подождите минуту или подключите оплату в Google AI Studio."
+  if (c === "empty")
+    return /max_output_tokens|max_tokens|incomplete/.test(m)
+      ? `${name}: ответ не уместился — модель потратила лимит на размышления. Уменьшите «Размышления» в настройках.`
+      : `${name} вернул пустой ответ. Повторите вопрос.`
   if (status === 529 || c === "overloaded_error") return `${name} сейчас перегружен. Повторите через минуту.`
   if (status === 429) return `${name} просит подождать (лимит запросов). Повторите через минуту.`
   if (status === 404 || c === "model_not_found" || c === "not_found_error" || c === "not_found")

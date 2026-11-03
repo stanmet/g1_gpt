@@ -1,8 +1,8 @@
 {
   "packageName": "com.g1gpt.assistant",
-  "version": "1.9.2",
+  "version": "1.9.3",
   "name": "GPT для G1",
-  "description": "Голосовые вопросы к OpenAI, ответы текстом на дисплее очков",
+  "description": "Голосовой помощник для Even Realities G1: ChatGPT, Claude или Gemini, перевод речи, тезисы лекций и подсказки в разговоре",
   "icon": "icon.png",
   "type": "standard",
   "sdkVersion": "0.3.0",
@@ -12,10 +12,21 @@
     "ui": "ui/index.html"
   },
   "permissions": [
-    {"type": "MICROPHONE", "description": "Распознавать ваши вопросы с микрофона очков."}
+    {
+      "type": "MICROPHONE",
+      "description": "Слышать ваши вопросы и речь вокруг — для перевода, лекций и подсказок в беседе."
+    }
   ],
   "hardwareRequirements": [
-    {"type": "DISPLAY", "level": "REQUIRED", "description": "Показывает ответы на дисплее очков."},
-    {"type": "MICROPHONE", "level": "REQUIRED", "description": "Слушает вопросы."}
+    {
+      "type": "DISPLAY",
+      "level": "REQUIRED",
+      "description": "Показывает ответы на дисплее очков."
+    },
+    {
+      "type": "MICROPHONE",
+      "level": "REQUIRED",
+      "description": "Слушает вопросы."
+    }
   ]
 }

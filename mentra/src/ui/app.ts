@@ -10,14 +10,16 @@ type Bridge = {
   on(channel: string, cb: (payload: any) => void): () => void
 }
 
+/** Layout hints the Mentra app injects into the page (safe area, capsule menu, theme). */
+type HostChrome = {
+  safeAreaInsets?: {top: number; bottom: number; left: number; right: number}
+  capsuleMenu?: {top: number; left: number; width: number; height: number; bottom: number}
+  colorScheme?: "light" | "dark"
+}
+
 declare global {
   interface Window {
     mentra?: Bridge
-    MentraOS?: {
-      safeAreaInsets?: {top: number; bottom: number; left: number; right: number}
-      capsuleMenu?: {top: number; left: number; width: number; height: number; bottom: number}
-      colorScheme?: "light" | "dark"
-    }
   }
 }
 
@@ -171,7 +173,7 @@ async function call(channel: string, payload: unknown = {}, timeout = 15000) {
 // ───────────────────────── chrome: theme, safe area, tabs ─────────────────────────
 
 function applyChrome() {
-  const g = window.MentraOS ?? {}
+  const g: HostChrome = (window as unknown as {MentraOS?: HostChrome}).MentraOS ?? {}
   const root = document.documentElement
   if (g.colorScheme === "dark" || g.colorScheme === "light") root.dataset.theme = g.colorScheme
   const top = g.safeAreaInsets?.top ?? 0
@@ -244,6 +246,13 @@ function renderGlasses(s: any, st: any) {
 
   const mode = modeOf(s)
   $("lens").dataset.mode = mode
+  // in translation, lecture and conversation modes the arrows page nothing and «Скрыть» turns the mode off
+  const listening = mode !== "assistant"
+  document.querySelectorAll<HTMLElement>('.lens-toolbar [data-cmd="prev"], .lens-toolbar [data-cmd="next"]').forEach((b) => {
+    b.style.visibility = listening ? "hidden" : ""
+  })
+  const hide = document.querySelector<HTMLButtonElement>('.lens-toolbar [data-cmd="hide"]')
+  if (hide) hide.textContent = listening ? "Выключить" : "Скрыть"
   const seg = $("modeSeg")
   seg.dataset.mode = mode
   seg.querySelectorAll<HTMLButtonElement>("button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.mode === mode)))
@@ -319,11 +328,16 @@ function renderGlasses(s: any, st: any) {
   $("keyWarnBtn").dataset.provider = p
 }
 
+let chatKey = ""
+
 function renderChat(s: any) {
+  const history: any[] = s.history ?? []
+  const key = `${s.historyCount}:${history.at(-1)?.at ?? 0}:${s.phase === "thinking" ? s.lastQuestion : ""}`
+  if (key === chatKey) return // state pushes come often in lecture/conversation modes
+  chatKey = key
   const chat = $("chat")
   const atBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 40
   chat.textContent = ""
-  const history: any[] = s.history ?? []
   let lastDay = ""
   for (const m of history) {
     const day = m.at ? new Date(m.at).toLocaleDateString("ru-RU", {day: "numeric", month: "long"}) : ""
@@ -464,7 +478,7 @@ const KIND_LABEL: Record<string, string> = {
   wake: "активатор",
   cmd: "команда",
   ask: "вопрос",
-  openai: "OpenAI",
+  openai: "нейросеть",
   display: "дисплей",
   error: "ошибка",
   info: "инфо",
@@ -560,8 +574,14 @@ function plural(n: number, one: string, few: string, many: string): string {
   return many
 }
 
+let logKey = ""
+
 function renderLog(s: any) {
   $("lastHeard").textContent = s.lastTranscript ? `«${s.lastTranscript}»` : "—"
+  const last = (s.log ?? []).at(-1)
+  const key = `${(s.log ?? []).length}:${last?.t ?? 0}:${last?.msg ?? ""}`
+  if (key === logKey) return
+  logKey = key
   const list = $("log")
   list.textContent = ""
   const entries: any[] = [...(s.log ?? [])].reverse()
@@ -818,7 +838,10 @@ function wire() {
       openKeySheet()
       return
     }
+    const mode = modeOf(current)
     await call("ask", {text}, 90000)
+    // in lecture and conversation modes the answer goes to the glasses and the list on «Очки», not to this chat
+    if (mode === "lecture" || mode === "talk") toast("Ответ — на очках и в списке на вкладке «Очки»")
   })
 
   $("simForm").addEventListener("submit", async (e) => {

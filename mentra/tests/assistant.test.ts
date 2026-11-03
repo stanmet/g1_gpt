@@ -890,3 +890,20 @@ describe("request building", () => {
     expect(extractText({output: [{type: "web_search_call"}, {type: "message", content: [{type: "output_text", text: "x"}]}]})).toBe("x")
   })
 })
+
+describe("review fixes", () => {
+  test("the Mentra dashboard warning also covers lecture and conversation screens", async () => {
+    const e = setup([])
+    e.a.onHeadPosition("up")
+    await e.clock.advance(HEAD_UP_HIDES_MS + 100)
+    e.a.onTranscript("Беседа", true)
+    expect(e.a.phase).toBe("talk")
+    expect(e.a.log.filter((l) => l.msg === DASHBOARD_WARNING).length).toBe(1)
+  })
+
+  test("lecture and conversation warn when the microphone is off", () => {
+    const e = setup([], {listenMode: "off"})
+    e.a.startLecture("ui")
+    expect(e.a.log.some((l) => l.msg.includes("Микрофон выключен"))).toBe(true)
+  })
+})

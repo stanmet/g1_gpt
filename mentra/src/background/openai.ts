@@ -55,6 +55,19 @@ export function effortFor(s: Settings): string | null {
   return null
 }
 
+/**
+ * Output budget. Reasoning tokens count against it, so models that think (Sol, Astra, or
+ * «Размышления» above «Немного») need room or they return an empty answer.
+ */
+export function openAIMaxTokens(s: Settings): number {
+  const base = Math.min(8000, Math.max(800, s.answerWords * 12))
+  const effort = effortFor(s)
+  if (effort === "high") return 16000
+  if (effort === "medium") return Math.max(base, 8000)
+  if (effort === "low") return Math.max(base, 4000)
+  return base
+}
+
 export function buildRequestBody(
   s: Settings,
   history: Message[],
@@ -71,7 +84,7 @@ export function buildRequestBody(
     instructions: opts.system ?? buildInstructions(s, opts.now, detectLang(question)),
     input,
     store: false,
-    max_output_tokens: Math.min(8000, Math.max(600, s.answerWords * 12)),
+    max_output_tokens: openAIMaxTokens(s),
   }
   const effort = effortFor(s)
   if (effort && opts.includeReasoning !== false) body.reasoning = {effort}

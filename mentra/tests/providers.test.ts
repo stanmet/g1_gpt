@@ -300,3 +300,20 @@ test("Claude key without a workspace: tells how to fix it", async () => {
   expect(msg).toContain("Workspace")
   expect(msg).toContain("platform.claude.com")
 })
+
+test("OpenAI output budget leaves room for reasoning", async () => {
+  const {openAIMaxTokens, buildRequestBody} = await import("../src/background/openai")
+  const {DEFAULT_SETTINGS} = await import("../src/background/store")
+  const s = (patch: Record<string, unknown>) => ({...DEFAULT_SETTINGS, ...patch}) as any
+  expect(openAIMaxTokens(s({model: "gpt-6.1-terra", effort: "auto"}))).toBe(800) // no reasoning
+  expect(openAIMaxTokens(s({model: "gpt-6.1-sol", effort: "auto"}))).toBe(4000) // auto → low for Sol
+  expect(openAIMaxTokens(s({effort: "medium"}))).toBe(8000)
+  expect(openAIMaxTokens(s({effort: "high"}))).toBe(16000)
+  expect(buildRequestBody(s({model: "gpt-6.1-sol"}), [], "Привет").max_output_tokens).toBe(4000)
+})
+
+test("an empty answer cut by the token limit is explained", async () => {
+  const {explainLLMError} = await import("../src/background/llm")
+  expect(explainLLMError("openai", 200, "empty", "empty answer (max_output_tokens)")).toContain("Размышления")
+  expect(explainLLMError("gemini", 200, "empty", "empty answer (SAFETY)")).toContain("пустой ответ")
+})

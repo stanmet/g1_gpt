@@ -352,15 +352,6 @@ export class Lecture {
     this.answer(question.trim(), true)
   }
 
-  /** Clear the glasses; key points come back with the next summary. */
-  hide(): void {
-    this.holdUntil = 0
-    this.pendingFeed = false
-    this.screen = ""
-    this.deps.clear()
-    this.deps.onChange()
-  }
-
   // ── internals ──
 
   private trimRecent(): void {

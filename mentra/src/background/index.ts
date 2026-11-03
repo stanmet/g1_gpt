@@ -1,10 +1,11 @@
 /**
  * Background layer: runs inside the Mentra app on the iPhone, owns the glasses session.
- * Glasses mic → Mentra speech-to-text (ru-RU) → Assistant → OpenAI → text pages on G1.
+ * Glasses mic → Mentra speech-to-text (Russian + English) → Assistant (questions, translation,
+ * lecture, conversation) → ChatGPT / Claude / Gemini → text on the G1 display.
  */
 import {registerMiniapp} from "@mentra/miniapp/background"
 import {Assistant} from "./assistant"
-import {asProvider} from "./llm"
+import {asProvider, keyFor, PROVIDERS} from "./llm"
 import type {FetchLike} from "./openai"
 import {Store, type KV, type Settings} from "./store"
 
@@ -50,7 +51,7 @@ registerMiniapp((session: any) => {
     show: (text: string) =>
       session.display.render([{type: "text", id: "g1gpt", box: fullBox(), text, style: {breakMode: "word"}}]),
     clear: () => {
-      session.display.render([])
+      session.display.render([])?.catch?.(() => {})
     },
     startTranslation: (target, handler) => session.translation.to(target, handler),
     onChange: pushState,
@@ -64,7 +65,8 @@ registerMiniapp((session: any) => {
       ? "Хранилище на телефоне работает: ключи и настройки сохраняются"
       : "Хранилище недоступно: настройки сохранятся только до перезапуска Mentra",
   )
-  if (!assistant.settings.apiKey) assistant.addLog("info", "Ключ OpenAI не задан — откройте настройки")
+  const provider = asProvider(assistant.settings.provider)
+  if (!keyFor(assistant.settings, provider)) assistant.addLog("info", `Ключ ${PROVIDERS[provider].label} не задан — откройте настройки`)
 
   // ── Speech-to-text ─────────────────────────────────────────────
   let unsubscribeStt: (() => void) | null = null

@@ -12,6 +12,7 @@
  * glasses show a rolling feed, newest at the bottom. Independent of Mentra, tested with fakes.
  */
 import {feedScreen, LECTURE_RESUME_MS, parseAnswer, wordCount, type LectureNote, type LectureRecord} from "./lecture"
+import {fitScreen} from "./g1text"
 import {detectLang, normalize, type Lang} from "./voice"
 
 /** A hint stays on the glasses this long, then the screen clears (the next hint replaces it sooner). */
@@ -304,7 +305,7 @@ export class Talk {
       every ? `• hints about every ${every} s` : "• a prompt when you trail off",
       goal ? `• goal: ${goal}` : "Stop: «стоп беседа»",
     ]
-    this.paint((intro.en ? en : ru).join("\n"), INTRO_MS)
+    this.paint(fitScreen((intro.en ? en : ru).join("\n")), INTRO_MS)
     this.deps.log("talk", resume ? "Режим беседы включён — продолжаю прежний список" : "Режим беседы включён")
     this.deps.onChange()
   }

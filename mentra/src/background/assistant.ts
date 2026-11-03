@@ -93,7 +93,7 @@ export function endsWithQuestion(text: string): boolean {
 /** How long we wait for a question after a bare wake phrase. */
 export const WAKE_WAIT_MS = 9000
 const INTERIM_THROTTLE_MS = 450
-const LOG_MAX = 80
+const LOG_MAX = 150
 /** Ignore repeated head-up events closer than this (sensor bounce). */
 const NOD_DEBOUNCE_MS = 1200
 /**
@@ -259,6 +259,7 @@ export class Assistant {
       this.addLog("error", `Дисплей: ${String((e as Error)?.message ?? e)}`)
       return
     }
+    this.warnIfDashboard()
     if (r && typeof (r as Promise<unknown>).then === "function") {
       ;(r as Promise<DisplayResultInfo | void>).then(
         (res) => {
@@ -698,7 +699,6 @@ export class Assistant {
     this.page = Math.max(0, Math.min(this.pages.length - 1, i))
     this.phase = "answering"
     this.show(this.pages[this.page])
-    this.warnIfDashboard()
     this.cancelTimer("pageTimer")
     this.cancelTimer("clearTimer_")
     const last = this.page >= this.pages.length - 1
@@ -784,6 +784,7 @@ export class Assistant {
     if (this.settings.sttLanguage === "ru-RU") {
       this.addLog("error", "Распознавание настроено только на русский: английскую лекцию очки не поймут. Настройки → Язык распознавания → русский + английский.")
     }
+    this.warnIfMicOff()
     this.lecture.start()
     this.addLog("lecture", `Тезисы и ответы пишет ${displayName(this.settings, provider)} (${source === "ui" ? "включено с телефона" : "включено голосом"})`)
   }
@@ -847,6 +848,7 @@ Notes are in the app.`
     this.interim = ""
     this.followUpUntil = 0
     this.phase = "talk"
+    this.warnIfMicOff()
     this.talk.start({en: this.settings.translateTo === "en-US"})
     this.addLog("talk", `Подсказки пишет ${displayName(this.settings, provider)} (${source === "ui" ? "включено с телефона" : "включено голосом"})`)
   }
@@ -1062,6 +1064,12 @@ Notes are in the app.`
     this.command("next", "head")
   }
 
+  /** Lecture and conversation modes hear nothing when the microphone is off in Settings. */
+  private warnIfMicOff(): void {
+    if (this.settings.listenMode === "off")
+      this.addLog("error", "Микрофон выключен в настройках (Режим прослушивания) — очки ничего не услышат")
+  }
+
   /** True when Mentra is most likely showing its dashboard instead of what this app sends. */
   dashboardLikely(): boolean {
     return this.headUp && this.now() - this.headUpSince >= HEAD_UP_HIDES_MS
@@ -1172,7 +1180,7 @@ Notes are in the app.`
       },
       historyCount: this.history.length,
       history: this.history.slice(-40),
-      log: this.log.slice(-60),
+      log: this.log.slice(-100),
     }
   }
 }

@@ -5118,6 +5118,17 @@ ${s.instructions.trim()}`);
       return "low";
     return null;
   }
+  function openAIMaxTokens(s) {
+    const base = Math.min(8000, Math.max(800, s.answerWords * 12));
+    const effort = effortFor(s);
+    if (effort === "high")
+      return 16000;
+    if (effort === "medium")
+      return Math.max(base, 8000);
+    if (effort === "low")
+      return Math.max(base, 4000);
+    return base;
+  }
   function buildRequestBody(s, history, question, opts = {}) {
     const recent = s.historyMessages > 0 ? history.slice(-s.historyMessages) : [];
     const input = [
@@ -5129,7 +5140,7 @@ ${s.instructions.trim()}`);
       instructions: opts.system ?? buildInstructions(s, opts.now, detectLang(question)),
       input,
       store: false,
-      max_output_tokens: Math.min(8000, Math.max(600, s.answerWords * 12))
+      max_output_tokens: openAIMaxTokens(s)
     };
     const effort = effortFor(s);
     if (effort && opts.includeReasoning !== false)
@@ -5321,6 +5332,8 @@ ${s.instructions.trim()}`);
       return p === "openai" ? "На счёте OpenAI API нет средств. Пополните баланс на platform.openai.com." : `На счёте ${name} нет средств. Пополните баланс у ${PROVIDERS[p].company}.`;
     if (p === "gemini" && (status === 429 || c === "resource_exhausted"))
       return "Лимит Gemini исчерпан. Подождите минуту или подключите оплату в Google AI Studio.";
+    if (c === "empty")
+      return /max_output_tokens|max_tokens|incomplete/.test(m) ? `${name}: ответ не уместился — модель потратила лимит на размышления. Уменьшите «Размышления» в настройках.` : `${name} вернул пустой ответ. Повторите вопрос.`;
     if (status === 529 || c === "overloaded_error")
       return `${name} сейчас перегружен. Повторите через минуту.`;
     if (status === 429)
@@ -5846,13 +5859,6 @@ Stop: «стоп лекция»` : `Режим лекции
         return;
       this.answer(question.trim(), true);
     }
-    hide() {
-      this.holdUntil = 0;
-      this.pendingFeed = false;
-      this.screen = "";
-      this.deps.clear();
-      this.deps.onChange();
-    }
     trimRecent() {
       let words = wordCount(this.recent.join(" "));
       while (this.recent.length > 1 && words > CONTEXT_WORDS) {
@@ -6329,8 +6335,8 @@ ${prevTips.map((t) => "— " + t).join(`
         every ? `• hints about every ${every} s` : "• a prompt when you trail off",
         goal ? `• goal: ${goal}` : "Stop: «стоп беседа»"
       ];
-      this.paint((intro.en ? en : ru).join(`
-`), INTRO_MS);
+      this.paint(fitScreen((intro.en ? en : ru).join(`
+`)), INTRO_MS);
       this.deps.log("talk", resume ? "Режим беседы включён — продолжаю прежний список" : "Режим беседы включён");
       this.deps.onChange();
     }
@@ -6756,7 +6762,7 @@ ${prevTips.map((t) => "— " + t).join(`
   }
   var WAKE_WAIT_MS = 9000;
   var INTERIM_THROTTLE_MS = 450;
-  var LOG_MAX = 80;
+  var LOG_MAX = 150;
   var NOD_DEBOUNCE_MS = 1200;
   var HEAD_UP_HIDES_MS = 4000;
   var DASHBOARD_WARN_EVERY_MS = 60000;
@@ -6885,6 +6891,7 @@ ${prevTips.map((t) => "— " + t).join(`
         this.addLog("error", `Дисплей: ${String(e?.message ?? e)}`);
         return;
       }
+      this.warnIfDashboard();
       if (r && typeof r.then === "function") {
         r.then((res) => {
           if (!res)
@@ -7299,7 +7306,6 @@ ${prevTips.map((t) => "— " + t).join(`
       this.page = Math.max(0, Math.min(this.pages.length - 1, i));
       this.phase = "answering";
       this.show(this.pages[this.page]);
-      this.warnIfDashboard();
       this.cancelTimer("pageTimer");
       this.cancelTimer("clearTimer_");
       const last = this.page >= this.pages.length - 1;
@@ -7385,6 +7391,7 @@ To stop: «стоп перевод»`);
       if (this.settings.sttLanguage === "ru-RU") {
         this.addLog("error", "Распознавание настроено только на русский: английскую лекцию очки не поймут. Настройки → Язык распознавания → русский + английский.");
       }
+      this.warnIfMicOff();
       this.lecture.start();
       this.addLog("lecture", `Тезисы и ответы пишет ${displayName(this.settings, provider)} (${source === "ui" ? "включено с телефона" : "включено голосом"})`);
     }
@@ -7446,6 +7453,7 @@ Notes are in the app.` : `Лекция выключена.
       this.interim = "";
       this.followUpUntil = 0;
       this.phase = "talk";
+      this.warnIfMicOff();
       this.talk.start({ en: this.settings.translateTo === "en-US" });
       this.addLog("talk", `Подсказки пишет ${displayName(this.settings, provider)} (${source === "ui" ? "включено с телефона" : "включено голосом"})`);
     }
@@ -7665,6 +7673,10 @@ ${goal}` : "Цель беседы убрана.", 3000);
       this.lastNodAt = now;
       this.command("next", "head");
     }
+    warnIfMicOff() {
+      if (this.settings.listenMode === "off")
+        this.addLog("error", "Микрофон выключен в настройках (Режим прослушивания) — очки ничего не услышат");
+    }
     dashboardLikely() {
       return this.headUp && this.now() - this.headUpSince >= HEAD_UP_HIDES_MS;
     }
@@ -7773,7 +7785,7 @@ ${goal}` : "Цель беседы убрана.", 3000);
         },
         historyCount: this.history.length,
         history: this.history.slice(-40),
-        log: this.log.slice(-60)
+        log: this.log.slice(-100)
       };
     }
   }
@@ -7809,7 +7821,7 @@ ${goal}` : "Цель беседы убрана.", 3000);
   }
 
   // src/background/index.ts
-  var APP_VERSION = "1.9.2";
+  var APP_VERSION = "1.9.3";
   function getKV() {
     try {
       const ls = globalThis.localStorage;
@@ -7845,7 +7857,7 @@ ${goal}` : "Цель беседы убрана.", 3000);
       fetch: (url, init) => globalThis.fetch(url, init),
       show: (text) => session.display.render([{ type: "text", id: "g1gpt", box: fullBox(), text, style: { breakMode: "word" } }]),
       clear: () => {
-        session.display.render([]);
+        session.display.render([])?.catch?.(() => {});
       },
       startTranslation: (target, handler) => session.translation.to(target, handler),
       onChange: pushState
@@ -7853,8 +7865,9 @@ ${goal}` : "Цель беседы убрана.", 3000);
     assistant.addLog("info", `Запущено, версия ${APP_VERSION}`);
     const storageOk = store.selfTest();
     assistant.addLog(storageOk ? "info" : "error", storageOk ? "Хранилище на телефоне работает: ключи и настройки сохраняются" : "Хранилище недоступно: настройки сохранятся только до перезапуска Mentra");
-    if (!assistant.settings.apiKey)
-      assistant.addLog("info", "Ключ OpenAI не задан — откройте настройки");
+    const provider = asProvider(assistant.settings.provider);
+    if (!keyFor(assistant.settings, provider))
+      assistant.addLog("info", `Ключ ${PROVIDERS[provider].label} не задан — откройте настройки`);
     let unsubscribeStt = null;
     let sttKey = "";
     const subscribeStt = (s) => {
