@@ -6,6 +6,7 @@ import {
   buildTipPrompt,
   findTalkTrigger,
   finishedQuestions,
+  looksLikeClaim,
   parseTip,
   Talk,
   TALK_ANSWER_PRIORITY_MS,
@@ -249,30 +250,52 @@ describe("conversation flow", () => {
   })
 })
 
-describe("proactive hints («Факт», «Спроси», «Скажи»)", () => {
+describe("analysis of the conversation: fact checks and evidence, no «Спроси»", () => {
   const LINE = "Мы обсуждаем ремонт кухни, у нас бюджет около пяти тысяч евро и сроки до весны"
+  const CHAT = "Ну вот мы и договорились, давай тогда встретимся у входа после работы"
 
   test("prompt and parsing", () => {
-    const p = buildTipPrompt("Мы обсуждаем ремонт.", ["Спроси: Какие сроки?"], "договориться о скидке", "ru")
-    expect(p.system).toContain("Цель пользователя в разговоре: договориться о скидке")
-    expect(p.system).toContain("Спроси:")
+    const p = buildTipPrompt("Мы обсуждаем ремонт.", ["Факт: Средняя цена ремонта кухни в Дублине — 15–25 тыс. евро."], "договориться о скидке", "ru")
+    expect(p.system).toContain("фактчекер")
+    expect(p.system).toContain("Цель пользователя: договориться о скидке")
+    for (const label of ["Неверно:", "Спорно:", "Верно:", "Факт:", "Довод:", "Цитата:"]) expect(p.system).toContain(label)
+    expect(p.system).toContain("Не предлагай, что спросить или сказать")
+    expect(p.system).not.toContain("Спроси:")
+    expect(p.system).not.toContain("Скажи:")
+    expect(p.system).toContain("Никогда не придумывай цифры")
     expect(p.system).toContain("SKIP")
-    expect(p.user).toContain("— Спроси: Какие сроки?")
-    expect(buildTipPrompt("x", [], "", "en").system).toContain("Ask:")
-    expect(parseTip("Спроси: Есть ли скидка при оплате сразу?")).toEqual({label: "ask", text: "Есть ли скидка при оплате сразу?"})
+    expect(p.user).toContain("— Факт: Средняя цена")
+    expect(buildTipPrompt("x", [], "", "ru").system).not.toContain("Цель пользователя")
+    expect(buildTipPrompt("x", [], "", "en").system).toContain("False:")
+    expect(parseTip("Неверно: Кант родился в 1724, а не в 1742.")).toEqual({label: "false", text: "Кант родился в 1724, а не в 1742."})
+    expect(parseTip("Довод: По закону о защите прав потребителей гарантия — 2 года.")).toMatchObject({label: "evidence"})
+    expect(parseTip("Спорно: данные о вреде кофе расходятся (Cochrane, 2021).")).toMatchObject({label: "disputed"})
     expect(parseTip("Fact: Lima is the capital of Peru.")).toEqual({label: "fact", text: "Lima is the capital of Peru."})
+    // advice is not shown, even if the model slips into it
+    expect(parseTip("Спроси: Есть ли скидка при оплате сразу?")).toBeNull()
+    expect(parseTip("Скажи: Другая фирма дешевле.")).toBeNull()
     expect(parseTip("SKIP")).toBeNull()
     expect(parseTip("Просто текст без метки")).toBeNull()
   })
 
-  test("come about every N seconds of talk, toward the goal, without repeats", async () => {
+  test("claims with numbers, dates, «доказано» are worth checking", () => {
+    expect(looksLikeClaim("В Китае живёт полтора миллиарда человек")).toBe(true)
+    expect(looksLikeClaim("Учёные доказали, что кофе вреден для сердца")).toBe(true)
+    expect(looksLikeClaim("Кант родился в 1742 году в Берлине")).toBe(true)
+    expect(looksLikeClaim("А сколько стоит такой ремонт?")).toBe(false)
+    expect(looksLikeClaim(CHAT)).toBe(false)
+    expect(looksLikeClaim("Это 100%")).toBe(false) // too short
+  })
+
+  test("about every N seconds of talk, toward the goal, without repeats", async () => {
     const e = setup(
-      ["Спроси: Есть ли скидка при оплате сразу?", "Спроси: Есть ли скидка при оплате сразу?", "Скажи: Другая фирма предложила на 10% дешевле."],
+      ["Факт: Средняя цена ремонта кухни в Ирландии — 15–25 тыс. евро.", "Факт: Средняя цена ремонта кухни в Ирландии — 15–25 тыс. евро.", "Довод: Зимой у строителей меньше заказов, скидки до 10%."],
       {everySec: 10, goal: "договориться о скидке"},
     )
     e.talk.start({en: false})
     expect(e.shown.at(-1)).toContain("цель: договориться о скидке")
-    e.talk.onSpeech(LINE)
+    expect(e.shown.at(-1)).toContain("проверка фактов")
+    e.talk.onSpeech(CHAT)
     await e.clock.advance(10)
     expect(e.calls.length).toBe(0) // 10 s have not passed yet
     await e.clock.advance(10_000)
@@ -280,22 +303,44 @@ describe("proactive hints («Факт», «Спроси», «Скажи»)", () 
     await e.clock.advance(10)
     expect(e.calls.length).toBe(1)
     expect(e.calls[0].system).toContain("договориться о скидке")
-    expect(e.calls[0].user).toContain("ремонт кухни")
+    expect(e.calls[0].user).toContain("встретимся у входа")
     expect(e.calls[0].user).toContain("И ещё нужно поменять") // the live text goes along
-    expect(e.shown.at(-1)!.replace(/\n/g, " ")).toBe("• Спроси: Есть ли скидка при оплате сразу?")
+    expect(e.shown.at(-1)!.replace(/\n/g, " ")).toBe("• Факт: Средняя цена ремонта кухни в Ирландии — 15–25 тыс. евро.")
 
-    e.talk.onSpeech(LINE)
+    e.talk.onSpeech(CHAT)
     await e.clock.advance(10_000)
-    e.talk.onSpeech(LINE)
+    e.talk.onSpeech(CHAT)
     await e.clock.advance(10)
-    expect(e.calls.length).toBe(2) // same hint again → not shown twice
+    expect(e.calls.length).toBe(2) // same finding again → not shown twice
     expect(e.talk.record!.notes.length).toBe(1)
     await e.clock.advance(10_000)
-    e.talk.onSpeech(LINE)
+    e.talk.onSpeech(CHAT)
     await e.clock.advance(10)
     expect(e.calls.length).toBe(3)
-    expect(e.shown.at(-1)).toMatch(/^· Спроси: .*\n• Скажи: Другая фирма/s) // feed: newest at the bottom
+    expect(e.shown.at(-1)).toMatch(/^· Факт: .*\n• Довод: Зимой/s) // feed: newest at the bottom
     expect(e.talk.record!.notes.map((n) => n.kind)).toEqual(["tip", "tip"])
+  })
+
+  test("a claim is checked within seconds, not at the next regular hint", async () => {
+    const e = setup(["Неверно: Кант родился в 1724 году в Кёнигсберге."], {everySec: 30})
+    e.talk.start({en: false})
+    await e.clock.advance(6000)
+    e.talk.onSpeech("Кант родился в 1742 году в Берлине, это все знают")
+    await e.clock.advance(10)
+    expect(e.calls.length).toBe(1)
+    expect(e.shown.at(-1)!.replace(/\n/g, " ")).toBe("• Неверно: Кант родился в 1724 году в Кёнигсберге.")
+  })
+
+  test("who said what goes to the AI when voices are told apart", async () => {
+    const e = setup(["SKIP"], {everySec: 10})
+    e.talk.start({en: false})
+    await e.clock.advance(6000)
+    e.talk.onSpeech("Я думаю, что ремонт можно сделать за месяц", "me")
+    e.talk.onSpeech("Нет, такой ремонт меньше трёх месяцев не делается никогда", "other")
+    await e.clock.advance(10)
+    expect(e.calls.length).toBe(1)
+    expect(e.calls[0].user).toContain("Вы: Я думаю")
+    expect(e.calls[0].user).toContain("Собеседник: Нет, такой ремонт")
   })
 
   test("silence or too few words → no hint; off when the setting is 0", async () => {

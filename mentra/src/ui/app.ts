@@ -155,7 +155,7 @@ function previewBridge(): Bridge {
         state.talk = {active: true, startedAt: Date.now() - 300000, endedAt: 0, total: 3, notes: [
           {t: Date.now() - 200000, kind: "qa", q: "Кто такой Кант?", text: "Немецкий философ, 1724–1804. Автор «Критики чистого разума», категорический императив."},
           {t: Date.now() - 120000, kind: "hint", q: "Категорический императив", text: "Поступай так, чтобы правило твоего поступка могло стать всеобщим законом."},
-          {t: Date.now() - 60000, kind: "tip", q: "Спроси", text: "А как вы сами понимаете долг — как правило или как чувство?"},
+          {t: Date.now() - 60000, kind: "tip", q: "Неверно", text: "Кант не покидал Пруссию: всю жизнь прожил в Кёнигсберге."},
         ]}
       }
       if (channel === "command" && payload?.cmd === "talkStop") {
@@ -372,7 +372,7 @@ function renderGlasses(s: any, st: any) {
         : s.phase === "lecture"
           ? `Тезисы ${st.translateTo === "en-US" ? "по-английски" : "по-русски"}`
           : s.phase === "talk"
-            ? "Подсказки по ходу разговора"
+            ? "Факты и проверка сказанного"
             : s.phase === "idle" && s.nav?.active
               ? "Навигатор"
               : (PHASE[s.phase] ?? s.phase)
@@ -657,7 +657,7 @@ function renderSettings(s: any, st: any) {
   setStep("talkEverySec", tipEvery)
   setText("talkGoal", st.talkGoal ?? "")
   $("talkCost").textContent = tipEvery
-    ? `«Факт», «Спроси», «Скажи», «Цитата» — до ${Math.round(3600 / tipEvery)} запросов в час.`
+    ? `Нейросеть разбирает сказанное: «Неверно», «Спорно», «Факт», «Довод», «Цитата». Утверждение с цифрами или датами проверяется сразу. До ${Math.round(3600 / tipEvery)} запросов в час.`
     : "Только ответы на вопросы и цитаты."
 
   setSub("ai", st.aiName ?? PROVIDERS[p].label)
@@ -665,7 +665,7 @@ function renderSettings(s: any, st: any) {
   setSub("voice", field<HTMLSelectElement>("listenMode").selectedOptions[0]?.textContent ?? "")
   setSub("translate", st.translateTo === "en-US" ? "На английский" : "На русский")
   setSub("lecture", `Тезисы каждые ${every} с`)
-  setSub("talk", tipEvery ? `Подсказки каждые ${tipEvery} с` : "Только вопросы и цитаты")
+  setSub("talk", tipEvery ? `Проверка фактов каждые ${tipEvery} с` : "Только вопросы и цитаты")
 
   if (!$("keySheet").hidden) fillKeySheet()
   $("versionText").textContent = s.version ? `Версия ${s.version}` : ""

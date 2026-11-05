@@ -6848,43 +6848,64 @@ A: <автор — источник, год>`,
     return { system, user: `${ctx}Реплика с цитатой: «${text.trim()}»` };
   }
   var TIP_LABELS = {
-    ru: { fact: "Факт", answer: "Ответ", ask: "Спроси", say: "Скажи", quote: "Цитата" },
-    en: { fact: "Fact", answer: "Answer", ask: "Ask", say: "Say", quote: "Quote" }
+    ru: { false: "Неверно", disputed: "Спорно", true: "Верно", fact: "Факт", evidence: "Довод", answer: "Ответ", quote: "Цитата" },
+    en: { false: "False", disputed: "Disputed", true: "True", fact: "Fact", evidence: "Evidence", answer: "Answer", quote: "Quote" }
   };
   var TIP_BY_WORD = {
+    неверно: "false",
+    ошибка: "false",
+    ложь: "false",
+    спорно: "disputed",
+    неточно: "disputed",
+    верно: "true",
+    правда: "true",
     факт: "fact",
+    справка: "fact",
+    довод: "evidence",
+    доказательство: "evidence",
+    аргумент: "evidence",
+    данные: "evidence",
     ответ: "answer",
-    ответь: "answer",
-    спроси: "ask",
-    вопрос: "ask",
-    скажи: "say",
-    идея: "say",
-    мысль: "say",
-    fact: "fact",
-    answer: "answer",
-    ask: "ask",
-    say: "say",
-    idea: "say",
     цитата: "quote",
+    false: "false",
+    wrong: "false",
+    disputed: "disputed",
+    misleading: "disputed",
+    true: "true",
+    correct: "true",
+    fact: "fact",
+    evidence: "evidence",
+    argument: "evidence",
+    data: "evidence",
+    answer: "answer",
     quote: "quote"
   };
+  var CLAIM_CUE = /\d|процент|миллион|миллиард|тысяч|доказа|исследова|учён|учен|статисти|по данным|вс[её]гда|никогда|самы[йея]|впервые|first|largest|biggest|percent|million|billion|studies|research|proven|always|never|according to/iu;
+  function looksLikeClaim(text) {
+    const t = String(text ?? "").trim();
+    return wordCount(t) >= 5 && !ENDS_WITH_QUESTION.test(t) && CLAIM_CUE.test(t);
+  }
   function buildTipPrompt(context, prevTips, goal, lang) {
     const L = TIP_LABELS[lang];
     const system = [
-      "Ты — суфлёр в умных очках и помогаешь пользователю вести живой разговор. Тебе дают свежую расшифровку речи (возможны ошибки, неизвестно, кто говорит). Подсказка показывается на крошечном дисплее и должна читаться за секунду.",
-      `Цель пользователя в разговоре: ${goal.trim() || "поддерживать интересный и содержательный разговор"}.`,
-      "Дай ОДНУ самую полезную прямо сейчас подсказку, до 15 слов, ровно в одной строке одного из видов:",
-      `${L.quote}: <автор и источник — если только что прозвучала известная цитата, афоризм или крылатая фраза; это важнее остального>`,
+      "Ты — аналитик и фактчекер в умных очках. Пользователь разговаривает с другим человеком; тебе дают свежую расшифровку речи (возможны ошибки распознавания). Если голоса различаются, реплики помечены «Вы:» (пользователь) и «Собеседник:»; метки могут ошибаться.",
+      "Твоя задача — анализировать сказанное: проверять утверждения и подкреплять разговор фактами и доказательствами. Не предлагай, что спросить или сказать, не давай советов, как вести разговор.",
+      goal.trim() ? `Цель пользователя: ${goal.trim()}. Ищи факты и доводы, которые ему в этом помогут, и проверяй утверждения, которые ему мешают.` : "",
+      "Дай ОДНУ самую важную находку, до 18 слов, ровно в одной строке, по приоритету:",
+      `${L.false}: <прозвучавшее утверждение ошибочно — как на самом деле, с цифрой или датой>`,
+      `${L.quote}: <автор и источник прозвучавшей цитаты или крылатой фразы>`,
+      `${L.disputed}: <утверждение преувеличено или данные расходятся — что говорят источники>`,
       `${L.fact}: <точная справка о только что упомянутом человеке, месте, термине, событии, числе>`,
-      `${L.answer}: <что ответить, если пользователю только что задали вопрос>`,
-      `${L.ask}: <вопрос собеседнику, который продвинет разговор к цели или углубит тему>`,
-      `${L.say}: <мысль, аргумент или пример, который стоит сказать сейчас>`,
-      "Опирайся на последние реплики. Не повторяй прошлые подсказки. Факты — только точные.",
+      `${L.evidence}: <конкретный факт, цифра, исследование, закон или прецедент, подтверждающий или опровергающий позицию в разговоре>`,
+      `${L.true}: <утверждение верно — чем подтверждается, если это неочевидно или собеседник сомневается>`,
+      `${L.answer}: <ответ по существу, если пользователю только что задали вопрос>`,
+      "Называй источник кратко в скобках, если знаешь его точно (ВОЗ, 2023; Росстат; ГК РФ ст. 475). Никогда не придумывай цифры, исследования и источники; не уверен — пиши «Спорно» или SKIP.",
+      "Опирайся на последние реплики. Не повторяй прошлые находки.",
       `Пиши на ${lang === "en" ? "английском (English)" : "русском"} языке. Без Markdown и пояснений.`,
-      "Если сейчас добавить нечего (пауза, бытовая мелочь, всё уже подсказано) — ответь ровно SKIP."
-    ].join(`
+      "Если в последних репликах нет ни утверждений, которые стоит проверить, ни фактов, которые стоит уточнить (бытовой разговор, эмоции, пауза, всё уже проверено), — ответь ровно SKIP."
+    ].filter(Boolean).join(`
 `);
-    const prev = prevTips.length ? `Прошлые подсказки:
+    const prev = prevTips.length ? `Прошлые находки:
 ${prevTips.map((t) => "— " + t).join(`
 `)}
 
@@ -6899,7 +6920,7 @@ ${prevTips.map((t) => "— " + t).join(`
     const m = /^\s*[•*\-–—]?\s*([A-Za-zА-Яа-яЁё]+)\s*[:：]\s*(.+)$/m.exec(t);
     if (!m)
       return null;
-    const label = TIP_BY_WORD[m[1].toLowerCase()];
+    const label = TIP_BY_WORD[m[1].toLowerCase().replace(/ё/g, "е")];
     const body = m[2].replace(/\*\*/g, "").trim();
     if (!label || !body || /^skip\b/i.test(body))
       return null;
@@ -6960,13 +6981,13 @@ ${prevTips.map((t) => "— " + t).join(`
       const ru = [
         "Режим беседы",
         "• ответы на вопросы с фактами",
-        every ? `• подсказки примерно раз в ${every} с` : "• подскажу, если запнётесь",
+        every ? `• проверка фактов раз в ${every} с` : "• подскажу, если запнётесь",
         goal ? `• цель: ${goal}` : "Выключить: «стоп беседа»"
       ];
       const en = [
         "Conversation mode",
         "• answers to factual questions",
-        every ? `• hints about every ${every} s` : "• a prompt when you trail off",
+        every ? `• fact checks every ${every} s` : "• a prompt when you trail off",
         goal ? `• goal: ${goal}` : "Stop: «стоп беседа»"
       ];
       this.paint(fitScreen((intro.en ? en : ru).join(`
@@ -7018,7 +7039,7 @@ ${prevTips.map((t) => "— " + t).join(`
       }, TALK_SETTLE_MS);
       this.maybeTip();
     }
-    onSpeech(text) {
+    onSpeech(text, who) {
       if (!this.active)
         return;
       const t = String(text ?? "").trim();
@@ -7026,7 +7047,7 @@ ${prevTips.map((t) => "— " + t).join(`
         return;
       this.cancelSettle();
       this.interim = "";
-      this.recent.push(t);
+      this.recent.push(who === "me" ? `Вы: ${t}` : who === "other" ? `Собеседник: ${t}` : t);
       let words = wordCount(this.recent.join(" "));
       while (this.recent.length > 1 && words > CONTEXT_WORDS2)
         words -= wordCount(this.recent.shift());
@@ -7043,7 +7064,7 @@ ${prevTips.map((t) => "— " + t).join(`
         if (trigger)
           this.request(trigger, "");
       }
-      this.maybeTip();
+      this.maybeTip(looksLikeClaim(t));
     }
     askUser(question) {
       if (!this.active || !question.trim())
@@ -7131,12 +7152,13 @@ ${prevTips.map((t) => "— " + t).join(`
       const v = Math.round(Number(this.deps.everySec?.() ?? 0));
       return v > 0 ? Math.max(TALK_TIP_MIN_SEC, Math.min(120, v)) : 0;
     }
-    maybeTip() {
+    maybeTip(claim = false) {
       const every = this.every();
       if (!every || this.tipBusy)
         return;
       const words = this.wordsSinceTip + (this.interim ? wordCount(this.interim) : 0);
-      if (words < TALK_TIP_MIN_WORDS || this.deps.now() - this.lastTipAt < every * 1000)
+      const gap = claim ? Math.min(every, TALK_TIP_MIN_SEC) : every;
+      if (words < TALK_TIP_MIN_WORDS || this.deps.now() - this.lastTipAt < gap * 1000)
         return;
       this.tip();
     }
@@ -7155,7 +7177,7 @@ ${prevTips.map((t) => "— " + t).join(`
           return;
         const tip = parseTip(reply);
         if (!tip) {
-          this.deps.log("talk", "Подсказка по ходу: нечего добавить");
+          this.deps.log("talk", "Анализ: проверять нечего");
           return;
         }
         const line = tipLine(tip.label, tip.text, lang);
@@ -7163,8 +7185,8 @@ ${prevTips.map((t) => "— " + t).join(`
         if (seen)
           return;
         this.addNote({ t: this.deps.now(), kind: "tip", q: TIP_LABELS[lang][tip.label], text: tip.text });
-        this.deps.log("talk", `Подсказка по ходу — ${line}`);
-        if (this.deps.now() - this.lastAnswerAt >= TALK_ANSWER_PRIORITY_MS)
+        this.deps.log("talk", `Анализ — ${line}`);
+        if (tip.label === "false" || this.deps.now() - this.lastAnswerAt >= TALK_ANSWER_PRIORITY_MS)
           this.push(line);
       } catch (e) {
         if (session !== this.session)
@@ -7690,7 +7712,7 @@ ${prevTips.map((t) => "— " + t).join(`
         return false;
       if (this.phase === "talk") {
         if (isFinal)
-          this.talk.onSpeech(t);
+          this.talk.onSpeech(t, "other");
         else
           this.talk.onInterim(t);
       } else if (this.phase === "lecture") {
@@ -7732,7 +7754,7 @@ ${prevTips.map((t) => "— " + t).join(`
       }
       if (this.phase === "talk") {
         if (isFinal)
-          this.onTranscriptWhileTalk(t);
+          this.onTranscriptWhileTalk(t, speaker);
         else if (!this.wake(t).matched)
           this.talk.onInterim(t);
         return;
@@ -8329,7 +8351,7 @@ Hints: ${hints}. The list is in the app.` : `Беседа выключена.
         this.addLog("cmd", "Режим беседы выключен с телефона");
       this.changed();
     }
-    onTranscriptWhileTalk(t) {
+    onTranscriptWhileTalk(t, speaker = null) {
       const wake = this.wake(t);
       const body = wake.matched ? wake.rest : t;
       const tc = parseTalkCommand(body);
@@ -8356,7 +8378,8 @@ Hints: ${hints}. The list is in the app.` : `Беседа выключена.
         this.talk.askUser(body);
         return;
       }
-      this.talk.onSpeech(t);
+      const who = speaker && this.ownerVoice ? speaker === this.ownerVoice ? "me" : "other" : undefined;
+      this.talk.onSpeech(t, who);
     }
     setGoal(goal) {
       this.updateSettings({ talkGoal: goal });
@@ -8888,7 +8911,7 @@ ${goal}` : "Цель беседы убрана.", 3000);
   }
 
   // src/background/index.ts
-  var APP_VERSION = "1.13.0";
+  var APP_VERSION = "1.13.1";
   function newToken() {
     return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
       const r = Math.random() * 16 | 0;

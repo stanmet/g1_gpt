@@ -4,8 +4,9 @@
  *   someone asks a factual question («Кто такой Кант? Когда он родился?»)  ──▶ short answer on the glasses
  *   you start explaining and trail off («А категорический императив — это…») ──▶ the facts to finish with
  *
- *   and, every ~10 s of talk, one proactive hint toward the user's goal:
- *     «Факт: …», «Ответ: …», «Спроси: …», «Скажи: …»
+ *   and, every ~10 s of talk (sooner after a claim with numbers, dates, «доказано»…), an analysis
+ *   of what was said — a fact check or evidence, never advice on what to ask or say:
+ *     «Неверно: …», «Спорно: …», «Верно: …», «Факт: …», «Довод: …», «Цитата: …»
  *
  * Questions go through a fast lane of their own (a placeholder shows at once, the answer replaces
  * it), checked locally first from the live transcript; proactive hints never hold them up. The
@@ -32,7 +33,7 @@ const INTRO_MS = 5000
 const CONTEXT_WORDS = 300
 const PREV_HINTS = 4
 const PREV_TIPS = 6
-/** Default and minimum interval of proactive hints, in seconds (setting «Подсказки по ходу»). */
+/** Default and minimum interval of fact checks, in seconds (setting «Проверка фактов»). */
 export const DEFAULT_TALK_TIP_SEC = 10
 export const TALK_TIP_MIN_SEC = 5
 /** A proactive hint needs at least this many new words of conversation. */
@@ -228,15 +229,32 @@ export function buildQuotePrompt(context: string, text: string, lang: Lang): {sy
 
 // ───────────────────────── proactive hints ─────────────────────────
 
-export type TipLabel = "fact" | "answer" | "ask" | "say" | "quote"
+/**
+ * What the proactive lane may show. It analyses the conversation: checks claims and brings facts
+ * and evidence. Questions to ask and lines to say are not offered (users found «Спроси» useless).
+ */
+export type TipLabel = "false" | "disputed" | "true" | "fact" | "evidence" | "answer" | "quote"
 
 const TIP_LABELS: Record<Lang, Record<TipLabel, string>> = {
-  ru: {fact: "Факт", answer: "Ответ", ask: "Спроси", say: "Скажи", quote: "Цитата"},
-  en: {fact: "Fact", answer: "Answer", ask: "Ask", say: "Say", quote: "Quote"},
+  ru: {false: "Неверно", disputed: "Спорно", true: "Верно", fact: "Факт", evidence: "Довод", answer: "Ответ", quote: "Цитата"},
+  en: {false: "False", disputed: "Disputed", true: "True", fact: "Fact", evidence: "Evidence", answer: "Answer", quote: "Quote"},
 }
 const TIP_BY_WORD: Record<string, TipLabel> = {
-  факт: "fact", ответ: "answer", ответь: "answer", спроси: "ask", вопрос: "ask", скажи: "say", идея: "say", мысль: "say",
-  fact: "fact", answer: "answer", ask: "ask", say: "say", idea: "say", цитата: "quote", quote: "quote",
+  неверно: "false", ошибка: "false", ложь: "false", спорно: "disputed", неточно: "disputed", верно: "true", правда: "true",
+  факт: "fact", справка: "fact", довод: "evidence", доказательство: "evidence", аргумент: "evidence", данные: "evidence",
+  ответ: "answer", цитата: "quote",
+  false: "false", wrong: "false", disputed: "disputed", misleading: "disputed", true: "true", correct: "true", fact: "fact",
+  evidence: "evidence", argument: "evidence", data: "evidence", answer: "answer", quote: "quote",
+}
+
+/** «доказано», «исследования показали», numbers and years: a claim worth checking soon. */
+const CLAIM_CUE =
+  /\d|процент|миллион|миллиард|тысяч|доказа|исследова|учён|учен|статисти|по данным|вс[её]гда|никогда|самы[йея]|впервые|first|largest|biggest|percent|million|billion|studies|research|proven|always|never|according to/iu
+
+/** True when an utterance states something checkable («В Китае полтора миллиарда человек»). */
+export function looksLikeClaim(text: string): boolean {
+  const t = String(text ?? "").trim()
+  return wordCount(t) >= 5 && !ENDS_WITH_QUESTION.test(t) && CLAIM_CUE.test(t)
 }
 
 export function buildTipPrompt(
@@ -247,29 +265,35 @@ export function buildTipPrompt(
 ): {system: string; user: string} {
   const L = TIP_LABELS[lang]
   const system = [
-    "Ты — суфлёр в умных очках и помогаешь пользователю вести живой разговор. Тебе дают свежую расшифровку речи (возможны ошибки, неизвестно, кто говорит). Подсказка показывается на крошечном дисплее и должна читаться за секунду.",
-    `Цель пользователя в разговоре: ${goal.trim() || "поддерживать интересный и содержательный разговор"}.`,
-    "Дай ОДНУ самую полезную прямо сейчас подсказку, до 15 слов, ровно в одной строке одного из видов:",
-    `${L.quote}: <автор и источник — если только что прозвучала известная цитата, афоризм или крылатая фраза; это важнее остального>`,
+    "Ты — аналитик и фактчекер в умных очках. Пользователь разговаривает с другим человеком; тебе дают свежую расшифровку речи (возможны ошибки распознавания). Если голоса различаются, реплики помечены «Вы:» (пользователь) и «Собеседник:»; метки могут ошибаться.",
+    "Твоя задача — анализировать сказанное: проверять утверждения и подкреплять разговор фактами и доказательствами. Не предлагай, что спросить или сказать, не давай советов, как вести разговор.",
+    goal.trim() ? `Цель пользователя: ${goal.trim()}. Ищи факты и доводы, которые ему в этом помогут, и проверяй утверждения, которые ему мешают.` : "",
+    "Дай ОДНУ самую важную находку, до 18 слов, ровно в одной строке, по приоритету:",
+    `${L.false}: <прозвучавшее утверждение ошибочно — как на самом деле, с цифрой или датой>`,
+    `${L.quote}: <автор и источник прозвучавшей цитаты или крылатой фразы>`,
+    `${L.disputed}: <утверждение преувеличено или данные расходятся — что говорят источники>`,
     `${L.fact}: <точная справка о только что упомянутом человеке, месте, термине, событии, числе>`,
-    `${L.answer}: <что ответить, если пользователю только что задали вопрос>`,
-    `${L.ask}: <вопрос собеседнику, который продвинет разговор к цели или углубит тему>`,
-    `${L.say}: <мысль, аргумент или пример, который стоит сказать сейчас>`,
-    "Опирайся на последние реплики. Не повторяй прошлые подсказки. Факты — только точные.",
+    `${L.evidence}: <конкретный факт, цифра, исследование, закон или прецедент, подтверждающий или опровергающий позицию в разговоре>`,
+    `${L.true}: <утверждение верно — чем подтверждается, если это неочевидно или собеседник сомневается>`,
+    `${L.answer}: <ответ по существу, если пользователю только что задали вопрос>`,
+    "Называй источник кратко в скобках, если знаешь его точно (ВОЗ, 2023; Росстат; ГК РФ ст. 475). Никогда не придумывай цифры, исследования и источники; не уверен — пиши «Спорно» или SKIP.",
+    "Опирайся на последние реплики. Не повторяй прошлые находки.",
     `Пиши на ${lang === "en" ? "английском (English)" : "русском"} языке. Без Markdown и пояснений.`,
-    "Если сейчас добавить нечего (пауза, бытовая мелочь, всё уже подсказано) — ответь ровно SKIP.",
-  ].join("\n")
-  const prev = prevTips.length ? `Прошлые подсказки:\n${prevTips.map((t) => "— " + t).join("\n")}\n\n` : ""
+    "Если в последних репликах нет ни утверждений, которые стоит проверить, ни фактов, которые стоит уточнить (бытовой разговор, эмоции, пауза, всё уже проверено), — ответь ровно SKIP.",
+  ]
+    .filter(Boolean)
+    .join("\n")
+  const prev = prevTips.length ? `Прошлые находки:\n${prevTips.map((t) => "— " + t).join("\n")}\n\n` : ""
   return {system, user: `${prev}Разговор (последнее — внизу):\n«${context.trim()}»`}
 }
 
-/** {label, text} from «Спроси: …»; null for SKIP or an unknown shape. */
+/** {label, text} from «Неверно: …»; null for SKIP, an unknown shape, or advice («Спроси: …»). */
 export function parseTip(text: string): {label: TipLabel; text: string} | null {
   const t = String(text ?? "").trim()
   if (!t || /^\s*skip\b/i.test(t)) return null
   const m = /^\s*[•*\-–—]?\s*([A-Za-zА-Яа-яЁё]+)\s*[:：]\s*(.+)$/m.exec(t)
   if (!m) return null
-  const label = TIP_BY_WORD[m[1].toLowerCase()]
+  const label = TIP_BY_WORD[m[1].toLowerCase().replace(/ё/g, "е")]
   const body = m[2].replace(/\*\*/g, "").trim()
   if (!label || !body || /^skip\b/i.test(body)) return null
   return {label, text: body}
@@ -294,7 +318,7 @@ export interface TalkDeps {
   onChange(): void
   /** Proactive hints about every N seconds of conversation; 0 = only answers to questions. */
   everySec?(): number
-  /** What the user wants from this conversation («договориться о скидке»); steers «Спроси»/«Скажи». */
+  /** What the user wants from this conversation («договориться о скидке»): which facts and evidence to look for. */
   goal?(): string
 }
 
@@ -361,13 +385,13 @@ export class Talk {
     const ru = [
       "Режим беседы",
       "• ответы на вопросы с фактами",
-      every ? `• подсказки примерно раз в ${every} с` : "• подскажу, если запнётесь",
+      every ? `• проверка фактов раз в ${every} с` : "• подскажу, если запнётесь",
       goal ? `• цель: ${goal}` : "Выключить: «стоп беседа»",
     ]
     const en = [
       "Conversation mode",
       "• answers to factual questions",
-      every ? `• hints about every ${every} s` : "• a prompt when you trail off",
+      every ? `• fact checks every ${every} s` : "• a prompt when you trail off",
       goal ? `• goal: ${goal}` : "Stop: «стоп беседа»",
     ]
     this.paint(fitScreen((intro.en ? en : ru).join("\n")), INTRO_MS)
@@ -416,14 +440,17 @@ export class Talk {
     this.maybeTip()
   }
 
-  /** A final transcript of what was said (by anyone). */
-  onSpeech(text: string): void {
+  /**
+   * A final transcript of what was said. `who`: «me» = the wearer, «other» = someone else, when
+   * Mentra tells voices apart and the wearer's voice is known; the AI then sees who claims what.
+   */
+  onSpeech(text: string, who?: "me" | "other"): void {
     if (!this.active) return
     const t = String(text ?? "").trim()
     if (!t) return
     this.cancelSettle()
     this.interim = ""
-    this.recent.push(t)
+    this.recent.push(who === "me" ? `Вы: ${t}` : who === "other" ? `Собеседник: ${t}` : t)
     let words = wordCount(this.recent.join(" "))
     while (this.recent.length > 1 && words > CONTEXT_WORDS) words -= wordCount(this.recent.shift()!)
     this.wordsSinceTip += wordCount(t)
@@ -437,7 +464,8 @@ export class Talk {
       const trigger = findTalkTrigger(t)
       if (trigger) this.request(trigger, "")
     }
-    this.maybeTip()
+    // a claim with numbers, dates, «доказано» is checked soon, not at the next regular hint
+    this.maybeTip(looksLikeClaim(t))
   }
 
   /** The user's own question («Вопрос, …»): always answered. */
@@ -532,11 +560,12 @@ export class Talk {
     return v > 0 ? Math.max(TALK_TIP_MIN_SEC, Math.min(120, v)) : 0
   }
 
-  private maybeTip(): void {
+  private maybeTip(claim = false): void {
     const every = this.every()
     if (!every || this.tipBusy) return
     const words = this.wordsSinceTip + (this.interim ? wordCount(this.interim) : 0)
-    if (words < TALK_TIP_MIN_WORDS || this.deps.now() - this.lastTipAt < every * 1000) return
+    const gap = claim ? Math.min(every, TALK_TIP_MIN_SEC) : every
+    if (words < TALK_TIP_MIN_WORDS || this.deps.now() - this.lastTipAt < gap * 1000) return
     void this.tip()
   }
 
@@ -554,16 +583,17 @@ export class Talk {
       if (session !== this.session) return
       const tip = parseTip(reply)
       if (!tip) {
-        this.deps.log("talk", "Подсказка по ходу: нечего добавить")
+        this.deps.log("talk", "Анализ: проверять нечего")
         return
       }
       const line = tipLine(tip.label, tip.text, lang)
       const seen = (this.record?.notes ?? []).slice(-PREV_TIPS).some((n) => normalize(`${n.q}: ${n.text}`) === normalize(line))
       if (seen) return
       this.addNote({t: this.deps.now(), kind: "tip", q: TIP_LABELS[lang][tip.label], text: tip.text})
-      this.deps.log("talk", `Подсказка по ходу — ${line}`)
+      this.deps.log("talk", `Анализ — ${line}`)
       // a fresh answer to a question stays on top for a while
-      if (this.deps.now() - this.lastAnswerAt >= TALK_ANSWER_PRIORITY_MS) this.push(line)
+      // (an error in what was just said is shown anyway)
+      if (tip.label === "false" || this.deps.now() - this.lastAnswerAt >= TALK_ANSWER_PRIORITY_MS) this.push(line)
     } catch (e) {
       if (session !== this.session) return
       this.deps.log("error", `Беседа: ${this.deps.explainError(e)}`)

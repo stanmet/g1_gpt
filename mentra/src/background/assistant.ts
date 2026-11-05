@@ -408,7 +408,7 @@ export class Assistant {
     }
     if (!this.settings.voiceLock || !this.ownerVoice || speaker === this.ownerVoice || wake) return false
     if (this.phase === "talk") {
-      if (isFinal) this.talk.onSpeech(t)
+      if (isFinal) this.talk.onSpeech(t, "other")
       else this.talk.onInterim(t)
     } else if (this.phase === "lecture") {
       if (isFinal) this.lecture.onSpeech(t)
@@ -447,7 +447,7 @@ export class Assistant {
       return
     }
     if (this.phase === "talk") {
-      if (isFinal) this.onTranscriptWhileTalk(t)
+      if (isFinal) this.onTranscriptWhileTalk(t, speaker)
       else if (!this.wake(t).matched) this.talk.onInterim(t) // «Вопрос, …» waits for the final
       return
     }
@@ -1065,7 +1065,7 @@ Notes are in the app.`
     this.changed()
   }
 
-  private onTranscriptWhileTalk(t: string): void {
+  private onTranscriptWhileTalk(t: string, speaker: string | null = null): void {
     const wake = this.wake(t)
     const body = wake.matched ? wake.rest : t
     const tc = parseTalkCommand(body)
@@ -1088,7 +1088,9 @@ Notes are in the app.`
       this.talk.askUser(body)
       return
     }
-    this.talk.onSpeech(t)
+    // who said it, when Mentra tells voices apart and the wearer's voice is known (said the activator)
+    const who = speaker && this.ownerVoice ? (speaker === this.ownerVoice ? "me" : "other") : undefined
+    this.talk.onSpeech(t, who)
   }
 
   /** Conversation goal, said by voice («Вопрос, цель: …») or typed in the app. */

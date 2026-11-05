@@ -45,9 +45,9 @@ export interface Settings {
   translateTo: TranslateTarget
   /** Lecture mode: key points about every N seconds. */
   lectureEverySec: number
-  /** Conversation mode: a proactive hint about every N seconds of talk; 0 = only answers to questions. */
+  /** Conversation mode: a fact check about every N seconds of talk; 0 = only answers to questions. */
   talkEverySec: number
-  /** Conversation mode: what the user wants from the conversation; steers «Спроси»/«Скажи». */
+  /** Conversation mode: what the user wants from the conversation; which facts and evidence to look for. */
   talkGoal: string
   /** Navigator: how to travel when the command does not say («пешком», «на машине»). */
   navMode: NavMode

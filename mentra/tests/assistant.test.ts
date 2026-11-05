@@ -637,8 +637,24 @@ describe("conversation mode («беседа»)", () => {
     expect(e.store.loadTalk()!.notes.map((n) => n.kind)).toEqual(["qa", "hint"])
   })
 
+  test("conversation: the fact check sees who said what, and a wrong claim is flagged", async () => {
+    const e = setup(["Неверно: Кант родился в 1724 году в Кёнигсберге."])
+    e.a.ownerVoice = "1" // the wearer said the activator earlier
+    e.a.startTalk("ui")
+    await e.clock.advance(6000)
+    e.a.onTranscript("Я думаю, Кант был немецким философом", true, "1")
+    e.a.onTranscript("Кант родился в 1742 году в Берлине, это все знают", true, "2")
+    await e.clock.advance(10)
+    expect(e.requests.length).toBe(1)
+    expect(e.requests[0].body.instructions).toContain("фактчекер")
+    const said = e.requests[0].body.input[0].content
+    expect(said).toContain("Вы: Я думаю, Кант")
+    expect(said).toContain("Собеседник: Кант родился в 1742")
+    expect(e.shown.at(-1)!.replace(/\n/g, " ")).toBe("• Неверно: Кант родился в 1724 году в Кёнигсберге.")
+  })
+
   test("the goal is set by voice in any mode and steers proactive hints", async () => {
-    const e = setup(["Спроси: Есть ли скидка при оплате сразу?"])
+    const e = setup(["Довод: Зимой у строителей меньше заказов, скидки до 10%."])
     e.a.onTranscript("Вопрос, цель — договориться о скидке", true)
     expect(e.a.settings.talkGoal).toBe("договориться о скидке")
     expect(e.store.loadSettings().talkGoal).toBe("договориться о скидке")
@@ -654,7 +670,7 @@ describe("conversation mode («беседа»)", () => {
     await e.clock.advance(10)
     expect(e.requests.length).toBe(1)
     expect(e.requests[0].body.instructions).toContain("договориться о скидке")
-    expect(e.shown.at(-1)!.replace(/\n/g, " ")).toBe("• Спроси: Есть ли скидка при оплате сразу?")
+    expect(e.shown.at(-1)!.replace(/\n/g, " ")).toBe("• Довод: Зимой у строителей меньше заказов, скидки до 10%.")
     e.a.onTranscript("Вопрос, цель: нет", true)
     expect(e.a.settings.talkGoal).toBe("")
     expect(e.a.phase).toBe("talk")
