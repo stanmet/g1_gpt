@@ -8176,7 +8176,7 @@ ${goal}` : "Цель беседы убрана.", 3000);
   }
 
   // src/background/index.ts
-  var APP_VERSION = "1.11.0";
+  var APP_VERSION = "1.12.0";
   function getKV() {
     try {
       const ls = globalThis.localStorage;

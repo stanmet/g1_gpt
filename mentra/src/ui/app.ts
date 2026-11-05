@@ -1,7 +1,8 @@
 /**
- * Phone UI: an iOS-style app with four tabs (Очки, Разговор, Настройки, Журнал).
- * Plain DOM, no framework. Talks to the background layer through the `mentra`
- * global injected by the Mentra app; settings save automatically on change.
+ * Phone UI: three tabs (Очки, Разговор, Настройки) and pages pushed over them
+ * (settings sections, Журнал, конспект, команды). Plain DOM, no framework. Talks to the
+ * background layer through the `mentra` global injected by the Mentra app; settings save
+ * automatically on change.
  */
 
 type Bridge = {
@@ -28,15 +29,17 @@ import {remoteCommand} from "./remote"
 import {notesAsText, type LectureRecord} from "../background/lecture"
 
 const AI_FOOTER: Record<Provider, string> = {
-  openai: "GPT‑6.1 Terra отвечает быстро и стоит доли цента за вопрос. Sol и Astra умнее, но дороже.",
-  anthropic: "Haiku 5.5 — самый быстрый и недорогой Claude. Sonnet 5.5 и Opus 5.5 умнее, но дольше думают и стоят дороже.",
-  gemini: "3.8 Flash быстрый, у Google есть бесплатный лимит. Flash‑Lite ещё дешевле, 4 Argon — самый умный, только платно.",
+  openai: "Terra — быстро и дёшево. Sol и Astra умнее, но дороже.",
+  anthropic: "Haiku — быстро и дёшево. Sonnet и Opus умнее, но дольше и дороже.",
+  gemini: "Flash — быстро, есть бесплатный лимит. Argon — самый умный.",
 }
 const asP = (v: unknown): Provider => (v === "anthropic" || v === "gemini" ? v : "openai")
 let modelOptionsFor: Provider | null = null
 let sheetProvider: Provider = "openai"
-const TABS = ["glasses", "chat", "settings", "log"] as const
+const TABS = ["glasses", "chat", "settings"] as const
 type Tab = (typeof TABS)[number]
+const PAGES = ["ai", "keys", "about", "voice", "display", "translate", "lecture", "talk", "log", "info", "notes", "commands"] as const
+type Page = (typeof PAGES)[number]
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
 const form = () => $<HTMLFormElement>("settingsForm")
@@ -159,7 +162,6 @@ function previewBridge(): Bridge {
 
 const bridge: Bridge = window.mentra ?? previewBridge()
 
-
 async function call(channel: string, payload: unknown = {}, timeout = 15000) {
   try {
     const s = await bridge.request(channel, payload, {timeout})
@@ -171,7 +173,7 @@ async function call(channel: string, payload: unknown = {}, timeout = 15000) {
   }
 }
 
-// ───────────────────────── chrome: theme, safe area, tabs ─────────────────────────
+// ───────────────────────── chrome: theme, safe area ─────────────────────────
 
 function applyChrome() {
   const g: HostChrome = (window as unknown as {MentraOS?: HostChrome}).MentraOS ?? {}
@@ -181,27 +183,52 @@ function applyChrome() {
   const bottom = g.safeAreaInsets?.bottom ?? 0
   root.style.setProperty("--safe-top", `${top}px`)
   root.style.setProperty("--safe-bottom", `${bottom}px`)
-  // Large titles sit below the host's floating capsule menu, like below an iOS nav bar.
+  // Titles sit below the host's floating capsule menu, like below an iOS nav bar.
   const capsuleBottom = g.capsuleMenu?.bottom ?? 0
   root.style.setProperty("--title-top", `${Math.max(top + 52, capsuleBottom + 14)}px`)
 }
 
-function showTab(tab: Tab, remember = true) {
-  for (const t of TABS) {
-    $(`screen-${t}`).hidden = t !== tab
-    const btn = document.querySelector<HTMLButtonElement>(`.tabbar [data-tab="${t}"]`)!
-    if (t === tab) btn.setAttribute("aria-current", "page")
-    else btn.removeAttribute("aria-current")
-  }
+// ───────────────────────── navigation: tabs and pushed pages ─────────────────────────
+
+let tab: Tab = "glasses"
+const stack: {page: Page; scrollY: number}[] = []
+
+function renderNav() {
+  const top = stack.at(-1)?.page
+  for (const t of TABS) $(`screen-${t}`).hidden = Boolean(top) || t !== tab
+  for (const p of PAGES) $(`page-${p}`).hidden = p !== top
+  document.querySelectorAll<HTMLButtonElement>(".tabbar [data-tab]").forEach((b) => {
+    if (b.dataset.tab === tab) b.setAttribute("aria-current", "page")
+    else b.removeAttribute("aria-current")
+  })
+}
+
+function showTab(t: Tab, remember = true) {
+  tab = t
+  stack.length = 0
+  renderNav()
   window.scrollTo(0, 0)
-  if (tab === "chat") requestAnimationFrame(() => window.scrollTo(0, document.body.scrollHeight))
+  if (t === "chat") requestAnimationFrame(() => window.scrollTo(0, document.body.scrollHeight))
   if (remember) {
     try {
-      localStorage.setItem("g1gpt.tab", tab)
+      localStorage.setItem("g1gpt.tab", t)
     } catch {
       // storage unavailable
     }
   }
+}
+
+function openPage(p: Page) {
+  stack.push({page: p, scrollY: window.scrollY})
+  renderNav()
+  window.scrollTo(0, 0)
+}
+
+function back() {
+  const left = stack.pop()
+  if (Object.keys(pending).length) flushSave()
+  renderNav()
+  window.scrollTo(0, left?.scrollY ?? 0)
 }
 
 function toast(msg: string, ms = 2400) {
@@ -215,7 +242,7 @@ function toast(msg: string, ms = 2400) {
 // ───────────────────────── render ─────────────────────────
 
 const PHASE: Record<string, string> = {
-  idle: "Готов — слушаю",
+  idle: "Готов",
   capturing: "Слушаю вопрос…",
   thinking: "Думаю…",
   answering: "Ответ на очках",
@@ -225,7 +252,7 @@ const PHASE: Record<string, string> = {
 }
 
 function capitalize(s: string) {
-  return s.charAt(0).toUpperCase() + s.slice(1)
+  return s ? s[0].toUpperCase() + s.slice(1) : s
 }
 
 function render(s: any) {
@@ -239,30 +266,35 @@ function render(s: any) {
   renderLog(s)
 }
 
+type Mode = "assistant" | "translate" | "lecture" | "talk"
+const STOP_CMD: Record<Mode, string> = {assistant: "hide", translate: "translateStop", lecture: "lectureStop", talk: "talkStop"}
+
+function modeOf(s: any): Mode {
+  return s?.talk?.active ? "talk" : s?.lecture?.active ? "lecture" : s?.translating ? "translate" : "assistant"
+}
+
 function renderGlasses(s: any, st: any) {
-  const dot = $("connDot")
-  dot.className = "status-dot" + (s.glassesConnected === true ? " on" : s.glassesConnected === false ? " off" : "")
+  $("connDot").className = "dot" + (s.glassesConnected === true ? " on" : s.glassesConnected === false ? " off" : "")
   $("connText").textContent =
-    s.glassesConnected === true ? "Очки подключены" : s.glassesConnected === false ? "Очки не подключены" : "Очки: нет данных"
+    s.glassesConnected === true ? "Подключены" : s.glassesConnected === false ? "Не подключены" : "Нет данных"
 
   const mode = modeOf(s)
   $("lens").dataset.mode = mode
+  $("modeSeg")
+    .querySelectorAll<HTMLButtonElement>("button")
+    .forEach((b) => b.setAttribute("aria-selected", String(b.dataset.mode === mode)))
+
   // in translation, lecture and conversation modes the arrows page nothing and «Скрыть» turns the mode off
   const listening = mode !== "assistant"
-  document.querySelectorAll<HTMLElement>('.lens-toolbar [data-cmd="prev"], .lens-toolbar [data-cmd="next"]').forEach((b) => {
+  document.querySelectorAll<HTMLElement>('.lens-controls [data-cmd="prev"], .lens-controls [data-cmd="next"]').forEach((b) => {
     b.style.visibility = listening ? "hidden" : ""
   })
-  const hide = document.querySelector<HTMLButtonElement>('.lens-toolbar [data-cmd="hide"]')
-  if (hide) hide.textContent = listening ? "Выключить" : "Скрыть"
-  const seg = $("modeSeg")
-  seg.dataset.mode = mode
-  seg.querySelectorAll<HTMLButtonElement>("button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.mode === mode)))
+  $("hideBtn").textContent = listening ? "Выключить" : "Скрыть"
 
   const wake = capitalize(String((st.wakeWords ?? [])[0] ?? "вопрос"))
   $("wakeHint").textContent = `«${wake}, …»`
   $("wakeList").textContent = (st.wakeWords ?? ["вопрос"]).map((w: string) => `«${capitalize(String(w))}»`).join(", ")
 
-  // The lens mirrors the glasses display.
   const lensText = $("lensText")
   let text: string
   let dim = false
@@ -273,10 +305,10 @@ function renderGlasses(s: any, st: any) {
     text = s.currentScreen || "Слушаю лекцию…"
     dim = !s.currentScreen
   } else if (s.phase === "talk") {
-    text = s.currentScreen || "Слушаю разговор…\nПодскажу, когда понадобится."
+    text = s.currentScreen || "Слушаю разговор…"
     dim = !s.currentScreen
   } else if (s.phase === "idle") {
-    text = s.lastError || `Экран пуст.\nСкажите «${wake}, …»`
+    text = s.lastError || `Скажите «${wake}, …»`
     dim = !s.lastError
   } else if (s.phase === "capturing" || s.phase === "thinking") {
     text = s.currentScreen || (s.phase === "thinking" ? "…думаю" : "Слушаю…")
@@ -292,8 +324,6 @@ function renderGlasses(s: any, st: any) {
   }
   lensText.classList.toggle("dim", dim)
 
-  $("dashNote").hidden = !s.dashboardLikely
-
   const target = st.translateTo === "en-US" ? "английский" : "русский"
   $("lensState").textContent =
     st.listenMode === "off"
@@ -301,9 +331,9 @@ function renderGlasses(s: any, st: any) {
       : s.translating
         ? `Перевод на ${target}`
         : s.phase === "lecture"
-          ? `Лекция: тезисы ${st.translateTo === "en-US" ? "по-английски" : "по-русски"}`
+          ? `Тезисы ${st.translateTo === "en-US" ? "по-английски" : "по-русски"}`
           : s.phase === "talk"
-            ? "Беседа: подсказки по ходу разговора"
+            ? "Подсказки по ходу разговора"
             : (PHASE[s.phase] ?? s.phase)
 
   const dots = $("pageDots")
@@ -315,18 +345,15 @@ function renderGlasses(s: any, st: any) {
       dots.appendChild(d)
     }
   }
-  const paging = !s.translating && s.pages > 1
-  document.querySelector<HTMLButtonElement>('.lens-toolbar [data-cmd="prev"]')!.disabled = !paging || s.page === 0
-  document.querySelector<HTMLButtonElement>('.lens-toolbar [data-cmd="next"]')!.disabled = !paging || s.page >= s.pages - 1
+
+  $("dashNote").hidden = !s.dashboardLikely
 
   const p = asP(st.provider)
-  const quick = $<HTMLSelectElement>("quickProvider")
-  if (document.activeElement !== quick) quick.value = p
-  $("aiName").textContent = st.aiName ?? PROVIDERS[p].label
-  $("aiIcon").className = `cell-icon ai-${p}`
   $("keyWarn").hidden = Boolean(st.hasKey)
   $("keyWarnTitle").textContent = `Добавьте ключ ${PROVIDERS[p].label}`
-  $("keyWarnBtn").dataset.provider = p
+  $("aiName").textContent = st.aiName ?? PROVIDERS[p].label
+  const quick = $<HTMLSelectElement>("quickProvider")
+  if (document.activeElement !== quick) quick.value = p
 }
 
 let chatKey = ""
@@ -370,12 +397,141 @@ function renderChat(s: any) {
     const t = document.createElement("div")
     t.className = "bubble assistant typing"
     t.setAttribute("aria-label", "Помощник отвечает")
-    t.innerHTML = "<i></i><i></i><i></i>"
+    t.append(document.createElement("i"), document.createElement("i"), document.createElement("i"))
     chat.appendChild(t)
   }
   $("chatEmpty").hidden = history.length > 0 || s.phase === "thinking"
   $("newChat").hidden = history.length === 0
   if (!$("screen-chat").hidden && atBottom) window.scrollTo(0, document.body.scrollHeight)
+}
+
+let notesKey = ""
+/** Which list the notes page shows: the active mode's, else the most recent one. */
+let notesShown: "lecture" | "talk" = "lecture"
+
+function renderNotes(s: any) {
+  const has = (r: any) => Boolean(r && (r.active || r.total > 0))
+  const lec = s.lecture
+  const talk = s.talk
+  const recent = (r: any) => (r ? r.endedAt || Date.now() : 0)
+  notesShown = talk?.active ? "talk" : lec?.active ? "lecture" : has(talk) && (!has(lec) || recent(talk) >= recent(lec)) ? "talk" : "lecture"
+  const r = notesShown === "talk" ? talk : lec
+  const isTalk = notesShown === "talk"
+  $("notesRow").hidden = !has(r)
+  if (!has(r)) return
+  const points = r.notes.filter((n: any) => n.kind === "point").length
+  const answers = r.notes.length - points
+  const counts = isTalk
+    ? `${answers} ${plural(answers, "подсказка", "подсказки", "подсказок")}`
+    : `${points} ${plural(points, "тезис", "тезиса", "тезисов")}, ${answers} ${plural(answers, "ответ", "ответа", "ответов")}`
+  const title = isTalk ? "Подсказки в беседе" : "Конспект лекции"
+  const when = r.active ? "идёт сейчас" : `${fmtHM(r.startedAt)}–${r.endedAt ? fmtHM(r.endedAt) : "…"}`
+  $("notesRowTitle").textContent = title
+  $("notesRowSub").textContent = `${counts}, ${when}`
+  $("notesTitle").textContent = isTalk ? "Подсказки" : "Конспект"
+  $("lectureMeta").textContent = r.active ? "Идёт сейчас." : `${capitalize(when)}.`
+  $("lectureSub").textContent = isTalk && s.settings?.talkGoal ? `Цель: ${s.settings.talkGoal}` : ""
+  const key = `${notesShown}:${r.startedAt}:${r.total}`
+  if (key === notesKey) return
+  notesKey = key
+  const list = $("lectureNotes")
+  list.dataset.empty = isTalk ? "Подсказки появятся, когда в разговоре прозвучит вопрос или цитата." : "Тезисы появятся, когда лектор скажет что-то по существу."
+  list.textContent = ""
+  const who: Record<string, string> = {you: "Вы: ", qa: isTalk ? "Вопрос: " : "Лектор: ", hint: "Подсказка: ", quote: "Цитата: "}
+  for (const n of [...r.notes].reverse()) {
+    const li = document.createElement("li")
+    li.className = n.kind
+    const t = document.createElement("span")
+    t.className = "t"
+    t.textContent = fmtHM(n.t)
+    li.append(t)
+    if (n.kind === "tip") {
+      const b = document.createElement("b")
+      b.textContent = `${n.q}: `
+      li.append(b, n.text)
+    } else if (n.kind !== "point") {
+      const q = document.createElement("span")
+      q.className = "q"
+      q.textContent = (who[n.kind] ?? "") + (n.q ?? "")
+      li.append(q, "→ " + n.text)
+    } else li.append(n.text)
+    list.append(li)
+  }
+}
+
+function plural(n: number, one: string, few: string, many: string): string {
+  const m10 = n % 10
+  const m100 = n % 100
+  if (m10 === 1 && m100 !== 11) return one
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few
+  return many
+}
+
+function setSub(page: string, text: string) {
+  const el = document.querySelector<HTMLElement>(`[data-sub="${page}"]`)
+  if (el) el.textContent = text
+}
+
+function renderSettings(s: any, st: any) {
+  const p = asP(st.provider)
+  setSelect("provider", p)
+  fillModelOptions(p)
+  const model = String(st[PROVIDERS[p].modelField] ?? "")
+  const known = PROVIDERS[p].models.some((m) => m.id === model)
+  setSelect("modelChoice", known ? model : "custom")
+  $("customModelCell").hidden = known
+  if (!known) setText("customModel", model)
+  $("aiFooter").textContent = AI_FOOTER[p]
+  let keys = 0
+  for (const id of ["openai", "anthropic", "gemini"] as Provider[]) {
+    const k = st.keys?.[id]
+    if (k?.has) keys++
+    const el = document.querySelector<HTMLElement>(`[data-key-of="${id}"]`)!
+    el.textContent = k?.has ? k.hint || "Сохранён" : id === p ? "Не задан — нужен для ответов" : "Не задан"
+    el.style.color = k?.has || id !== p ? "" : "var(--danger)"
+  }
+  setSelect("effort", st.effort ?? "auto")
+  const web = field<HTMLInputElement>("webSearch")
+  if (document.activeElement !== web) web.checked = Boolean(st.webSearch)
+  setStep("answerWords", st.answerWords ?? 60)
+  setStep("historyMessages", st.historyMessages ?? 20)
+  setText("aboutMe", st.aboutMe ?? "")
+  setText("instructions", st.instructions ?? "")
+  setSelect("listenMode", st.listenMode ?? "wake")
+  setSelect("sttLanguage", st.sttLanguage ?? "auto")
+  setText("wakeWords", (st.wakeWords ?? []).join(", "))
+  setStep("followUpSec", st.followUpSec ?? 0)
+  setSelect("translateTo", st.translateTo ?? "ru-RU")
+  setStep("autoAdvanceSec", st.autoAdvanceSec ?? 0)
+  setStep("clearAfterSec", st.clearAfterSec ?? 90)
+  const nod = field<HTMLInputElement>("headNod")
+  if (document.activeElement !== nod) nod.checked = st.headNod !== false
+  const lock = field<HTMLInputElement>("voiceLock")
+  if (document.activeElement !== lock) lock.checked = st.voiceLock === true
+  $("voiceLockText").textContent = s.ownerVoice
+    ? `«Только мой голос»: команды без активатора принимаются от голоса ${s.ownerVoice} — того, кто последним сказал активатор.`
+    : "«Только мой голос»: ваш голос определится, когда вы скажете активатор."
+
+  const every = st.lectureEverySec ?? 15
+  setStep("lectureEverySec", every)
+  $("lectureCost").textContent = `До ${Math.round(3600 / every)} запросов к нейросети в час.`
+  const tipEvery = st.talkEverySec ?? 10
+  setStep("talkEverySec", tipEvery)
+  setText("talkGoal", st.talkGoal ?? "")
+  $("talkCost").textContent = tipEvery
+    ? `«Факт», «Спроси», «Скажи», «Цитата» — до ${Math.round(3600 / tipEvery)} запросов в час.`
+    : "Только ответы на вопросы и цитаты."
+
+  setSub("ai", st.aiName ?? PROVIDERS[p].label)
+  setSub("keys", `${keys} из 3`)
+  setSub("voice", field<HTMLSelectElement>("listenMode").selectedOptions[0]?.textContent ?? "")
+  setSub("translate", st.translateTo === "en-US" ? "На английский" : "На русский")
+  setSub("lecture", `Тезисы каждые ${every} с`)
+  setSub("talk", tipEvery ? `Подсказки каждые ${tipEvery} с` : "Только вопросы и цитаты")
+
+  if (!$("keySheet").hidden) fillKeySheet()
+  $("versionText").textContent = s.version ? `Версия ${s.version}` : ""
+  $("aboutVersion").textContent = s.version ? `Версия ${s.version}` : ""
 }
 
 function setSelect(name: string, value: string) {
@@ -401,62 +557,6 @@ function setStep(name: string, value: number) {
   const [minus, plus] = stepper.querySelectorAll("button")
   minus.disabled = value <= min
   plus.disabled = value >= max
-}
-
-function renderSettings(s: any, st: any) {
-  const p = asP(st.provider)
-  setSelect("provider", p)
-  fillModelOptions(p)
-  const model = String(st[PROVIDERS[p].modelField] ?? "")
-  const known = PROVIDERS[p].models.some((m) => m.id === model)
-  setSelect("modelChoice", known ? model : "custom")
-  $("customModelCell").hidden = known
-  if (!known) setText("customModel", model)
-  $("aiFooter").textContent = `${AI_FOOTER[p]} Поиск добавляет свежие факты, за него берут плату. Чем глубже размышления, тем дольше ответ.`
-  for (const id of ["openai", "anthropic", "gemini"] as Provider[]) {
-    const k = st.keys?.[id]
-    const el = document.querySelector<HTMLElement>(`[data-key-of="${id}"]`)!
-    el.textContent = k?.has ? k.hint || "Сохранён" : "Не задан"
-    el.style.color = k?.has || id !== p ? "" : "var(--red)"
-  }
-  setSelect("effort", st.effort ?? "auto")
-  const web = field<HTMLInputElement>("webSearch")
-  if (document.activeElement !== web) web.checked = Boolean(st.webSearch)
-  setStep("answerWords", st.answerWords ?? 60)
-  setStep("historyMessages", st.historyMessages ?? 20)
-  setText("aboutMe", st.aboutMe ?? "")
-  setText("instructions", st.instructions ?? "")
-  setSelect("listenMode", st.listenMode ?? "wake")
-  setSelect("sttLanguage", st.sttLanguage ?? "auto")
-  setText("wakeWords", (st.wakeWords ?? []).join(", "))
-  setStep("followUpSec", st.followUpSec ?? 0)
-  setSelect("translateTo", st.translateTo ?? "ru-RU")
-  setStep("autoAdvanceSec", st.autoAdvanceSec ?? 0)
-  const every = st.lectureEverySec ?? 15
-  setStep("lectureEverySec", every)
-  $("lectureCost").textContent = `Чаще — больше запросов к нейросети: до ${Math.round(3600 / every)} в час. Пауза в речи лектора даёт тезис раньше.`
-  $("lectureEveryText").textContent = `Тезисы появляются примерно раз в ${every} секунд.`
-  const tipEvery = st.talkEverySec ?? 10
-  setStep("talkEverySec", tipEvery)
-  setText("talkGoal", st.talkGoal ?? "")
-  $("talkEveryText").textContent = tipEvery
-    ? `Ещё примерно раз в ${tipEvery} секунд — подсказка, куда вести разговор${st.talkGoal ? ` (цель: ${st.talkGoal})` : ""}.`
-    : "Подсказки по ходу разговора выключены."
-  $("talkCost").textContent = tipEvery
-    ? `Кроме ответов на вопросы, очки сами подсказывают: «Факт», «Ответ», «Спроси», «Скажи» — к цели, если она задана. До ${Math.round(3600 / tipEvery)} запросов в час, пока идёт разговор. Цель можно сказать голосом: «Вопрос, цель — …».`
-    : "Только ответы на вопросы и подсказки, когда вы запнулись. Цель можно сказать голосом: «Вопрос, цель — …»."
-  setStep("clearAfterSec", st.clearAfterSec ?? 90)
-  const nod = field<HTMLInputElement>("headNod")
-  if (document.activeElement !== nod) nod.checked = st.headNod !== false
-  const lock = field<HTMLInputElement>("voiceLock")
-  if (document.activeElement !== lock) lock.checked = st.voiceLock === true
-  const voiceState = s.ownerVoice
-    ? `Сейчас ваш голос — «голос ${s.ownerVoice}».`
-    : "Ваш голос пока не определён: скажите «Вопрос, …». Если в «Журнале» у фраз нет пометки «голос N», Mentra не различает голоса и настройка ничего не меняет."
-  $("voiceLockText").textContent = `«Только мой голос» — эксперимент. Mentra различает голоса в разговоре, но не знает, какой из них ваш. Приложение запоминает голос того, кто сказал активатор, и команды без активатора («Лекция», «Как будет на английском…», «дальше») принимает только от него. Чужая речь по-прежнему идёт в лекцию и подсказки беседы. Активатор работает всегда. ${voiceState}`
-
-  if (!$("keySheet").hidden) fillKeySheet()
-  $("versionText").textContent = s.version ? `Версия ${s.version}.` : ""
 }
 
 function fillModelOptions(p: Provider) {
@@ -490,10 +590,10 @@ const KIND_LABEL: Record<string, string> = {
   error: "ошибка",
   info: "инфо",
   touch: "касание",
-  lecture: "лекция",
-  talk: "беседа",
   head: "голова",
   translate: "перевод",
+  lecture: "лекция",
+  talk: "беседа",
 }
 
 async function copyText(text: string): Promise<void> {
@@ -509,78 +609,6 @@ async function copyText(text: string): Promise<void> {
   }
 }
 
-type Mode = "assistant" | "translate" | "lecture" | "talk"
-const STOP_CMD: Record<Mode, string> = {assistant: "hide", translate: "translateStop", lecture: "lectureStop", talk: "talkStop"}
-
-function modeOf(s: any): Mode {
-  return s?.talk?.active ? "talk" : s?.lecture?.active ? "lecture" : s?.translating ? "translate" : "assistant"
-}
-
-let notesKey = ""
-/** Which list the notes box shows: the active mode's, else the most recent one. */
-let notesShown: "lecture" | "talk" = "lecture"
-
-function renderNotes(s: any) {
-  const has = (r: any) => Boolean(r && (r.active || r.total > 0))
-  const lec = s.lecture
-  const talk = s.talk
-  const recent = (r: any) => (r ? r.endedAt || Date.now() : 0)
-  notesShown = talk?.active ? "talk" : lec?.active ? "lecture" : has(talk) && (!has(lec) || recent(talk) >= recent(lec)) ? "talk" : "lecture"
-  const r = notesShown === "talk" ? talk : lec
-  const box = $("lectureBox")
-  box.hidden = !has(r)
-  if (box.hidden) return
-  const isTalk = notesShown === "talk"
-  $("notesTitle").textContent = isTalk ? "Подсказки в беседе" : "Конспект лекции"
-  $("lectureFooter").hidden = isTalk
-  $("talkFooter").hidden = !isTalk
-  const points = r.notes.filter((n: any) => n.kind === "point").length
-  const answers = r.notes.length - points
-  $("lectureMeta").textContent = r.active
-    ? isTalk
-      ? "Слушаю разговор"
-      : "Идёт запись"
-    : `${isTalk ? "Беседа" : "Лекция"} ${fmtHM(r.startedAt)}–${r.endedAt ? fmtHM(r.endedAt) : "…"}`
-  $("lectureSub").textContent = isTalk
-    ? `${answers} ${plural(answers, "подсказка", "подсказки", "подсказок")}${s.settings?.talkGoal ? `. Цель: ${s.settings.talkGoal}` : ""}`
-    : `${points} ${plural(points, "тезис", "тезиса", "тезисов")}, ${answers} ${plural(answers, "ответ", "ответа", "ответов")}`
-  const key = `${notesShown}:${r.startedAt}:${r.total}`
-  if (key === notesKey) return
-  notesKey = key
-  const list = $("lectureNotes")
-  list.dataset.empty = isTalk ? "Пока нет подсказок — они появятся, когда в разговоре прозвучит вопрос с фактами." : ""
-  list.textContent = ""
-  const who: Record<string, string> = {you: "Вы: ", qa: isTalk ? "Вопрос: " : "Лектор: ", hint: "Подсказка: ", quote: "Цитата: "}
-  for (const n of [...r.notes].reverse()) {
-    const li = document.createElement("li")
-    li.className = n.kind
-    const t = document.createElement("span")
-    t.className = "t"
-    t.textContent = fmtHM(n.t)
-    li.append(t)
-    if (n.kind === "tip") {
-      const b = document.createElement("b")
-      b.textContent = `${n.q}: `
-      li.append(b, n.text)
-    } else if (n.kind !== "point") {
-      const q = document.createElement("span")
-      q.className = "q"
-      q.textContent = (who[n.kind] ?? "") + (n.q ?? "")
-      li.append(q)
-      li.append("→ " + n.text)
-    } else li.append(n.text)
-    list.append(li)
-  }
-}
-
-function plural(n: number, one: string, few: string, many: string): string {
-  const m10 = n % 10
-  const m100 = n % 100
-  if (m10 === 1 && m100 !== 11) return one
-  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few
-  return many
-}
-
 let logKey = ""
 
 function renderLog(s: any) {
@@ -594,13 +622,11 @@ function renderLog(s: any) {
   const entries: any[] = [...(s.log ?? [])].reverse()
   if (!entries.length) {
     const li = document.createElement("li")
-    li.className = "cell"
     li.textContent = "Событий пока нет"
     list.appendChild(li)
   }
   for (const e of entries) {
     const li = document.createElement("li")
-    li.className = `cell k-${e.kind}`
     const time = document.createElement("time")
     time.textContent = fmtTime(e.t)
     const kind = document.createElement("span")
@@ -648,6 +674,8 @@ function modelFromForm(): string {
   return field<HTMLInputElement>("customModel").value.trim() || PROVIDERS[p].models[0].id
 }
 
+const SWITCHES = new Set(["webSearch", "headNod", "voiceLock"])
+
 function wireSettings() {
   const f = form()
   f.addEventListener("submit", (e) => e.preventDefault())
@@ -673,7 +701,7 @@ function wireSettings() {
       queueSave({[PROVIDERS[currentProvider()].modelField]: el.value}, 0)
       return
     }
-    if (name === "webSearch" || name === "headNod" || name === "voiceLock") return queueSave({[name]: (el as HTMLInputElement).checked}, 0)
+    if (SWITCHES.has(name)) return queueSave({[name]: (el as HTMLInputElement).checked}, 0)
     if (el instanceof HTMLSelectElement) {
       setSelect(name, el.value)
       return queueSave({[name]: el.value}, 0)
@@ -683,7 +711,7 @@ function wireSettings() {
   f.addEventListener("input", (e) => {
     const el = e.target as HTMLInputElement | HTMLTextAreaElement
     const name = el.name
-    if (!name || el instanceof HTMLSelectElement || name === "webSearch" || name === "headNod" || name === "voiceLock") return
+    if (!name || el instanceof HTMLSelectElement || SWITCHES.has(name)) return
     dirty.add(name)
     if (name === "customModel") return queueSave({[PROVIDERS[currentProvider()].modelField]: modelFromForm()}, 800)
     if (name === "wakeWords") {
@@ -736,9 +764,9 @@ function fillKeySheet() {
   const k = current?.settings?.keys?.[p]
   $("keySheetTitle").textContent = `Ключ ${info.label}`
   $<HTMLInputElement>("apiKey").placeholder = info.keyPlaceholder
-  $("keyState").textContent = k?.has ? `Сейчас сохранён ключ ${k.hint}. Вставьте новый, чтобы заменить.` : "Ключ пока не задан."
-  $("keyHelp").textContent = `Где взять: ${info.keyWhere}. Ключ хранится только в этом приложении на телефоне и отправляется только в ${KEY_DOMAIN[p]}.`
-  $("removeKeyGroup").hidden = !k?.has
+  $("keyState").textContent = k?.has ? `Сохранён ${k.hint}. Вставьте новый, чтобы заменить.` : "Вставьте ключ API."
+  $("keyHelp").textContent = `Где взять: ${info.keyWhere}. Хранится только на телефоне и уходит только в ${KEY_DOMAIN[p]}.`
+  $("removeKey").hidden = !k?.has
 }
 
 function openKeySheet(p?: Provider) {
@@ -767,10 +795,15 @@ async function saveKey() {
 
 // ───────────────────────── wiring ─────────────────────────
 
+const DASHBOARD_HELP =
+  "Mentra считает, что вы смотрите вверх, и показывает свою панель. Опустите голову. Не помогает — Mentra → Settings → Dashboard → выключите Contextual Dashboard."
+
 function wire() {
   document.querySelectorAll<HTMLButtonElement>(".tabbar [data-tab]").forEach((b) =>
     b.addEventListener("click", () => showTab(b.dataset.tab as Tab)),
   )
+  document.querySelectorAll<HTMLElement>("[data-page]").forEach((b) => b.addEventListener("click", () => openPage(b.dataset.page as Page)))
+  document.querySelectorAll<HTMLElement>(".back").forEach((b) => b.addEventListener("click", back))
 
   document.querySelectorAll<HTMLButtonElement>("[data-cmd]").forEach((b) =>
     b.addEventListener("click", () => call("command", {cmd: b.dataset.cmd})),
@@ -780,7 +813,7 @@ function wire() {
   // to the app on screen, so this works while this page is open in Mentra, not from a pocket.
   document.addEventListener("keydown", (e) => {
     const cmd = remoteCommand(e)
-    if (!cmd) return
+    if (!cmd || !$("keySheet").hidden) return
     e.preventDefault()
     call("command", {cmd, source: "key"})
   })
@@ -789,12 +822,13 @@ function wire() {
     toast("Проверочный текст отправлен на очки")
     call("testDisplay")
   })
+  $("dashNote").addEventListener("click", () => toast(DASHBOARD_HELP, 7000))
 
   $("modeSeg")
     .querySelectorAll<HTMLButtonElement>("button")
     .forEach((b) =>
       b.addEventListener("click", () => {
-        const want = b.dataset.mode
+        const want = b.dataset.mode as Mode
         const now = modeOf(current)
         if (want === now) return
         if (want === "assistant") call("command", {cmd: STOP_CMD[now]})
@@ -860,6 +894,12 @@ function wire() {
     await call("simulateSpeech", {text})
   })
 
+  $("copyLog").addEventListener("click", async () => {
+    const lines = (current?.log ?? []).map((e: any) => `${fmtTime(e.t)} [${e.kind}] ${e.msg}`).join("\n")
+    await copyText(lines)
+    toast("Журнал скопирован")
+  })
+
   $("copyLecture").addEventListener("click", async () => {
     const which = notesShown
     let rec: LectureRecord | null = null
@@ -869,17 +909,10 @@ function wire() {
       rec = current?.[which] ?? null
     }
     const fmt = (t: number) => new Date(t).toLocaleString("ru-RU", {day: "numeric", month: "long", hour: "2-digit", minute: "2-digit"})
-    const text =
-      which === "talk" ? notesAsText(rec, fmt, {title: "Подсказки в беседе", asked: "Вопрос"}) : notesAsText(rec, fmt)
+    const text = which === "talk" ? notesAsText(rec, fmt, {title: "Подсказки в беседе", asked: "Вопрос"}) : notesAsText(rec, fmt)
     if (!text) return toast("Список пока пуст")
     await copyText(text)
     toast(which === "talk" ? "Подсказки скопированы" : "Конспект скопирован")
-  })
-
-  $("copyLog").addEventListener("click", async () => {
-    const lines = (current?.log ?? []).map((e: any) => `${fmtTime(e.t)} [${e.kind}] ${e.msg}`).join("\n")
-    await copyText(lines)
-    toast("Журнал скопирован")
   })
 
   wireSettings()
@@ -895,13 +928,17 @@ function boot() {
   } catch {
     // storage unavailable
   }
+  let page: Page | null = null
   try {
-    const hash = location.hash.replace("#", "") as Tab
-    if ((TABS as readonly string[]).includes(hash)) start = hash
+    // #chat opens a tab, #log or #page-log opens a page (handy for previews)
+    const hash = location.hash.replace(/^#(page-)?/, "")
+    if ((TABS as readonly string[]).includes(hash)) start = hash as Tab
+    else if ((PAGES as readonly string[]).includes(hash)) page = hash as Page
   } catch {
     // no location
   }
   showTab(start, false)
+  if (page) openPage(page)
   bridge.on("state", (s) => render(s))
   bridge.ready()
   call("getState")
