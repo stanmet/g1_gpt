@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light dark" />
     <title>GPT для G1</title>
     
-  <link rel="stylesheet" crossorigin href="./chunk-znmyv9f3.css"><script type="module" crossorigin src="./chunk-8mnztrpj.js"></script></head>
+  <link rel="stylesheet" crossorigin href="./chunk-znmyv9f3.css"><script type="module" crossorigin src="./chunk-7zghjvw4.js"></script></head>
   <body>
     <!-- ───────────── Очки ───────────── -->
     <section class="screen" id="screen-glasses" aria-labelledby="t-glasses">
@@ -311,8 +311,13 @@
               <button type="button" data-d="-1" aria-label="Меньше">−</button><button type="button" data-d="1" aria-label="Больше">+</button>
             </span>
           </div>
+          <label class="cell">
+            <span class="cell-title">Только мой голос</span>
+            <input name="voiceLock" type="checkbox" class="switch" />
+          </label>
         </div>
         <p class="group-footer">Активаторы перечислите через запятую. После встречного вопроса помощника отвечать без активатора можно всегда — 25 секунд.</p>
+        <p class="group-footer" id="voiceLockText">«Только мой голос» — эксперимент. Mentra различает голоса в разговоре, но не знает, какой из них ваш. Приложение запоминает голос того, кто сказал активатор, и команды без активатора («Лекция», «Как будет на английском…», «дальше») принимает только от него. Чужая речь по-прежнему идёт в лекцию и подсказки беседы. Активатор работает всегда.</p>
 
         <h2 class="group-header">Перевод</h2>
         <div class="group">

@@ -75,6 +75,7 @@ function previewBridge(): Bridge {
       autoAdvanceSec: 0,
       clearAfterSec: 90,
       headNod: true,
+      voiceLock: false,
       translateTo: "ru-RU",
       lectureEverySec: 15,
       talkEverySec: 10,
@@ -447,6 +448,12 @@ function renderSettings(s: any, st: any) {
   setStep("clearAfterSec", st.clearAfterSec ?? 90)
   const nod = field<HTMLInputElement>("headNod")
   if (document.activeElement !== nod) nod.checked = st.headNod !== false
+  const lock = field<HTMLInputElement>("voiceLock")
+  if (document.activeElement !== lock) lock.checked = st.voiceLock === true
+  const voiceState = s.ownerVoice
+    ? `Сейчас ваш голос — «голос ${s.ownerVoice}».`
+    : "Ваш голос пока не определён: скажите «Вопрос, …». Если в «Журнале» у фраз нет пометки «голос N», Mentra не различает голоса и настройка ничего не меняет."
+  $("voiceLockText").textContent = `«Только мой голос» — эксперимент. Mentra различает голоса в разговоре, но не знает, какой из них ваш. Приложение запоминает голос того, кто сказал активатор, и команды без активатора («Лекция», «Как будет на английском…», «дальше») принимает только от него. Чужая речь по-прежнему идёт в лекцию и подсказки беседы. Активатор работает всегда. ${voiceState}`
 
   if (!$("keySheet").hidden) fillKeySheet()
   $("versionText").textContent = s.version ? `Версия ${s.version}.` : ""
@@ -666,7 +673,7 @@ function wireSettings() {
       queueSave({[PROVIDERS[currentProvider()].modelField]: el.value}, 0)
       return
     }
-    if (name === "webSearch" || name === "headNod") return queueSave({[name]: (el as HTMLInputElement).checked}, 0)
+    if (name === "webSearch" || name === "headNod" || name === "voiceLock") return queueSave({[name]: (el as HTMLInputElement).checked}, 0)
     if (el instanceof HTMLSelectElement) {
       setSelect(name, el.value)
       return queueSave({[name]: el.value}, 0)
@@ -676,7 +683,7 @@ function wireSettings() {
   f.addEventListener("input", (e) => {
     const el = e.target as HTMLInputElement | HTMLTextAreaElement
     const name = el.name
-    if (!name || el instanceof HTMLSelectElement || name === "webSearch" || name === "headNod") return
+    if (!name || el instanceof HTMLSelectElement || name === "webSearch" || name === "headNod" || name === "voiceLock") return
     dirty.add(name)
     if (name === "customModel") return queueSave({[PROVIDERS[currentProvider()].modelField]: modelFromForm()}, 800)
     if (name === "wakeWords") {

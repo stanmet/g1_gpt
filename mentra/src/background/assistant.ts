@@ -161,6 +161,8 @@ export class Assistant {
   private headUpSince = 0
   private lastDashboardWarnAt = -Infinity
   private displayChecked = false
+  /** Mentra's speaker label of the voice that last said the activator — taken to be the wearer's. */
+  ownerVoice: string | null = null
   /** Waiting for the word after «Как будет на английском…» + pause. */
   private phraseWait: {lang: PhraseLang; until: number} | null = null
   /** Lecture mode: key points of what the lecturer says + answers to questions to the audience. */
@@ -339,6 +341,31 @@ export class Assistant {
 
   // ───────────────────────────── input ─────────────────────────────
 
+  /**
+   * «Только мой голос»: whoever says the activator is taken to be the wearer. With the setting on,
+   * speech from other voices still feeds lecture notes and conversation hints, but it cannot give
+   * commands without the activator. Returns true when the utterance was handled that way.
+   */
+  private fromAnotherVoice(t: string, isFinal: boolean, speaker: string | null): boolean {
+    if (!speaker) return false
+    const wake = this.wake(t).matched
+    if (isFinal && wake && this.ownerVoice !== speaker) {
+      this.ownerVoice = speaker
+      this.addLog("info", `Ваш голос — «голос ${speaker}»${this.settings.voiceLock ? ": команды без активатора теперь только от него" : ""}`)
+      this.changed()
+    }
+    if (!this.settings.voiceLock || !this.ownerVoice || speaker === this.ownerVoice || wake) return false
+    if (this.phase === "talk") {
+      if (isFinal) this.talk.onSpeech(t)
+      else this.talk.onInterim(t)
+    } else if (this.phase === "lecture") {
+      if (isFinal) this.lecture.onSpeech(t)
+    } else if (isFinal && looksLikeCommand(t)) {
+      this.addLog("info", `Команда чужим голосом пропущена: «${t}»`)
+    }
+    return true
+  }
+
   /** User activators plus AI names («Клод», «Джемини», «Чат GPT»). */
   private wakeWords(): string[] {
     return [...this.settings.wakeWords, ...AI_WAKE_WORDS]
@@ -348,14 +375,16 @@ export class Assistant {
     return detectWake(t, this.wakeWords())
   }
 
-  onTranscript(text: string, isFinal: boolean): void {
+  onTranscript(text: string, isFinal: boolean, speakerId?: string | number | null): void {
     if (this.settings.listenMode === "off") return
     const t = String(text ?? "").trim()
     if (!t) return
+    const speaker = speakerId != null && String(speakerId).trim() ? String(speakerId).trim() : null
     if (isFinal) {
       this.lastTranscript = t
-      this.addLog("stt", t)
+      this.addLog("stt", speaker ? `[голос ${speaker}] ${t}` : t)
     }
+    if (this.fromAnotherVoice(t, isFinal, speaker)) return
 
     if (this.phase === "translating") {
       if (isFinal) this.onTranscriptWhileTranslating(t)
@@ -1266,6 +1295,7 @@ Notes are in the app.`
       lastAnswer: this.lastAnswer,
       lastError: this.lastError,
       dashboardLikely: this.dashboardLikely(),
+      ownerVoice: this.ownerVoice,
       lecture: lectureSnapshot(this.lecture.active, this.lecture.record),
       talk: lectureSnapshot(this.talk.active, this.talk.record),
       glassesConnected: this.glassesConnected,
@@ -1326,4 +1356,16 @@ export function goalIn(raw: string): string | null {
   const start = m.index + m[0].length - m[1].length
   if (normalize(raw.slice(0, start)).split(" ").filter(Boolean).length > 3) return null
   return parseGoal(raw.slice(start))
+}
+
+/** Anything a bystander could set off by accident: mode switches, paging, translation requests. */
+function looksLikeCommand(t: string): boolean {
+  return Boolean(
+    parseCommand(t) ||
+      parseTranslateCommand(t) ||
+      parseLectureCommand(t) ||
+      parseTalkCommand(t) ||
+      parsePhraseRequest(t) ||
+      parseSwitchCommand(t),
+  )
 }

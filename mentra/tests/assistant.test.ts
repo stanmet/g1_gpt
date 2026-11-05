@@ -970,3 +970,51 @@ describe("«как будет на английском …» in every mode", ()
     expect(e.requests[2].body.instructions).toContain("обратился к аудитории")
   })
 })
+
+describe("«Только мой голос» (voice lock by Mentra's speaker labels)", () => {
+  test("the voice that says the activator is yours; others cannot give commands without it", async () => {
+    const e = setup(["Ответ.", "Q: Иммануил Кант\nA: Немецкий философ."], {voiceLock: true})
+    e.a.onTranscript("Лекция", true, "2") // no known owner yet: works as before
+    expect(e.a.phase).toBe("lecture")
+    e.a.command("hide", "ui")
+
+    e.a.onTranscript("Вопрос, сколько будет два плюс два?", true, "1")
+    expect(e.a.ownerVoice).toBe("1")
+    await e.clock.advance(2000)
+    expect(e.a.log.some((l) => l.msg === "[голос 1] Вопрос, сколько будет два плюс два?")).toBe(true)
+
+    e.a.onTranscript("Лекция", true, "2") // a bystander
+    expect(e.a.phase).toBe("answering")
+    expect(e.a.log.some((l) => l.msg.includes("Команда чужим голосом пропущена"))).toBe(true)
+    e.a.onTranscript("Как будет на английском стол?", true, "2")
+    expect(e.requests.length).toBe(1)
+
+    e.a.onTranscript("Беседа", true, "1") // you
+    expect(e.a.phase).toBe("talk")
+    e.a.onTranscript("Слушай, кто такой Кант?", true, "2") // others' questions still get hints
+    await e.clock.advance(10)
+    expect(e.requests.length).toBe(2)
+    e.a.onTranscript("Стоп беседа", true, "2") // but cannot stop the mode
+    expect(e.a.phase).toBe("talk")
+    e.a.onTranscript("Стоп беседа", true, "1")
+    expect(e.a.phase).toBe("idle")
+  })
+
+  test("off by default; no speaker labels → no filtering; the activator always works", async () => {
+    const off = setup([])
+    off.a.onTranscript("Вопрос, привет", true, "1")
+    off.a.command("cancel", "ui")
+    off.a.onTranscript("Лекция", true, "2")
+    expect(off.a.phase).toBe("lecture")
+
+    const on = setup(["Ответ."], {voiceLock: true})
+    on.a.onTranscript("Вопрос, привет", true, "1")
+    on.a.command("cancel", "ui")
+    on.a.onTranscript("Лекция", true) // the recognizer gave no label
+    expect(on.a.phase).toBe("lecture")
+    on.a.command("hide", "ui")
+    on.a.onTranscript("Вопрос, лекция", true, "2") // the activator from another voice is accepted…
+    expect(on.a.phase).toBe("lecture")
+    expect(on.a.ownerVoice).toBe("2") // …and that voice becomes «yours»
+  })
+})

@@ -101,7 +101,9 @@ registerMiniapp((session: any) => {
     } catch (e) {
       assistant.addLog("info", `configure STT пропущен: ${String((e as Error)?.message ?? e)}`)
     }
-    const handler = (data: {text: string; isFinal: boolean}) => assistant.onTranscript(data?.text ?? "", Boolean(data?.isFinal))
+    // speakerId: Mentra's speaker label for the utterance («1», «2»…), when its recognizer reports one
+    const handler = (data: {text: string; isFinal: boolean; speakerId?: string | number}) =>
+      assistant.onTranscript(data?.text ?? "", Boolean(data?.isFinal), data?.speakerId)
     try {
       unsubscribeStt =
         s.sttLanguage === "auto" ? session.transcription.on(handler) : session.transcription.forLanguage("ru-RU", handler)

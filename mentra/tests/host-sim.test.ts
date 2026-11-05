@@ -296,3 +296,18 @@ test("built bundle: «как будет на английском …» without 
   expect(h.openaiCalls[0].body.input).toEqual([{role: "user", content: "стол"}])
   expect(h.renders().at(-1)).toBe("стол → table")
 }, 15000)
+
+test("built bundle: Mentra's speaker label reaches the app («голос 1»)", async () => {
+  const h = makeHost([])
+  vm.runInContext(readFileSync(BUNDLE, "utf8"), h.ctx, {filename: "background/index.js"})
+  h.ctx.__mentraInitCallback("s")
+  await sleep(50)
+  h.ev("_ui", {type: "UI_OPEN"})
+  h.ev("transcription:ru-RU", {type: "transcription", text: "Вопрос, привет", isFinal: true, speakerId: "1"})
+  await sleep(30)
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "getState", payload: {}, seq: 1, requestId: "g1"})
+  await sleep(30)
+  const st = h.uiReplies().find((e) => e.payload.requestId === "g1")!.payload.payload.result
+  expect(st.ownerVoice).toBe("1")
+  expect(st.log.some((l: any) => l.msg === "[голос 1] Вопрос, привет")).toBe(true)
+}, 15000)

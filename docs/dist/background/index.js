@@ -6835,6 +6835,7 @@ ${prevTips.map((t) => "— " + t).join(`
     autoAdvanceSec: 0,
     clearAfterSec: 90,
     headNod: true,
+    voiceLock: false,
     followUpSec: 0,
     translateTo: "ru-RU",
     lectureEverySec: 15,
@@ -6898,6 +6899,7 @@ ${prevTips.map((t) => "— " + t).join(`
       autoAdvanceSec: clampInt(pick("autoAdvanceSec"), 0, 60, 0),
       clearAfterSec: clampInt(pick("clearAfterSec"), 0, 3600, DEFAULT_SETTINGS.clearAfterSec),
       headNod: pick("headNod") !== false,
+      voiceLock: pick("voiceLock") === true,
       followUpSec: clampInt(pick("followUpSec"), 0, 120, 0),
       translateTo: pick("translateTo") === "en-US" ? "en-US" : "ru-RU",
       lectureEverySec: clampInt(pick("lectureEverySec"), 10, 60, DEFAULT_SETTINGS.lectureEverySec),
@@ -7032,6 +7034,7 @@ ${prevTips.map((t) => "— " + t).join(`
     headUpSince = 0;
     lastDashboardWarnAt = -Infinity;
     displayChecked = false;
+    ownerVoice = null;
     phraseWait = null;
     lecture;
     talk;
@@ -7183,22 +7186,49 @@ ${prevTips.map((t) => "— " + t).join(`
           this.talk.screen ? this.show(this.talk.screen) : this.clearDisplay();
       }, ms);
     }
+    fromAnotherVoice(t, isFinal, speaker) {
+      if (!speaker)
+        return false;
+      const wake = this.wake(t).matched;
+      if (isFinal && wake && this.ownerVoice !== speaker) {
+        this.ownerVoice = speaker;
+        this.addLog("info", `Ваш голос — «голос ${speaker}»${this.settings.voiceLock ? ": команды без активатора теперь только от него" : ""}`);
+        this.changed();
+      }
+      if (!this.settings.voiceLock || !this.ownerVoice || speaker === this.ownerVoice || wake)
+        return false;
+      if (this.phase === "talk") {
+        if (isFinal)
+          this.talk.onSpeech(t);
+        else
+          this.talk.onInterim(t);
+      } else if (this.phase === "lecture") {
+        if (isFinal)
+          this.lecture.onSpeech(t);
+      } else if (isFinal && looksLikeCommand(t)) {
+        this.addLog("info", `Команда чужим голосом пропущена: «${t}»`);
+      }
+      return true;
+    }
     wakeWords() {
       return [...this.settings.wakeWords, ...AI_WAKE_WORDS];
     }
     wake(t) {
       return detectWake(t, this.wakeWords());
     }
-    onTranscript(text, isFinal) {
+    onTranscript(text, isFinal, speakerId) {
       if (this.settings.listenMode === "off")
         return;
       const t = String(text ?? "").trim();
       if (!t)
         return;
+      const speaker = speakerId != null && String(speakerId).trim() ? String(speakerId).trim() : null;
       if (isFinal) {
         this.lastTranscript = t;
-        this.addLog("stt", t);
+        this.addLog("stt", speaker ? `[голос ${speaker}] ${t}` : t);
       }
+      if (this.fromAnotherVoice(t, isFinal, speaker))
+        return;
       if (this.phase === "translating") {
         if (isFinal)
           this.onTranscriptWhileTranslating(t);
@@ -8087,6 +8117,7 @@ ${goal}` : "Цель беседы убрана.", 3000);
         lastAnswer: this.lastAnswer,
         lastError: this.lastError,
         dashboardLikely: this.dashboardLikely(),
+        ownerVoice: this.ownerVoice,
         lecture: lectureSnapshot(this.lecture.active, this.lecture.record),
         talk: lectureSnapshot(this.talk.active, this.talk.record),
         glassesConnected: this.glassesConnected,
@@ -8140,9 +8171,12 @@ ${goal}` : "Цель беседы убрана.", 3000);
       return null;
     return parseGoal(raw.slice(start));
   }
+  function looksLikeCommand(t) {
+    return Boolean(parseCommand(t) || parseTranslateCommand(t) || parseLectureCommand(t) || parseTalkCommand(t) || parsePhraseRequest(t) || parseSwitchCommand(t));
+  }
 
   // src/background/index.ts
-  var APP_VERSION = "1.10.0";
+  var APP_VERSION = "1.11.0";
   function getKV() {
     try {
       const ls = globalThis.localStorage;
@@ -8217,7 +8251,7 @@ ${goal}` : "Цель беседы убрана.", 3000);
       } catch (e) {
         assistant.addLog("info", `configure STT пропущен: ${String(e?.message ?? e)}`);
       }
-      const handler = (data) => assistant.onTranscript(data?.text ?? "", Boolean(data?.isFinal));
+      const handler = (data) => assistant.onTranscript(data?.text ?? "", Boolean(data?.isFinal), data?.speakerId);
       try {
         unsubscribeStt = s.sttLanguage === "auto" ? session.transcription.on(handler) : session.transcription.forLanguage("ru-RU", handler);
         assistant.addLog("info", `Слушаю (${s.sttLanguage === "auto" ? "русский + английский" : "только русский"})`);

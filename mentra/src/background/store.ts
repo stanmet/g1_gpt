@@ -33,6 +33,11 @@ export interface Settings {
   clearAfterSec: number
   /** Look up (G1 head-up sensor) to show the next page of a long answer. */
   headNod: boolean
+  /**
+   * Commands without the activator only from the voice that last said the activator (Mentra's
+   * speaker labels; experimental). The activator itself always works.
+   */
+  voiceLock: boolean
   /** Seconds after an answer during which a question needs no wake phrase; 0 = off. */
   followUpSec: number
   /** Live translation ("транслейт") target language; also the language of lecture notes. */
@@ -72,6 +77,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoAdvanceSec: 0,
   clearAfterSec: 90,
   headNod: true,
+  voiceLock: false,
   followUpSec: 0,
   translateTo: "ru-RU",
   lectureEverySec: 15,
@@ -162,6 +168,7 @@ export function normalizeSettings(raw: Partial<Settings> | null | undefined, bas
     autoAdvanceSec: clampInt(pick("autoAdvanceSec"), 0, 60, 0),
     clearAfterSec: clampInt(pick("clearAfterSec"), 0, 3600, DEFAULT_SETTINGS.clearAfterSec),
     headNod: pick("headNod") !== false,
+    voiceLock: pick("voiceLock") === true,
     followUpSec: clampInt(pick("followUpSec"), 0, 120, 0),
     translateTo: pick("translateTo") === "en-US" ? "en-US" : "ru-RU",
     lectureEverySec: clampInt(pick("lectureEverySec"), 10, 60, DEFAULT_SETTINGS.lectureEverySec),
