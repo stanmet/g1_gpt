@@ -5132,6 +5132,103 @@
     }
     return null;
   }
+  var NAV_STOP = [
+    "стоп навигация",
+    "стоп навигатор",
+    "стоп маршрут",
+    "выключи навигатор",
+    "выключи навигацию",
+    "отмени маршрут",
+    "отмена маршрута",
+    "конец маршрута",
+    "закончи маршрут",
+    "закончи навигацию",
+    "останови навигацию",
+    "хватит навигации",
+    "навигатор стоп",
+    "навигация стоп",
+    "маршрут стоп",
+    "выключи маршрут",
+    "stop navigation",
+    "end navigation",
+    "cancel route",
+    "cancel navigation"
+  ];
+  var NAV_STATUS = [
+    "сколько осталось",
+    "сколько еще",
+    "сколько еще идти",
+    "сколько еще ехать",
+    "сколько идти",
+    "сколько ехать",
+    "когда придем",
+    "когда приедем",
+    "далеко еще",
+    "долго еще",
+    "how far",
+    "how long",
+    "how much longer"
+  ];
+  var NAV_ASK = [
+    "навигатор",
+    "включи навигатор",
+    "включи навигацию",
+    "открой навигатор",
+    "проложи маршрут",
+    "построй маршрут",
+    "проложи мне маршрут",
+    "navigator",
+    "start navigation"
+  ];
+  var NAV_STOP_SET = new Set(NAV_STOP.map((p) => normalize(p)));
+  var NAV_ASK_SET = new Set(NAV_ASK.map((p) => normalize(p)));
+  var NAV_STATUS_SET = new Set(NAV_STATUS.map((p) => normalize(p)));
+  var NAV_GO = /^(?:(?:ну|а|и|слушай|пожалуйста|давай)\s+)*(?:(?:навигатор|навигация|маршрут)(?:\s+(?:до|к|ко|в|во|на))?|(?:проложи|построй|покажи)\s+(?:мне\s+)?(?:маршрут|дорогу|путь)\s+(?:до|к|ко|в|во|на)|(?:проведи|веди|отведи|доведи|отвези|довези|подвези)\s+(?:меня\s+)?(?:до|к|ко|в|во|на)|как\s+(?:мне\s+)?(?:дойти|пройти|доехать|добраться|проехать|попасть)\s+(?:до|к|ко|в|во|на)|(?:navigate|directions|take me|get me|route)\s+to|how\s+(?:do|can)\s+i\s+get\s+to)\s+(.+)$/iu;
+  var MODE_WORDS = [
+    [/\s*,?\s*(?:пешком|на ногах|by foot|on foot|walking)\s*$/iu, "walking"],
+    [/\s*,?\s*(?:на машине|на авто|на автомобиле|на такси|by car|driving)\s*$/iu, "driving"],
+    [/\s*,?\s*(?:на велосипеде|на велике|by bike|cycling)\s*$/iu, "cycling"]
+  ];
+  function parseNavCommand(text) {
+    const raw = String(text ?? "").replace(/\s+/g, " ").trim().replace(/[?？!.…]+$/u, "").trim();
+    if (!raw)
+      return null;
+    const n = normalize(raw);
+    if (NAV_STOP_SET.has(n))
+      return { kind: "stop" };
+    if (NAV_STATUS_SET.has(n))
+      return { kind: "status" };
+    for (const [re, md] of MODE_WORDS) {
+      const bare = re.test(raw) ? normalize(raw.replace(re, "")) : "";
+      if (bare && NAV_ASK_SET.has(bare))
+        return { kind: "ask", mode: md };
+    }
+    if (NAV_ASK_SET.has(n))
+      return { kind: "ask", mode: null };
+    const m = NAV_GO.exec(raw);
+    if (!m)
+      return null;
+    let query = m[1].trim();
+    let mode = null;
+    for (const [re, md] of MODE_WORDS) {
+      if (re.test(query)) {
+        mode = md;
+        query = query.replace(re, "").trim();
+        break;
+      }
+    }
+    if (!mode) {
+      const verb = normalize(raw.slice(0, raw.length - m[1].length));
+      if (/(доехать|проехать|отвези|довези|подвези)/.test(verb))
+        mode = "driving";
+      else if (/(дойти|пройти)/.test(verb))
+        mode = "walking";
+    }
+    query = query.replace(/^[«"“„']+|[»"”']+$/gu, "").replace(/[,.]+$/u, "").trim();
+    if (!query || query.split(/\s+/).length > 10)
+      return null;
+    return { kind: "go", query, mode };
+  }
 
   // src/background/openai.ts
   var OPENAI_URL = "https://api.openai.com/v1/responses";
@@ -6087,6 +6184,354 @@ Stop: «стоп лекция»` : `Режим лекции
     }
   }
 
+  // src/background/navigator.ts
+  var URGENT_METERS = { walking: 30, cycling: 60, driving: 200 };
+  var MIN_REPAINT_MS = 1500;
+  var ARRIVED_STOP_MS = 15000;
+  var MODE_RU = { walking: "пешком", driving: "на машине", cycling: "на велосипеде" };
+  function modeLabel(m) {
+    return MODE_RU[m];
+  }
+  function formatDistance(m) {
+    if (!Number.isFinite(m) || m < 0)
+      return "";
+    if (m < 200)
+      return `${Math.max(10, Math.round(m / 10) * 10)} м`;
+    if (m < 1000)
+      return `${Math.round(m / 50) * 50} м`;
+    return `${(Math.round(m / 100) / 10).toString().replace(".", ",")} км`;
+  }
+  function formatDuration(s) {
+    if (!Number.isFinite(s) || s < 0)
+      return "";
+    const min = Math.max(1, Math.round(s / 60));
+    if (min < 60)
+      return `${min} мин`;
+    const h = Math.floor(min / 60);
+    const rest = min % 60;
+    return rest ? `${h} ч ${rest} мин` : `${h} ч`;
+  }
+  function turnPhrase(type) {
+    switch (type) {
+      case "TURN_LEFT":
+        return { arrow: "←", text: "Налево" };
+      case "TURN_RIGHT":
+        return { arrow: "→", text: "Направо" };
+      case "SLIGHT_LEFT":
+        return { arrow: "←", text: "Левее" };
+      case "SLIGHT_RIGHT":
+        return { arrow: "→", text: "Правее" };
+      case "SHARP_LEFT":
+        return { arrow: "←", text: "Резко налево" };
+      case "SHARP_RIGHT":
+        return { arrow: "→", text: "Резко направо" };
+      case "U_TURN":
+        return { arrow: "↓", text: "Развернитесь" };
+      case "CROSS_STREET":
+        return { arrow: "↑", text: "Перейдите улицу" };
+      case "ARRIVE":
+        return { arrow: "•", text: "Прибытие" };
+      case "DEPART":
+        return { arrow: "↑", text: "Начните движение" };
+      default:
+        return { arrow: "↑", text: "Прямо" };
+    }
+  }
+  function maneuverScreen(u, dest) {
+    const { arrow, text } = turnPhrase(u.maneuverType);
+    const d = formatDistance(u.distanceMeters);
+    const straight = text === "Прямо";
+    const first = u.distanceMeters >= 0 && u.distanceMeters <= 15 && !straight ? `${arrow} ${text} сейчас` : d ? straight ? `${arrow} Прямо ${d}` : `${arrow} ${text} через ${d}` : `${arrow} ${text}`;
+    const road = (u.nextStepRoad || u.toRoad || "").trim();
+    const lines = [first];
+    if (road)
+      lines.push(`на ${road}`);
+    const left = [formatDistance(u.distanceToDestinationMeters ?? -1), formatDuration(u.timeToDestinationSeconds ?? -1)].filter(Boolean);
+    lines.push(left.length ? `${dest}: ${left.join(", ")}` : dest);
+    return lines.join(`
+`);
+  }
+  function shortPlace(name, max = 26) {
+    const n = String(name ?? "").replace(/\s+/g, " ").trim();
+    if (n.length <= max)
+      return n;
+    const cut = n.split(/,|\s[-–—]\s/)[0].trim();
+    if (cut.length <= max)
+      return cut;
+    const words = cut.split(" ");
+    let out = "";
+    for (const w of words) {
+      if ((out ? out.length + 1 : 0) + w.length > max - 1)
+        break;
+      out = out ? `${out} ${w}` : w;
+    }
+    return `${out || cut.slice(0, max - 1)}…`;
+  }
+  function buildMapQueryPrompt(query, near) {
+    const system = [
+      "Ты помогаешь навигатору. Пользователь голосом назвал место, куда хочет попасть; распознавание речи могло исказить название.",
+      "Верни одну строку для поиска на карте рядом с пользователем:",
+      "— название места так, как оно написано на картах в этой стране (в Ирландии, Англии, США — по-английски), в именительном падеже;",
+      "— для адреса — адрес на местном языке;",
+      "— для типа места («аптека», «ближайшее кафе») — тип места на местном языке (pharmacy, cafe).",
+      "Только строка поиска, без кавычек и пояснений."
+    ].join(`
+`);
+    const where = near ? `
+Пользователь сейчас у точки ${near.lat.toFixed(3)}, ${near.lng.toFixed(3)}.` : "";
+    return { system, user: `Место: ${query}${where}` };
+  }
+  function cleanMapQuery(reply) {
+    const line = String(reply ?? "").split(`
+`).map((l) => l.trim()).find(Boolean);
+    if (!line)
+      return "";
+    return line.replace(/^(?:строка поиска|поиск|запрос|query)\s*:\s*/iu, "").replace(/[.。]+$/u, "").replace(/^[«"“„'`]+|[»"”'`]+$/gu, "").replace(/[.。]+$/u, "").trim().slice(0, 80);
+  }
+  function explainNavError(raw) {
+    const e = String(raw ?? "").trim();
+    if (!e)
+      return "ошибка навигации";
+    if (/LOCATION permission not declared/i.test(e))
+      return "нет разрешения на геопозицию — переустановите мини‑приложение";
+    if (/not granted|denied/i.test(e))
+      return "нет доступа к геопозиции — разрешите Mentra доступ к местоположению в настройках iPhone";
+    if (/no GPS fix|location/i.test(e))
+      return "не удалось определить, где вы (GPS)";
+    if (/disabled by this deployment|not configured|NOT_IMPLEMENTED/i.test(e))
+      return "навигация недоступна в этой версии Mentra";
+    if (/terms|T&C|accept/i.test(e))
+      return "примите условия навигации в Mentra";
+    if (/timeout|timed out/i.test(e))
+      return "Mentra не ответила вовремя";
+    return e.slice(0, 120);
+  }
+
+  class Navigator {
+    deps;
+    active = false;
+    dest = null;
+    mode = "walking";
+    screen = "";
+    message = "";
+    last = null;
+    busy = false;
+    trip = 0;
+    lastPaint = 0;
+    paintTimer = null;
+    pendingText = "";
+    urgentKey = "";
+    arrivedTimer = null;
+    constructor(deps) {
+      this.deps = deps;
+    }
+    async go(query, mode) {
+      const trip = ++this.trip;
+      this.busy = true;
+      this.say(`Ищу: ${query}…`);
+      let place = null;
+      try {
+        place = await this.deps.search(query);
+      } catch (e) {
+        if (trip !== this.trip)
+          return;
+        this.busy = false;
+        return this.fail(`Поиск не удался: ${explainNavError(e?.message ?? e)}`);
+      }
+      if (trip !== this.trip)
+        return;
+      if (!place) {
+        this.busy = false;
+        return this.fail(`Не нашёл «${query}». Скажите название точнее.`);
+      }
+      await this.startTrip(place, mode, trip);
+    }
+    async goTo(place, mode) {
+      const trip = ++this.trip;
+      this.busy = true;
+      this.deps.onChange();
+      await this.startTrip(place, mode, trip);
+    }
+    async resume(t) {
+      const trip = ++this.trip;
+      this.busy = true;
+      this.deps.log("nav", `Продолжаю маршрут до ${t.dest.name}`);
+      await this.startTrip(t.dest, t.mode, trip, true);
+    }
+    stop(reason = "voice") {
+      this.trip++;
+      const wasBusy = this.busy;
+      this.busy = false;
+      if (this.arrivedTimer != null)
+        this.deps.clearTimer(this.arrivedTimer);
+      this.arrivedTimer = null;
+      if (this.paintTimer != null)
+        this.deps.clearTimer(this.paintTimer);
+      this.paintTimer = null;
+      if (!this.active) {
+        if (wasBusy) {
+          this.message = "";
+          this.deps.log("nav", "Поиск маршрута отменён");
+          this.deps.onChange();
+        }
+        return;
+      }
+      this.active = false;
+      try {
+        this.deps.stop();
+      } catch {}
+      this.deps.log("nav", `Маршрут завершён${reason === "arrived" ? " — вы на месте" : reason === "ui" ? " с телефона" : ""}`);
+      this.deps.save(null);
+      this.screen = "";
+      this.last = null;
+      this.deps.ended();
+      this.deps.onChange();
+    }
+    left() {
+      const u = this.last;
+      if (!this.active || !u)
+        return "";
+      return [formatDistance(u.distanceToDestinationMeters ?? -1), formatDuration(u.timeToDestinationSeconds ?? -1)].filter(Boolean).join(", ");
+    }
+    status() {
+      if (!this.active || !this.dest)
+        return "Маршрута нет.";
+      const left = this.left();
+      const name = shortPlace(this.dest.name);
+      return left ? `${name}
+Осталось ${left}` : `${name}
+Считаю маршрут…`;
+    }
+    onUpdate(u) {
+      if (!this.active || !this.dest || this.busy)
+        return;
+      const dest = shortPlace(this.dest.name);
+      switch (u?.kind) {
+        case "maneuver": {
+          this.last = u;
+          const text = maneuverScreen(u, dest);
+          const key = `${u.maneuverType}|${u.nextStepRoad ?? u.toRoad ?? ""}`;
+          const urgent = u.distanceMeters >= 0 && u.distanceMeters <= URGENT_METERS[this.mode] && u.maneuverType !== "STRAIGHT" && u.maneuverType !== "CONTINUE";
+          if (urgent && key !== this.urgentKey) {
+            this.urgentKey = key;
+            this.paint(text, true);
+          } else
+            this.paint(text, false);
+          break;
+        }
+        case "off_route":
+          this.paint(`Вы сошли с маршрута
+Перестраиваю…
+${dest}`, true);
+          break;
+        case "rerouting":
+          this.paint(`Перестраиваю маршрут…
+${dest}`, false);
+          break;
+        case "arrived":
+          this.deps.log("nav", `Прибытие: ${dest}`);
+          this.paint(`Вы на месте
+${dest}`, true);
+          if (this.arrivedTimer == null) {
+            this.arrivedTimer = this.deps.setTimer(() => {
+              this.arrivedTimer = null;
+              this.stop("arrived");
+            }, ARRIVED_STOP_MS);
+          }
+          break;
+        case "error":
+          this.stop("error");
+          this.fail(`Навигация остановлена: ${explainNavError(u.message)}`);
+          break;
+      }
+    }
+    async startTrip(place, mode, trip, quiet = false) {
+      if (!quiet)
+        this.say(`Маршрут до ${shortPlace(place.name)}
+${modeLabel(mode)}…`);
+      if (this.active) {
+        this.active = false;
+        this.last = null;
+        try {
+          this.deps.stop();
+        } catch {}
+        this.deps.log("nav", "Прежний маршрут завершён");
+      }
+      let res;
+      try {
+        res = await this.deps.start(place, mode);
+      } catch (e) {
+        res = { ok: false, error: String(e?.message ?? e) };
+      }
+      if (trip !== this.trip)
+        return;
+      this.busy = false;
+      if (!res.ok) {
+        this.deps.save(null);
+        if (!quiet)
+          return this.fail(`Маршрут не построен: ${explainNavError(res.error)}`);
+        this.deps.log("info", `Прежний маршрут не продолжен: ${explainNavError(res.error)}`);
+        this.deps.onChange();
+        return;
+      }
+      this.active = true;
+      this.dest = place;
+      this.mode = mode;
+      this.last = null;
+      this.urgentKey = "";
+      this.message = "";
+      this.deps.save({ dest: place, mode, startedAt: this.deps.now() });
+      if (quiet) {
+        this.screen = `Маршрут до ${shortPlace(place.name)}
+${modeLabel(mode)}`;
+        this.deps.onChange();
+        return;
+      }
+      this.deps.log("nav", `Маршрут до ${place.name} (${modeLabel(mode)})${place.address ? ", " + place.address : ""}`);
+      this.paint(`Маршрут до ${shortPlace(place.name)}
+${modeLabel(mode)}
+Сейчас покажу первый поворот`, true);
+      this.deps.onChange();
+    }
+    fail(msg) {
+      this.deps.log("error", msg);
+      this.say(msg);
+    }
+    say(text) {
+      this.message = text;
+      this.deps.screen(text, "message");
+      this.deps.onChange();
+    }
+    show(text, urgent) {
+      this.screen = text;
+      this.lastPaint = this.deps.now();
+      this.deps.screen(text, urgent ? "turn" : "route");
+    }
+    paint(text, urgent) {
+      if (text === this.screen && !urgent)
+        return;
+      const now = this.deps.now();
+      if (urgent || now - this.lastPaint >= MIN_REPAINT_MS) {
+        if (this.paintTimer != null)
+          this.deps.clearTimer(this.paintTimer);
+        this.paintTimer = null;
+        this.show(text, urgent);
+        this.deps.onChange();
+        return;
+      }
+      this.pendingText = text;
+      if (this.paintTimer == null) {
+        this.paintTimer = this.deps.setTimer(() => {
+          this.paintTimer = null;
+          if (this.active && this.pendingText && this.pendingText !== this.screen) {
+            this.show(this.pendingText, false);
+            this.deps.onChange();
+          }
+        }, MIN_REPAINT_MS - (now - this.lastPaint));
+      }
+    }
+  }
+
   // src/background/phrase.ts
   function buildPhrasePrompt(phrase, lang) {
     const target = PHRASE_LANG_NAME[lang];
@@ -6841,6 +7286,7 @@ ${prevTips.map((t) => "— " + t).join(`
     lectureEverySec: 15,
     talkEverySec: 10,
     talkGoal: "",
+    navMode: "walking",
     v: SETTINGS_VERSION
   };
   function migrateSettings(raw) {
@@ -6864,6 +7310,7 @@ ${prevTips.map((t) => "— " + t).join(`
   var HISTORY_KEY = "g1gpt.history.v1";
   var LECTURE_KEY = "g1gpt.lecture.v1";
   var TALK_KEY = "g1gpt.talk.v1";
+  var NAV_KEY = "g1gpt.nav.v1";
   function clampInt(v, min, max, dflt) {
     const n = typeof v === "number" ? v : parseInt(String(v), 10);
     if (!Number.isFinite(n))
@@ -6905,6 +7352,7 @@ ${prevTips.map((t) => "— " + t).join(`
       lectureEverySec: clampInt(pick("lectureEverySec"), 10, 60, DEFAULT_SETTINGS.lectureEverySec),
       talkEverySec: clampInt(pick("talkEverySec"), 0, 60, DEFAULT_SETTINGS.talkEverySec),
       talkGoal: String(pick("talkGoal") ?? "").trim().slice(0, 300),
+      navMode: ["walking", "driving", "cycling"].includes(pick("navMode")) ? pick("navMode") : "walking",
       v: SETTINGS_VERSION
     };
   }
@@ -6966,6 +7414,20 @@ ${prevTips.map((t) => "— " + t).join(`
     saveTalk(r) {
       this.write(TALK_KEY, r);
     }
+    loadNav() {
+      const t = this.read(NAV_KEY);
+      const d = t?.dest;
+      return t && d && typeof d.name === "string" && Number.isFinite(d.lat) && Number.isFinite(d.lng) && typeof t.startedAt === "number" ? t : null;
+    }
+    saveNav(t) {
+      if (t)
+        this.write(NAV_KEY, t);
+      else {
+        try {
+          this.kv?.removeItem(NAV_KEY);
+        } catch {}
+      }
+    }
   }
 
   // src/background/assistant.ts
@@ -6995,6 +7457,11 @@ ${prevTips.map((t) => "— " + t).join(`
   var DASHBOARD_WARN_EVERY_MS = 60000;
   var DASHBOARD_WARNING = "Mentra считает, что голова поднята, и показывает свою панель (время, заряд) вместо ответа. " + "Опустите голову. Если не помогает: Mentra → Settings → Dashboard → выключите Contextual Dashboard " + "или увеличьте Adjust Head-Up Angle.";
   var PHRASE_WAIT_MS = 8000;
+  var NAV_WAIT_MS = 9000;
+  var NAV_TURN_MS = 4500;
+  var NAV_BUSY_MS = 25000;
+  var NAV_MSG_MS = 6000;
+  var NAV_RESUME_MS = 3 * 3600000;
 
   class Assistant {
     deps;
@@ -7036,6 +7503,8 @@ ${prevTips.map((t) => "— " + t).join(`
     displayChecked = false;
     ownerVoice = null;
     phraseWait = null;
+    navWait = null;
+    nav;
     lecture;
     talk;
     now;
@@ -7082,6 +7551,22 @@ ${prevTips.map((t) => "— " + t).join(`
         everySec: () => this.settings.talkEverySec,
         goal: () => this.settings.talkGoal
       }, deps.store.loadTalk());
+      this.nav = new Navigator({
+        search: (q) => this.findPlace(q),
+        start: (place, mode) => deps.nav ? deps.nav.start(place, mode) : Promise.resolve({ ok: false, error: "navigation adapter not configured" }),
+        stop: () => deps.nav?.stop(),
+        screen: (text, kind) => this.navScreen(text, kind),
+        log: (kind, msg) => this.addLog(kind, msg),
+        now: () => this.now(),
+        setTimer: (fn, ms) => this.setTimer(fn, ms),
+        clearTimer: (id) => this.clearTimerFn(id),
+        onChange: () => this.changed(),
+        save: (t) => deps.store.saveNav(t),
+        ended: () => {
+          if (this.phase === "idle" && this.clearTimer_ == null)
+            this.clearDisplay();
+        }
+      });
     }
     async completeOnce(system, user) {
       const provider = asProvider(this.settings.provider);
@@ -7136,6 +7621,10 @@ ${prevTips.map((t) => "— " + t).join(`
       }
     }
     clearDisplay() {
+      if (this.nav.active && this.nav.screen) {
+        this.show(fitScreen(this.nav.screen));
+        return;
+      }
       try {
         this.deps.clear();
       } catch {}
@@ -7184,6 +7673,8 @@ ${prevTips.map((t) => "— " + t).join(`
           this.lecture.screen ? this.show(this.lecture.screen) : this.clearDisplay();
         else if (this.phase === "talk")
           this.talk.screen ? this.show(this.talk.screen) : this.clearDisplay();
+        else if (this.phase === "translating")
+          this.translationScreen ? this.show(this.translationScreen) : this.clearDisplay();
       }, ms);
     }
     fromAnotherVoice(t, isFinal, speaker) {
@@ -7288,6 +7779,9 @@ ${prevTips.map((t) => "— " + t).join(`
         this.switchProvider(switchTo, "voice");
         return;
       }
+      const nav = this.navIntent(body);
+      if (nav)
+        return nav();
       const cmd = parseCommand(body);
       if (cmd && (wake.matched || this.commandRelevant(cmd))) {
         this.command(cmd, "voice");
@@ -7419,6 +7913,15 @@ ${prevTips.map((t) => "— " + t).join(`
             this.tryPhrase(clean);
             return;
           }
+        }
+        const nav = this.committed.length === 0 ? this.navIntent(clean) : null;
+        if (nav) {
+          this.cancelTimer("silenceTimer");
+          this.cancelTimer("wakeTimer");
+          this.interim = "";
+          this.phase = this.pages.length ? "answering" : "idle";
+          nav();
+          return;
         }
         const goal = this.committed.length === 0 ? goalIn(t) : null;
         if (goal !== null) {
@@ -7697,6 +8200,9 @@ Notes are in the app.` : `Лекция выключена.
         return;
       if (mine && this.tryPhrase(body))
         return;
+      const nav = mine ? this.navIntent(body, !wake.matched) : null;
+      if (nav)
+        return nav();
       const cmd = parseCommand(body);
       if (mine && (cmd === "hide" || cmd === "cancel" || parseTranslateCommand(body) === "stop"))
         return this.stopLecture("voice");
@@ -7836,6 +8342,9 @@ Hints: ${hints}. The list is in the app.` : `Беседа выключена.
         return;
       if (this.tryPhrase(body))
         return;
+      const nav = this.navIntent(body, !wake.matched);
+      if (nav)
+        return nav();
       const goal = wake.matched ? goalIn(t) : null;
       if (goal !== null)
         return this.setGoal(goal);
@@ -7918,6 +8427,9 @@ ${goal}` : "Цель беседы убрана.", 3000);
         return;
       if (this.trySwitchMode(body))
         return;
+      const nav = this.navIntent(body, !wake.matched);
+      if (nav)
+        return nav();
       const cmd = parseCommand(body);
       if ((cmd === "hide" || cmd === "cancel") && (wake.matched || detectLang(body) === "ru")) {
         this.stopTranslation("voice");
@@ -8012,6 +8524,8 @@ ${goal}` : "Цель беседы убрана.", 3000);
           this.show(this.lecture.screen);
         if (!up && this.phase === "talk" && this.talk.screen)
           this.show(this.talk.screen);
+        if (!up && this.phase === "idle" && this.nav.active && this.nav.screen && this.clearTimer_ == null)
+          this.show(fitScreen(this.nav.screen));
         this.changed();
       }
       if (!up || !this.settings.headNod)
@@ -8102,6 +8616,194 @@ ${goal}` : "Цель беседы убрана.", 3000);
           break;
       }
     }
+    navIntent(body, strict = false) {
+      const waiting = this.navWait && this.now() < this.navWait.until ? this.navWait : null;
+      const c = parseNavCommand(body);
+      if (c) {
+        if (strict && !(c.kind === "stop" && (this.nav.active || this.nav.busy)))
+          return null;
+        switch (c.kind) {
+          case "go":
+            return () => {
+              this.navWait = null;
+              this.navigate(c.query, c.mode ?? this.settings.navMode, "voice");
+            };
+          case "stop":
+            return () => {
+              this.navWait = null;
+              this.stopNav("voice");
+            };
+          case "status":
+            return this.nav.active ? () => this.flash(this.nav.status(), 5000) : null;
+          case "ask":
+            return () => this.askDestination(c.mode);
+        }
+      }
+      if (!waiting)
+        return null;
+      const cmd = parseCommand(body);
+      if (cmd === "cancel" || cmd === "hide") {
+        return () => {
+          this.navWait = null;
+          this.addLog("cmd", "Навигатор: отменено");
+          this.flash("Маршрут отменён.", 1500);
+        };
+      }
+      const place = body.replace(/[?？!.…]+$/u, "").replace(/^(?:до|к|ко|в|во|на|to)\s+/iu, "").trim();
+      if (!normalize(place) || place.split(/\s+/).length > 10)
+        return null;
+      return () => {
+        this.navWait = null;
+        this.navigate(place, waiting.mode ?? this.settings.navMode, "voice");
+      };
+    }
+    askDestination(mode) {
+      if (!this.navAvailable())
+        return;
+      this.navWait = { mode, until: this.now() + NAV_WAIT_MS };
+      this.addLog("cmd", "Навигатор: жду, куда");
+      this.flash(`Навигатор${mode ? ", " + modeLabel(mode) : ""}: куда?
+Скажите место или адрес`, NAV_WAIT_MS);
+    }
+    navProblem() {
+      if (!this.deps.nav)
+        return "Навигация недоступна в этой версии Mentra";
+      try {
+        return this.deps.nav.problem?.() ?? "";
+      } catch {
+        return "";
+      }
+    }
+    navAvailable() {
+      const problem = this.navProblem();
+      if (!problem)
+        return true;
+      this.addLog("error", `Навигатор: ${problem}`);
+      this.flash(`${problem}.`, 6000);
+      return false;
+    }
+    async navigate(query, mode, source) {
+      const q = String(query ?? "").trim();
+      if (!q || !this.navAvailable())
+        return;
+      this.addLog("cmd", `Навигатор: «${q}», ${modeLabel(mode)} (${source === "ui" ? "с телефона" : "голосом"})`);
+      await this.nav.go(q, mode);
+    }
+    async navigateTo(place, mode) {
+      if (!this.navAvailable())
+        return;
+      this.addLog("cmd", `Навигатор: ${place.name}, ${modeLabel(mode)} (с телефона)`);
+      await this.nav.goTo(place, mode);
+    }
+    stopNav(source) {
+      if (!this.nav.active && !this.nav.busy) {
+        if (source === "voice")
+          this.flash("Маршрута нет.", 2000);
+        return;
+      }
+      const wasActive = this.nav.active;
+      this.nav.stop(source);
+      if (source === "voice")
+        this.flash(wasActive ? "Маршрут завершён." : "Поиск маршрута отменён.", 2000);
+      else if (!wasActive && this.phase === "idle") {
+        this.cancelTimer("clearTimer_");
+        this.clearDisplay();
+      }
+    }
+    async resumeNav(trip, hostActive) {
+      if (!trip)
+        return;
+      if (!hostActive || this.now() - trip.startedAt > NAV_RESUME_MS || !this.deps.nav) {
+        this.deps.store.saveNav(null);
+        return;
+      }
+      await this.nav.resume(trip);
+    }
+    navScreen(text, kind) {
+      if (kind === "message")
+        this.flash(text, this.nav.busy ? NAV_BUSY_MS : NAV_MSG_MS);
+      else if (this.phase === "idle" && this.clearTimer_ == null)
+        this.show(fitScreen(text));
+      else if (kind === "turn")
+        this.flash(text, NAV_TURN_MS);
+    }
+    async locate() {
+      try {
+        return await this.deps.nav?.locate() ?? null;
+      } catch (e) {
+        this.addLog("info", `Геопозиция: ${explainNavError(e?.message ?? e)} — ищу без неё`);
+        return null;
+      }
+    }
+    async mapQueries(query, near) {
+      const queries = [];
+      const provider = asProvider(this.settings.provider);
+      if (/[а-яё]/iu.test(query) && keyFor(this.settings, provider)) {
+        try {
+          const { system, user } = buildMapQueryPrompt(query, near);
+          const q = cleanMapQuery(await this.completeOnce(system, user));
+          if (q) {
+            queries.push(q);
+            if (normalize(q) !== normalize(query))
+              this.addLog("nav", `Ищу на карте: ${q}`);
+          }
+        } catch (e) {
+          const err = e;
+          this.addLog("error", `Не удалось уточнить место: ${explainLLMError(err?.provider ?? provider, Number(err?.status) || 0, String(err?.code ?? ""), String(err?.message ?? ""))}`);
+        }
+      }
+      if (!queries.includes(query))
+        queries.push(query);
+      return queries;
+    }
+    async findPlace(query) {
+      const host = this.deps.nav;
+      if (!host)
+        return null;
+      const near = await this.locate();
+      for (const q of await this.mapQueries(query, near)) {
+        const found = await host.suggest(q, near);
+        for (const sug of found.slice(0, 3)) {
+          const place = await this.placeFor(sug);
+          if (place) {
+            this.addLog("nav", `Найдено: ${place.name}${place.address ? ", " + place.address : ""}`);
+            return place;
+          }
+        }
+      }
+      return null;
+    }
+    async placeFor(sug) {
+      let place = null;
+      try {
+        place = await this.deps.nav?.details(sug.placeId) ?? null;
+      } catch {
+        place = null;
+      }
+      if (!place || !Number.isFinite(place.lat) || !Number.isFinite(place.lng))
+        return null;
+      return { ...place, name: place.name || sug.mainText, address: place.address || sug.secondaryText };
+    }
+    async searchPlaces(query) {
+      const host = this.deps.nav;
+      const q = String(query ?? "").trim();
+      if (!host || !q)
+        return [];
+      const near = await this.locate();
+      const seen = new Set;
+      const out = [];
+      for (const mq of await this.mapQueries(q, near)) {
+        for (const sug of await host.suggest(mq, near)) {
+          if (seen.has(sug.placeId))
+            continue;
+          seen.add(sug.placeId);
+          out.push(sug);
+        }
+        if (out.length >= 5)
+          break;
+      }
+      return out.slice(0, 8);
+    }
     snapshot() {
       const hint = (k) => k ? `${k.slice(0, k.startsWith("sk-ant-") ? 7 : 3)}…${k.slice(-4)}` : "";
       const provider = asProvider(this.settings.provider);
@@ -8110,7 +8812,7 @@ ${goal}` : "Цель беседы убрана.", 3000);
         phase: this.phase,
         page: this.page,
         pages: this.pages.length,
-        currentScreen: this.phase === "translating" ? this.translationScreen : this.phase === "lecture" ? this.lecture.screen : this.phase === "talk" ? this.talk.screen : this.pages[this.page] ?? "",
+        currentScreen: this.phase === "translating" ? this.translationScreen : this.phase === "lecture" ? this.lecture.screen : this.phase === "talk" ? this.talk.screen : this.phase === "idle" && this.nav.active ? this.nav.screen : this.pages[this.page] ?? "",
         translating: this.phase === "translating",
         lastTranscript: this.lastTranscript,
         lastQuestion: this.lastQuestion,
@@ -8120,6 +8822,16 @@ ${goal}` : "Цель беседы убрана.", 3000);
         ownerVoice: this.ownerVoice,
         lecture: lectureSnapshot(this.lecture.active, this.lecture.record),
         talk: lectureSnapshot(this.talk.active, this.talk.record),
+        nav: {
+          problem: this.navProblem(),
+          active: this.nav.active,
+          busy: this.nav.busy,
+          dest: this.nav.dest,
+          mode: this.nav.mode,
+          screen: this.nav.screen,
+          message: this.nav.message,
+          left: this.nav.left()
+        },
         glassesConnected: this.glassesConnected,
         settings: {
           ...this.settings,
@@ -8176,7 +8888,70 @@ ${goal}` : "Цель беседы убрана.", 3000);
   }
 
   // src/background/index.ts
-  var APP_VERSION = "1.12.2";
+  var APP_VERSION = "1.13.0";
+  function newToken() {
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+      const r = Math.random() * 16 | 0;
+      return (c === "x" ? r : r & 3 | 8).toString(16);
+    });
+  }
+  var asMode = (m) => m === "driving" || m === "cycling" ? m : "walking";
+  function makeNavHost(session, log) {
+    const nav = session.navigation;
+    if (!nav || typeof nav.start !== "function")
+      return;
+    let token = newToken();
+    let termsAsked = false;
+    let lastFix = null;
+    return {
+      problem: () => nav.hasPermission === false ? "нет разрешения на геопозицию — загрузите EVA-IA заново: Mentra → Settings → Miniapp Developer Settings → Load Miniapp from URL" : "",
+      async locate() {
+        if (lastFix && Date.now() - lastFix.at < 60000)
+          return { lat: lastFix.lat, lng: lastFix.lng };
+        const fix = await session.location.getOnce();
+        const lat = Number(fix?.lat);
+        const lng = Number(fix?.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng))
+          return null;
+        lastFix = { lat, lng, at: Date.now() };
+        return { lat, lng };
+      },
+      async suggest(query, near) {
+        token = newToken();
+        const r = await nav.placeAutocomplete({ query, near: near ?? undefined, sessionToken: token });
+        if (!r?.ok)
+          throw new Error(r?.error || "place search failed");
+        return (r.suggestions ?? []).filter((x) => x?.placeId);
+      },
+      async details(placeId) {
+        const r = await nav.placeDetails({ placeId, sessionToken: token });
+        if (!r?.ok || !r.place)
+          return null;
+        const p = r.place;
+        return { name: String(p.name ?? ""), address: String(p.address ?? ""), lat: Number(p.lat), lng: Number(p.lng) };
+      },
+      async start(place, mode) {
+        if (!termsAsked) {
+          termsAsked = true;
+          try {
+            const pr = await nav.requestPermission();
+            if (pr && pr.ok && pr.accepted === false) {
+              termsAsked = false;
+              return { ok: false, error: "terms not accepted" };
+            }
+            if (pr && !pr.ok && pr.error)
+              log(`Навигация: ${pr.error}`);
+          } catch (e) {
+            log(`Навигация: условия не запрошены (${String(e?.message ?? e)})`);
+          }
+        }
+        return nav.start({ lat: place.lat, lng: place.lng, mode });
+      },
+      stop() {
+        nav.stop();
+      }
+    };
+  }
   function getKV() {
     try {
       const ls = globalThis.localStorage;
@@ -8215,7 +8990,8 @@ ${goal}` : "Цель беседы убрана.", 3000);
         session.display.render([])?.catch?.(() => {});
       },
       startTranslation: (target, handler) => session.translation.to(target, handler),
-      onChange: pushState
+      onChange: pushState,
+      nav: makeNavHost(session, (msg) => assistant.addLog("info", msg))
     });
     assistant.addLog("info", `Запущено, версия ${APP_VERSION}`);
     const storageOk = store.selfTest();
@@ -8239,9 +9015,6 @@ ${goal}` : "Цель беседы убрана.", 3000);
       if (s.listenMode === "off") {
         assistant.addLog("info", "Микрофон выключен в настройках");
         return;
-      }
-      if (!session.transcription.hasPermission) {
-        assistant.addLog("error", "Нет разрешения MICROPHONE в манифесте");
       }
       try {
         session.transcription.configure({
@@ -8280,8 +9053,24 @@ ${goal}` : "Цель беседы убрана.", 3000);
         const d = session.capabilities?.display;
         if (d)
           assistant.addLog("info", `Дисплей ${d.width ?? "?"}×${d.height ?? "?"}${d.canPosition === false ? ", текстовый режим" : ""}`);
+        if (session.transcription?.hasPermission === false)
+          assistant.addLog("error", "Нет разрешения MICROPHONE в манифесте");
+        const navProblem = assistant.navProblem();
+        if (navProblem)
+          assistant.addLog("info", `Навигатор: ${navProblem}`);
       });
     } catch {}
+    try {
+      if (session.navigation) {
+        session.navigation.onUpdate((u) => assistant.nav.onUpdate(u));
+        const saved = store.loadNav();
+        if (saved) {
+          session.navigation.getState().then((st) => assistant.resumeNav(saved, Boolean(st?.active))).catch(() => assistant.resumeNav(saved, false));
+        }
+      }
+    } catch (e) {
+      assistant.addLog("info", `Навигатор не подключён: ${String(e?.message ?? e)}`);
+    }
     session.ui.handle("getState", () => snap());
     session.ui.handle("saveSettings", (patch) => {
       const s = assistant.updateSettings(patch ?? {});
@@ -8310,6 +9099,36 @@ ${goal}` : "Цель беседы убрана.", 3000);
         assistant.stopTalk("ui");
       else if (["next", "prev", "first", "repeat", "hide", "cancel", "reset"].includes(cmd))
         assistant.command(cmd, p?.source === "key" ? "key" : "ui");
+      return snap();
+    });
+    session.ui.handle("navSearch", async (p) => {
+      try {
+        return { ok: true, results: await assistant.searchPlaces(String(p?.query ?? "")) };
+      } catch (e) {
+        const msg = String(e?.message ?? e);
+        assistant.addLog("error", `Поиск места: ${msg}`);
+        return { ok: false, error: msg };
+      }
+    });
+    session.ui.handle("navGo", async (p) => {
+      const mode = asMode(p?.mode);
+      if (p?.placeId) {
+        const place = await assistant.placeFor({
+          placeId: String(p.placeId),
+          mainText: String(p.mainText ?? ""),
+          secondaryText: String(p.secondaryText ?? "")
+        });
+        if (!place) {
+          assistant.addLog("error", "Навигатор: Mentra не нашла координаты этого места");
+          return { ...snap(), navError: "Не удалось получить координаты этого места" };
+        }
+        assistant.navigateTo(place, mode);
+      } else
+        assistant.navigate(String(p?.query ?? ""), mode, "ui");
+      return snap();
+    });
+    session.ui.handle("navStop", () => {
+      assistant.stopNav("ui");
       return snap();
     });
     session.ui.handle("getLecture", () => assistant.lecture.record);

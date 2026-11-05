@@ -1,6 +1,7 @@
 /** Settings and conversation history, persisted in the miniapp's own localStorage on the phone. */
 
 import type {LectureRecord} from "./lecture"
+import type {NavTrip} from "./navigator"
 export type ListenMode = "wake" | "always" | "off"
 export type Effort = "auto" | "none" | "low" | "medium" | "high"
 export type SttLanguage = "ru-RU" | "auto"
@@ -48,9 +49,13 @@ export interface Settings {
   talkEverySec: number
   /** Conversation mode: what the user wants from the conversation; steers «Спроси»/«Скажи». */
   talkGoal: string
+  /** Navigator: how to travel when the command does not say («пешком», «на машине»). */
+  navMode: NavMode
   /** Settings schema version, for one-time migrations of stored settings. */
   v: number
 }
+
+export type NavMode = "walking" | "driving" | "cycling"
 
 export const SETTINGS_VERSION = 2
 
@@ -83,6 +88,7 @@ export const DEFAULT_SETTINGS: Settings = {
   lectureEverySec: 15,
   talkEverySec: 10,
   talkGoal: "",
+  navMode: "walking",
   v: SETTINGS_VERSION,
 }
 
@@ -129,6 +135,7 @@ const SETTINGS_KEY = "g1gpt.settings.v1"
 const HISTORY_KEY = "g1gpt.history.v1"
 const LECTURE_KEY = "g1gpt.lecture.v1"
 const TALK_KEY = "g1gpt.talk.v1"
+const NAV_KEY = "g1gpt.nav.v1"
 
 function clampInt(v: unknown, min: number, max: number, dflt: number): number {
   const n = typeof v === "number" ? v : parseInt(String(v), 10)
@@ -174,6 +181,7 @@ export function normalizeSettings(raw: Partial<Settings> | null | undefined, bas
     lectureEverySec: clampInt(pick("lectureEverySec"), 10, 60, DEFAULT_SETTINGS.lectureEverySec),
     talkEverySec: clampInt(pick("talkEverySec"), 0, 60, DEFAULT_SETTINGS.talkEverySec),
     talkGoal: String(pick("talkGoal") ?? "").trim().slice(0, 300),
+    navMode: (["walking", "driving", "cycling"] as NavMode[]).includes(pick("navMode")) ? pick("navMode") : "walking",
     v: SETTINGS_VERSION,
   }
 }
@@ -246,5 +254,23 @@ export class Store {
 
   saveTalk(r: LectureRecord): void {
     this.write(TALK_KEY, r)
+  }
+
+  /** The running navigator trip, if any. */
+  loadNav(): NavTrip | null {
+    const t = this.read<NavTrip>(NAV_KEY)
+    const d = t?.dest
+    return t && d && typeof d.name === "string" && Number.isFinite(d.lat) && Number.isFinite(d.lng) && typeof t.startedAt === "number" ? t : null
+  }
+
+  saveNav(t: NavTrip | null): void {
+    if (t) this.write(NAV_KEY, t)
+    else {
+      try {
+        this.kv?.removeItem(NAV_KEY)
+      } catch {
+        // ignore
+      }
+    }
   }
 }

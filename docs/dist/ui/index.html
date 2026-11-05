@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light dark" />
     <title>EVA-IA</title>
     
-  <link rel="stylesheet" crossorigin href="./chunk-rqvtt6bg.css"><script type="module" crossorigin src="./chunk-pxj4cgyh.js"></script></head>
+  <link rel="stylesheet" crossorigin href="./chunk-q71p70cx.css"><script type="module" crossorigin src="./chunk-8s2s65y8.js"></script></head>
   <body>
     <!-- Icons, referenced with <svg><use href="#i-…"/></svg> -->
     <svg width="0" height="0" style="position: absolute" aria-hidden="true">
@@ -29,6 +29,9 @@
       <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" /></symbol>
       <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></symbol>
       <symbol id="i-send" viewBox="0 0 24 24"><path d="M12 19V6M6 11l6-6 6 6" /></symbol>
+      <symbol id="i-nav" viewBox="0 0 24 24"><path d="M12 3l7.5 17.5L12 16.5l-7.5 4z" /></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" /><path d="M15.5 15.5L20 20" /></symbol>
+      <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6.5-6-6.5-11.2a6.5 6.5 0 0 1 13 0C18.5 15 12 21 12 21z" /><circle cx="12" cy="9.8" r="2.3" /></symbol>
       <symbol id="i-glasses-tab" viewBox="0 0 28 28"><circle cx="8" cy="15" r="5" /><circle cx="20" cy="15" r="5" /><path d="M13 14c.6-.8 1.4-.8 2 0M3 15V9M25 15V9" /></symbol>
       <symbol id="i-chat-tab" viewBox="0 0 28 28"><path d="M5 6h18v12H12l-6 5v-5H5z" /></symbol>
       <symbol id="i-settings-tab" viewBox="0 0 28 28"><path d="M5 8h10M19 8h4M5 14h4M13 14h10M5 20h12M21 20h2" /><circle cx="17" cy="8" r="2" /><circle cx="11" cy="14" r="2" /><circle cx="19" cy="20" r="2" /></symbol>
@@ -93,6 +96,11 @@
             <option value="gemini">Gemini</option>
           </select>
         </label>
+        <button class="card row" data-page="nav" id="navRow" type="button">
+          <svg class="row-icon"><use href="#i-nav" /></svg>
+          <span class="row-label">Навигатор<span class="row-sub" id="navRowSub"></span></span>
+          <span class="go"><svg><use href="#i-arrow" /></svg></span>
+        </button>
         <button class="card row" data-page="notes" id="notesRow" type="button" hidden>
           <svg class="row-icon"><use href="#i-notes" /></svg>
           <span class="row-label"><span id="notesRowTitle">Конспект</span><span class="row-sub" id="notesRowSub"></span></span>
@@ -428,6 +436,44 @@
       <ol class="card notes" id="lectureNotes"></ol>
     </section>
 
+    <!-- ───────────── Навигатор ───────────── -->
+    <section class="page" id="page-nav" hidden>
+      <header class="page-top"><button class="circle back" type="button" aria-label="Назад"><svg><use href="#i-back" /></svg></button><h1>Навигатор</h1></header>
+
+      <div class="card trip" id="navTrip" hidden>
+        <p class="trip-turn" id="navTurn"></p>
+        <p class="trip-road" id="navRoad"></p>
+        <div class="trip-dest">
+          <svg class="row-icon"><use href="#i-pin" /></svg>
+          <span class="row-label"><span id="navDest"></span><span class="row-sub" id="navLeft"></span></span>
+        </div>
+        <button class="pill" id="navStop" type="button">Завершить маршрут</button>
+      </div>
+
+      <p class="notice" id="navProblem" hidden></p>
+
+      <form class="composer composer-inline" id="navForm" role="search">
+        <input id="navQuery" type="search" placeholder="Куда?" enterkeyhint="search" autocomplete="off" aria-label="Куда" />
+        <button class="send" id="navFind" type="submit" aria-label="Найти"><svg><use href="#i-search" /></svg></button>
+      </form>
+      <div class="seg" id="navModes" role="radiogroup" aria-label="Как добираться">
+        <button type="button" role="radio" data-nav-mode="walking">Пешком</button>
+        <button type="button" role="radio" data-nav-mode="driving">На машине</button>
+        <button type="button" role="radio" data-nav-mode="cycling">Велосипед</button>
+      </div>
+      <p class="help" id="navMsg"></p>
+      <div class="card list places" id="navResults" hidden></div>
+
+      <h2 class="section">Голосом</h2>
+      <div class="card list cmds">
+        <div class="cmd"><p class="cmd-say">«Проведи до Тринити-колледжа»</p><p class="cmd-do">Маршрут. Можно добавить «пешком», «на машине», «на велосипеде»</p></div>
+        <div class="cmd"><p class="cmd-say">«Как доехать до аэропорта?»</p><p class="cmd-do">На машине; «как дойти до …» — пешком</p></div>
+        <div class="cmd"><p class="cmd-say">«Сколько осталось?»</p><p class="cmd-do">Расстояние и время до цели</p></div>
+        <div class="cmd"><p class="cmd-say">«Стоп навигация»</p><p class="cmd-do">Завершить маршрут</p></div>
+      </div>
+      <p class="help">Повороты видны на очках, когда там нет ответа. Близкий поворот на несколько секунд показывается поверх ответа, лекции или перевода. Маршрут строит Mentra.</p>
+    </section>
+
     <!-- ───────────── Команды ───────────── -->
     <section class="page" id="page-commands" hidden>
       <header class="page-top"><button class="circle back" type="button" aria-label="Назад"><svg><use href="#i-back" /></svg></button><h1>Команды</h1></header>
@@ -446,6 +492,12 @@
         <div class="cmd"><p class="cmd-say">«Лекция»</p><p class="cmd-do">Тезисы и ответы на вопросы лектора. «Стоп лекция»</p></div>
         <div class="cmd"><p class="cmd-say">«Беседа»</p><p class="cmd-do">Факты, цитаты и подсказки в разговоре. «Стоп беседа»</p></div>
         <div class="cmd"><p class="cmd-say">«Вопрос, цель — …»</p><p class="cmd-do">Куда вести беседу</p></div>
+      </div>
+      <h2 class="section">Навигатор</h2>
+      <div class="card list cmds">
+        <div class="cmd"><p class="cmd-say">«Проведи до …» · «Как дойти до …»</p><p class="cmd-do">Маршрут с поворотами на очках</p></div>
+        <div class="cmd"><p class="cmd-say">«Сколько осталось?»</p><p class="cmd-do">Расстояние и время до цели</p></div>
+        <div class="cmd"><p class="cmd-say">«Стоп навигация»</p><p class="cmd-do">Завершить маршрут</p></div>
       </div>
     </section>
 

@@ -8,6 +8,18 @@
 import {fitScreen, G1_LINES, paginate, sanitizeForG1, wrapLines} from "./g1text"
 import {askLLM, asProvider, displayName, explainLLMError, keyFor, LLMError, PROVIDERS, type Provider} from "./llm"
 import {Lecture, type LectureRecord} from "./lecture"
+import {
+  buildMapQueryPrompt,
+  cleanMapQuery,
+  explainNavError,
+  modeLabel,
+  Navigator,
+  type NavHost,
+  type NavScreenKind,
+  type NavTrip,
+  type Place,
+  type PlaceSuggestion,
+} from "./navigator"
 import {buildPhrasePrompt, cleanPhraseReply} from "./phrase"
 import {Talk} from "./talk"
 import type {FetchLike} from "./openai"
@@ -20,6 +32,7 @@ import {
   normalize,
   parseCommand,
   parseLectureCommand,
+  parseNavCommand,
   parsePhraseRequest,
   parseSwitchCommand,
   PHRASE_LANG_NAME,
@@ -28,6 +41,7 @@ import {
   parseTranslateCommand,
   aiForWakePhrase,
   AI_WAKE_WORDS,
+  type TravelMode,
   type VoiceCommand,
 } from "./voice"
 
@@ -35,7 +49,7 @@ export type Phase = "idle" | "capturing" | "thinking" | "answering" | "translati
 
 export interface LogEntry {
   t: number
-  kind: "stt" | "wake" | "cmd" | "ask" | "openai" | "display" | "error" | "info" | "touch" | "translate" | "head" | "lecture" | "talk"
+  kind: "stt" | "wake" | "cmd" | "ask" | "openai" | "display" | "error" | "info" | "touch" | "translate" | "head" | "lecture" | "talk" | "nav"
   msg: string
 }
 
@@ -67,6 +81,8 @@ export interface AssistantDeps {
   setTimer?: (fn: () => void, ms: number) => unknown
   clearTimer?: (id: unknown) => void
   onChange?: () => void
+  /** Mentra's location, place search and navigator; absent where the host has no navigation. */
+  nav?: NavHost
 }
 
 /** How long a pause in speech ends a question. */
@@ -114,6 +130,16 @@ export const DASHBOARD_WARNING =
 
 /** After «Как будет на английском…» and a pause, the next phrase is taken as the word to translate. */
 export const PHRASE_WAIT_MS = 8000
+
+/** After «Навигатор» without a destination, the next phrase is taken as the place. */
+export const NAV_WAIT_MS = 9000
+/** A coming turn shown over an answer, notes or translation for this long. */
+export const NAV_TURN_MS = 4500
+/** «Ищу…», «Маршрут до…» stay on screen at most this long if Mentra does not answer. */
+const NAV_BUSY_MS = 25_000
+const NAV_MSG_MS = 6000
+/** A trip saved longer ago than this is not resumed after a restart. */
+const NAV_RESUME_MS = 3 * 3600_000
 
 /** Where a paging command came from; shown in the log. key = Bluetooth remote or keyboard. */
 export type CommandSource = "voice" | "ui" | "touch" | "head" | "key"
@@ -165,6 +191,10 @@ export class Assistant {
   ownerVoice: string | null = null
   /** Waiting for the word after «Как будет на английском…» + pause. */
   private phraseWait: {lang: PhraseLang; until: number} | null = null
+  /** Waiting for the place after «Навигатор». */
+  private navWait: {mode: TravelMode | null; until: number} | null = null
+  /** Turn-by-turn directions (Mentra's navigator) on the glasses. */
+  readonly nav: Navigator
   /** Lecture mode: key points of what the lecturer says + answers to questions to the audience. */
   readonly lecture: Lecture
   /** Conversation mode: facts when someone asks, a prompt when the user trails off. */
@@ -220,6 +250,22 @@ export class Assistant {
       },
       deps.store.loadTalk(),
     )
+    this.nav = new Navigator({
+      search: (q) => this.findPlace(q),
+      start: (place, mode) =>
+        deps.nav ? deps.nav.start(place, mode) : Promise.resolve({ok: false, error: "navigation adapter not configured"}),
+      stop: () => deps.nav?.stop(),
+      screen: (text, kind) => this.navScreen(text, kind),
+      log: (kind, msg) => this.addLog(kind, msg),
+      now: () => this.now(),
+      setTimer: (fn, ms) => this.setTimer(fn, ms),
+      clearTimer: (id) => this.clearTimerFn(id),
+      onChange: () => this.changed(),
+      save: (t) => deps.store.saveNav(t),
+      ended: () => {
+        if (this.phase === "idle" && this.clearTimer_ == null) this.clearDisplay()
+      },
+    })
   }
 
   /**
@@ -287,7 +333,12 @@ export class Assistant {
     }
   }
 
+  /** Nothing else to show: the glasses go blank, or show the route while a trip is on. */
   private clearDisplay(): void {
+    if (this.nav.active && this.nav.screen) {
+      this.show(fitScreen(this.nav.screen))
+      return
+    }
     try {
       this.deps.clear()
     } catch {
@@ -336,6 +387,7 @@ export class Assistant {
       else if (this.phase === "answering") this.showPage(this.page)
       else if (this.phase === "lecture") this.lecture.screen ? this.show(this.lecture.screen) : this.clearDisplay()
       else if (this.phase === "talk") this.talk.screen ? this.show(this.talk.screen) : this.clearDisplay()
+      else if (this.phase === "translating") this.translationScreen ? this.show(this.translationScreen) : this.clearDisplay()
     }, ms)
   }
 
@@ -448,6 +500,9 @@ export class Assistant {
       this.switchProvider(switchTo, "voice")
       return
     }
+
+    const nav = this.navIntent(body)
+    if (nav) return nav()
 
     const cmd = parseCommand(body)
     if (cmd && (wake.matched || this.commandRelevant(cmd))) {
@@ -588,6 +643,15 @@ export class Assistant {
           this.tryPhrase(clean)
           return
         }
+      }
+      const nav = this.committed.length === 0 ? this.navIntent(clean) : null
+      if (nav) {
+        this.cancelTimer("silenceTimer")
+        this.cancelTimer("wakeTimer")
+        this.interim = ""
+        this.phase = this.pages.length ? "answering" : "idle"
+        nav()
+        return
       }
       const goal = this.committed.length === 0 ? goalIn(t) : null
       if (goal !== null) {
@@ -871,6 +935,8 @@ Notes are in the app.`
     const mine = wake.matched || detectLang(body) === "ru"
     if (mine && this.trySwitchMode(body)) return
     if (mine && this.tryPhrase(body)) return
+    const nav = mine ? this.navIntent(body, !wake.matched) : null
+    if (nav) return nav()
     const cmd = parseCommand(body)
     if (mine && (cmd === "hide" || cmd === "cancel" || parseTranslateCommand(body) === "stop")) return this.stopLecture("voice")
     // «Вопрос, что такое энтропия?» — the user's own question, answered without leaving the lecture
@@ -1010,6 +1076,8 @@ Notes are in the app.`
     const unambiguous = wake.matched || parseTranslateCommand(body) === "start" || normalize(body).split(" ").length >= 2
     if (unambiguous && this.trySwitchMode(body)) return
     if (this.tryPhrase(body)) return
+    const nav = this.navIntent(body, !wake.matched)
+    if (nav) return nav()
     // «Вопрос, цель: договориться о скидке» — what the hints should steer toward
     const goal = wake.matched ? goalIn(t) : null
     if (goal !== null) return this.setGoal(goal)
@@ -1095,6 +1163,8 @@ Notes are in the app.`
     }
     if (tcmd === "start") return // already translating
     if (this.trySwitchMode(body)) return
+    const nav = this.navIntent(body, !wake.matched)
+    if (nav) return nav()
     // "скрой"/"отмена" in Russian also stop; bare English "stop" may come from people around.
     const cmd = parseCommand(body)
     if ((cmd === "hide" || cmd === "cancel") && (wake.matched || detectLang(body) === "ru")) {
@@ -1188,6 +1258,7 @@ Notes are in the app.`
       if (!up && this.phase === "answering" && this.pages.length) this.show(this.pages[this.page]) // repaint after the dashboard
       if (!up && this.phase === "lecture" && this.lecture.screen) this.show(this.lecture.screen)
       if (!up && this.phase === "talk" && this.talk.screen) this.show(this.talk.screen)
+      if (!up && this.phase === "idle" && this.nav.active && this.nav.screen && this.clearTimer_ == null) this.show(fitScreen(this.nav.screen))
       this.changed()
     }
     if (!up || !this.settings.headNod) return
@@ -1271,6 +1342,211 @@ Notes are in the app.`
     }
   }
 
+  // ───────────────────────────── navigator ─────────────────────────────
+
+  /**
+   * A navigator command in what was said, as an action to run, or null. `strict` (lecture,
+   * conversation and translation without the activator): other people talk there, so only the
+   * unambiguous «стоп навигация» counts — and the place right after «Навигатор».
+   */
+  private navIntent(body: string, strict = false): (() => void) | null {
+    const waiting = this.navWait && this.now() < this.navWait.until ? this.navWait : null
+    const c = parseNavCommand(body)
+    if (c) {
+      if (strict && !(c.kind === "stop" && (this.nav.active || this.nav.busy))) return null
+      switch (c.kind) {
+        case "go":
+          return () => {
+            this.navWait = null
+            void this.navigate(c.query, c.mode ?? this.settings.navMode, "voice")
+          }
+        case "stop":
+          return () => {
+            this.navWait = null
+            this.stopNav("voice")
+          }
+        case "status":
+          return this.nav.active ? () => this.flash(this.nav.status(), 5000) : null
+        case "ask":
+          return () => this.askDestination(c.mode)
+      }
+    }
+    if (!waiting) return null
+    const cmd = parseCommand(body)
+    if (cmd === "cancel" || cmd === "hide") {
+      return () => {
+        this.navWait = null
+        this.addLog("cmd", "Навигатор: отменено")
+        this.flash("Маршрут отменён.", 1500)
+      }
+    }
+    const place = body
+      .replace(/[?？!.…]+$/u, "")
+      .replace(/^(?:до|к|ко|в|во|на|to)\s+/iu, "")
+      .trim()
+    if (!normalize(place) || place.split(/\s+/).length > 10) return null
+    return () => {
+      this.navWait = null
+      void this.navigate(place, waiting.mode ?? this.settings.navMode, "voice")
+    }
+  }
+
+  /** «Навигатор» without a place: ask where to and take the next phrase as the destination. */
+  private askDestination(mode: TravelMode | null): void {
+    if (!this.navAvailable()) return
+    this.navWait = {mode, until: this.now() + NAV_WAIT_MS}
+    this.addLog("cmd", "Навигатор: жду, куда")
+    this.flash(`Навигатор${mode ? ", " + modeLabel(mode) : ""}: куда?\nСкажите место или адрес`, NAV_WAIT_MS)
+  }
+
+  /** "" when the navigator can work, otherwise why not. */
+  navProblem(): string {
+    if (!this.deps.nav) return "Навигация недоступна в этой версии Mentra"
+    try {
+      return this.deps.nav.problem?.() ?? ""
+    } catch {
+      return ""
+    }
+  }
+
+  private navAvailable(): boolean {
+    const problem = this.navProblem()
+    if (!problem) return true
+    this.addLog("error", `Навигатор: ${problem}`)
+    this.flash(`${problem}.`, 6000)
+    return false
+  }
+
+  /** Searches the spoken or typed place near the user and starts the route. */
+  async navigate(query: string, mode: TravelMode, source: "voice" | "ui"): Promise<void> {
+    const q = String(query ?? "").trim()
+    if (!q || !this.navAvailable()) return
+    this.addLog("cmd", `Навигатор: «${q}», ${modeLabel(mode)} (${source === "ui" ? "с телефона" : "голосом"})`)
+    await this.nav.go(q, mode)
+  }
+
+  /** Starts the route to a place picked from the search results in the app. */
+  async navigateTo(place: Place, mode: TravelMode): Promise<void> {
+    if (!this.navAvailable()) return
+    this.addLog("cmd", `Навигатор: ${place.name}, ${modeLabel(mode)} (с телефона)`)
+    await this.nav.goTo(place, mode)
+  }
+
+  stopNav(source: "voice" | "ui"): void {
+    if (!this.nav.active && !this.nav.busy) {
+      if (source === "voice") this.flash("Маршрута нет.", 2000)
+      return
+    }
+    const wasActive = this.nav.active
+    this.nav.stop(source)
+    if (source === "voice") this.flash(wasActive ? "Маршрут завершён." : "Поиск маршрута отменён.", 2000)
+    else if (!wasActive && this.phase === "idle") {
+      // «Ищу…» is no longer true
+      this.cancelTimer("clearTimer_")
+      this.clearDisplay()
+    }
+  }
+
+  /** After a restart: picks up the trip Mentra's navigator may still be running. */
+  async resumeNav(trip: NavTrip | null, hostActive: boolean): Promise<void> {
+    if (!trip) return
+    if (!hostActive || this.now() - trip.startedAt > NAV_RESUME_MS || !this.deps.nav) {
+      this.deps.store.saveNav(null)
+      return
+    }
+    await this.nav.resume(trip)
+  }
+
+  /**
+   * Where the navigator shows its screens. Searching and errors come as short messages; during a
+   * trip the route stays on the glasses when nothing else is shown, and a turn that is close
+   * shows for a few seconds over answers, notes or translation.
+   */
+  private navScreen(text: string, kind: NavScreenKind): void {
+    if (kind === "message") this.flash(text, this.nav.busy ? NAV_BUSY_MS : NAV_MSG_MS)
+    else if (this.phase === "idle" && this.clearTimer_ == null) this.show(fitScreen(text))
+    else if (kind === "turn") this.flash(text, NAV_TURN_MS)
+  }
+
+  private async locate(): Promise<{lat: number; lng: number} | null> {
+    try {
+      return (await this.deps.nav?.locate()) ?? null
+    } catch (e) {
+      this.addLog("info", `Геопозиция: ${explainNavError((e as Error)?.message ?? e)} — ищу без неё`)
+      return null
+    }
+  }
+
+  /** What to type into the map search: a Russian name is first turned into what the map knows. */
+  private async mapQueries(query: string, near: {lat: number; lng: number} | null): Promise<string[]> {
+    const queries: string[] = []
+    const provider = asProvider(this.settings.provider)
+    if (/[а-яё]/iu.test(query) && keyFor(this.settings, provider)) {
+      try {
+        const {system, user} = buildMapQueryPrompt(query, near)
+        const q = cleanMapQuery(await this.completeOnce(system, user))
+        if (q) {
+          queries.push(q)
+          if (normalize(q) !== normalize(query)) this.addLog("nav", `Ищу на карте: ${q}`)
+        }
+      } catch (e) {
+        const err = e as LLMError
+        this.addLog("error", `Не удалось уточнить место: ${explainLLMError(err?.provider ?? provider, Number(err?.status) || 0, String(err?.code ?? ""), String(err?.message ?? ""))}`)
+      }
+    }
+    if (!queries.includes(query)) queries.push(query)
+    return queries
+  }
+
+  /** Place search near the user for a spoken destination: the best match with coordinates. */
+  private async findPlace(query: string): Promise<Place | null> {
+    const host = this.deps.nav
+    if (!host) return null
+    const near = await this.locate()
+    for (const q of await this.mapQueries(query, near)) {
+      const found = await host.suggest(q, near)
+      for (const sug of found.slice(0, 3)) {
+        const place = await this.placeFor(sug)
+        if (place) {
+          this.addLog("nav", `Найдено: ${place.name}${place.address ? ", " + place.address : ""}`)
+          return place
+        }
+      }
+    }
+    return null
+  }
+
+  /** Coordinates for a search result; null when Mentra cannot resolve it. */
+  async placeFor(sug: PlaceSuggestion): Promise<Place | null> {
+    let place: Place | null = null
+    try {
+      place = (await this.deps.nav?.details(sug.placeId)) ?? null
+    } catch {
+      place = null
+    }
+    if (!place || !Number.isFinite(place.lat) || !Number.isFinite(place.lng)) return null
+    return {...place, name: place.name || sug.mainText, address: place.address || sug.secondaryText}
+  }
+
+  /** Search from the app: the list to pick from. */
+  async searchPlaces(query: string): Promise<PlaceSuggestion[]> {
+    const host = this.deps.nav
+    const q = String(query ?? "").trim()
+    if (!host || !q) return []
+    const near = await this.locate()
+    const seen = new Set<string>()
+    const out: PlaceSuggestion[] = []
+    for (const mq of await this.mapQueries(q, near)) {
+      for (const sug of await host.suggest(mq, near)) {
+        if (seen.has(sug.placeId)) continue
+        seen.add(sug.placeId)
+        out.push(sug)
+      }
+      if (out.length >= 5) break
+    }
+    return out.slice(0, 8)
+  }
+
   // ───────────────────────────── state for the phone UI ─────────────────────────────
 
   snapshot() {
@@ -1288,7 +1564,9 @@ Notes are in the app.`
             ? this.lecture.screen
             : this.phase === "talk"
               ? this.talk.screen
-              : this.pages[this.page] ?? "",
+              : this.phase === "idle" && this.nav.active
+                ? this.nav.screen
+                : this.pages[this.page] ?? "",
       translating: this.phase === "translating",
       lastTranscript: this.lastTranscript,
       lastQuestion: this.lastQuestion,
@@ -1298,6 +1576,16 @@ Notes are in the app.`
       ownerVoice: this.ownerVoice,
       lecture: lectureSnapshot(this.lecture.active, this.lecture.record),
       talk: lectureSnapshot(this.talk.active, this.talk.record),
+      nav: {
+        problem: this.navProblem(),
+        active: this.nav.active,
+        busy: this.nav.busy,
+        dest: this.nav.dest,
+        mode: this.nav.mode,
+        screen: this.nav.screen,
+        message: this.nav.message,
+        left: this.nav.left(),
+      },
       glassesConnected: this.glassesConnected,
       settings: {
         ...this.settings,

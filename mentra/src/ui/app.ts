@@ -38,7 +38,7 @@ let modelOptionsFor: Provider | null = null
 let sheetProvider: Provider = "openai"
 const TABS = ["glasses", "chat", "settings"] as const
 type Tab = (typeof TABS)[number]
-const PAGES = ["ai", "keys", "about", "voice", "display", "translate", "lecture", "talk", "log", "info", "notes", "commands"] as const
+const PAGES = ["ai", "keys", "about", "voice", "display", "translate", "lecture", "talk", "log", "info", "notes", "commands", "nav"] as const
 type Page = (typeof PAGES)[number]
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
@@ -83,6 +83,7 @@ function previewBridge(): Bridge {
       lectureEverySec: 15,
       talkEverySec: 10,
       talkGoal: "Договориться о скидке на ремонт",
+      navMode: "walking",
       provider: "anthropic",
       anthropicModel: "claude-haiku-5-5",
       geminiModel: "gemini-3.8-flash",
@@ -94,6 +95,16 @@ function previewBridge(): Bridge {
         anthropic: {has: true, hint: "sk-ant-…x9Qa"},
         gemini: {has: false, hint: ""},
       },
+    },
+    nav: {
+      problem: "",
+      active: false,
+      busy: false,
+      dest: null,
+      mode: "walking",
+      screen: "",
+      message: "",
+      left: "",
     },
     historyCount: 4,
     history: [
@@ -152,6 +163,28 @@ function previewBridge(): Bridge {
         state.talk = {...state.talk, active: false, endedAt: Date.now()}
       }
       if (channel === "getTalk") return state.talk
+      if (channel === "navSearch")
+        return {
+          ok: true,
+          results: [
+            {placeId: "a", mainText: "Trinity College Dublin", secondaryText: "College Green, Dublin 2"},
+            {placeId: "b", mainText: "Trinity College Library", secondaryText: "College St, Dublin 2"},
+            {placeId: "c", mainText: "Trinity Street", secondaryText: "Dublin 2"},
+          ],
+        }
+      if (channel === "navGo") {
+        state.phase = "idle"
+        state.currentScreen = "→ Направо через 120 м\nна Grafton Street\nTrinity College Dublin: 850 м, 11 мин"
+        state.nav = {
+          ...state.nav,
+          active: true,
+          dest: {name: payload?.mainText || "Trinity College Dublin", address: payload?.secondaryText || "College Green, Dublin 2"},
+          mode: payload?.mode ?? "walking",
+          screen: state.currentScreen,
+          left: "850 м, 11 мин",
+        }
+      }
+      if (channel === "navStop") state.nav = {...state.nav, active: false, dest: null, screen: "", left: ""}
       return state
     },
     on() {
@@ -260,6 +293,7 @@ function render(s: any) {
   if (!s) return
   const st = s.settings ?? {}
   renderGlasses(s, st)
+  renderNavigator(s, st)
   renderChat(s)
   renderNotes(s)
   renderSettings(s, st)
@@ -284,12 +318,14 @@ function renderGlasses(s: any, st: any) {
     .querySelectorAll<HTMLButtonElement>("button")
     .forEach((b) => b.setAttribute("aria-selected", String(b.dataset.mode === mode)))
 
-  // in translation, lecture and conversation modes the arrows page nothing and «Скрыть» turns the mode off
+  // in translation, lecture and conversation modes the arrows page nothing and «Скрыть» turns the mode off;
+  // with only the route on the glasses the button ends the route
   const listening = mode !== "assistant"
+  const routeOnly = !listening && s.phase === "idle" && Boolean(s.nav?.active)
   document.querySelectorAll<HTMLElement>('.lens-controls [data-cmd="prev"], .lens-controls [data-cmd="next"]').forEach((b) => {
-    b.style.visibility = listening ? "hidden" : ""
+    b.style.visibility = listening || routeOnly ? "hidden" : ""
   })
-  $("hideBtn").textContent = listening ? "Выключить" : "Скрыть"
+  $("hideBtn").textContent = listening ? "Выключить" : routeOnly ? "Завершить маршрут" : "Скрыть"
 
   const wake = capitalize(String((st.wakeWords ?? [])[0] ?? "вопрос"))
   $("wakeHint").textContent = `«${wake}, …»`
@@ -306,6 +342,9 @@ function renderGlasses(s: any, st: any) {
     dim = !s.currentScreen
   } else if (s.phase === "talk") {
     text = s.currentScreen || "Слушаю разговор…"
+    dim = !s.currentScreen
+  } else if (s.phase === "idle" && s.nav?.active) {
+    text = s.currentScreen || "Маршрут построен"
     dim = !s.currentScreen
   } else if (s.phase === "idle") {
     text = s.lastError || `Скажите «${wake}, …»`
@@ -334,7 +373,9 @@ function renderGlasses(s: any, st: any) {
           ? `Тезисы ${st.translateTo === "en-US" ? "по-английски" : "по-русски"}`
           : s.phase === "talk"
             ? "Подсказки по ходу разговора"
-            : (PHASE[s.phase] ?? s.phase)
+            : s.phase === "idle" && s.nav?.active
+              ? "Навигатор"
+              : (PHASE[s.phase] ?? s.phase)
 
   const dots = $("pageDots")
   dots.textContent = ""
@@ -354,6 +395,103 @@ function renderGlasses(s: any, st: any) {
   $("aiName").textContent = st.aiName ?? PROVIDERS[p].label
   const quick = $<HTMLSelectElement>("quickProvider")
   if (document.activeElement !== quick) quick.value = p
+}
+
+// ───────────────────────── navigator ─────────────────────────
+
+const NAV_MODE_LABEL: Record<string, string> = {walking: "пешком", driving: "на машине", cycling: "на велосипеде"}
+let navMode = "walking"
+let navResults: {placeId: string; mainText: string; secondaryText: string}[] = []
+
+function renderNavigator(s: any, st: any) {
+  const nav = s.nav ?? {}
+  if (!pending.navMode) navMode = st.navMode ?? navMode
+  $("navModes")
+    .querySelectorAll<HTMLButtonElement>("[data-nav-mode]")
+    .forEach((b) => b.setAttribute("aria-checked", String(b.dataset.navMode === navMode)))
+
+  const dest = nav.dest?.name ?? ""
+  $("navRowSub").textContent = nav.active
+    ? [dest, nav.left].filter(Boolean).join(" · ")
+    : nav.busy
+      ? "Строю маршрут…"
+      : "«Проведи до …»"
+
+  $("navTrip").hidden = !nav.active
+  if (nav.active) {
+    const lines = String(nav.screen ?? "").split("\n")
+    const isTurn = /^[←→↑↓•]/.test(lines[0] ?? "")
+    // «120 м» stays on one line
+    const nb = (t: string) => t.replace(/(\d) (?=(?:м|км|мин|ч)\b)/gu, "$1\u00a0")
+    $("navTurn").textContent = isTurn ? nb(lines[0]) : ""
+    $("navRoad").textContent = isTurn && /^на /.test(lines[1] ?? "") ? lines[1] : ""
+    $("navDest").textContent = dest
+    $("navLeft").textContent = nb([nav.left, NAV_MODE_LABEL[nav.mode] ?? ""].filter(Boolean).join(" · ") || nav.dest?.address || "")
+  }
+  $("navProblem").textContent = nav.problem ? `${capitalize(nav.problem)}.` : ""
+  $("navProblem").hidden = !nav.problem
+  // what the navigator said last (searching, not found…) — only while it is current
+  if (nav.busy || (!nav.active && nav.message)) $("navMsg").textContent = String(nav.message ?? "").replace(/\n/g, " ")
+  else if (!navSearching) $("navMsg").textContent = ""
+}
+
+let navSearching = false
+
+function renderNavResults() {
+  const box = $("navResults")
+  box.textContent = ""
+  box.hidden = navResults.length === 0
+  for (const r of navResults) {
+    const b = document.createElement("button")
+    b.type = "button"
+    b.className = "item place"
+    const label = document.createElement("span")
+    label.className = "row-label"
+    label.textContent = r.mainText
+    if (r.secondaryText) {
+      const sub = document.createElement("span")
+      sub.className = "row-sub"
+      sub.textContent = r.secondaryText
+      label.appendChild(sub)
+    }
+    const go = document.createElement("span")
+    go.className = "go"
+    go.innerHTML = '<svg><use href="#i-arrow" /></svg>'
+    b.append(label, go)
+    b.addEventListener("click", () => startRoute(r))
+    box.appendChild(b)
+  }
+}
+
+async function searchPlaces(query: string) {
+  navSearching = true
+  $("navMsg").textContent = "Ищу…"
+  navResults = []
+  renderNavResults()
+  let r: any = null
+  try {
+    r = await bridge.request("navSearch", {query}, {timeout: 40000})
+  } catch (e: any) {
+    r = {ok: false, error: e?.message ?? String(e)}
+  }
+  navSearching = false
+  if (!r?.ok) {
+    $("navMsg").textContent = `Поиск не удался: ${r?.error ?? "нет ответа"}`
+    return
+  }
+  navResults = r.results ?? []
+  $("navMsg").textContent = navResults.length ? "" : "Ничего не нашлось. Попробуйте название, адрес или улицу."
+  renderNavResults()
+}
+
+async function startRoute(r: {placeId: string; mainText: string; secondaryText: string}) {
+  const s = await call("navGo", {...r, mode: navMode}, 45000)
+  if (!s) return
+  if (s.navError) return toast(s.navError)
+  navResults = []
+  renderNavResults()
+  $<HTMLInputElement>("navQuery").value = ""
+  toast(`Строю маршрут до «${r.mainText}» — смотрите на очки`)
 }
 
 let chatKey = ""
@@ -594,6 +732,7 @@ const KIND_LABEL: Record<string, string> = {
   translate: "перевод",
   lecture: "лекция",
   talk: "беседа",
+  nav: "навигатор",
 }
 
 async function copyText(text: string): Promise<void> {
@@ -806,7 +945,10 @@ function wire() {
   document.querySelectorAll<HTMLElement>(".back").forEach((b) => b.addEventListener("click", back))
 
   document.querySelectorAll<HTMLButtonElement>("[data-cmd]").forEach((b) =>
-    b.addEventListener("click", () => call("command", {cmd: b.dataset.cmd})),
+    b.addEventListener("click", () => {
+      if (b.id === "hideBtn" && current?.phase === "idle" && current?.nav?.active) return call("navStop")
+      call("command", {cmd: b.dataset.cmd})
+    }),
   )
 
   // Bluetooth page turners and presenters act as a keyboard. iOS hands their key presses only
@@ -914,6 +1056,27 @@ function wire() {
     await copyText(text)
     toast(which === "talk" ? "Подсказки скопированы" : "Конспект скопирован")
   })
+
+  $("navForm").addEventListener("submit", (e) => {
+    e.preventDefault()
+    const input = $<HTMLInputElement>("navQuery")
+    const q = input.value.trim()
+    if (!q) return input.focus()
+    input.blur()
+    searchPlaces(q)
+  })
+  $("navModes")
+    .querySelectorAll<HTMLButtonElement>("[data-nav-mode]")
+    .forEach((b) =>
+      b.addEventListener("click", () => {
+        navMode = b.dataset.navMode!
+        $("navModes")
+          .querySelectorAll<HTMLButtonElement>("[data-nav-mode]")
+          .forEach((x) => x.setAttribute("aria-checked", String(x === b)))
+        queueSave({navMode}, 0)
+      }),
+    )
+  $("navStop").addEventListener("click", () => call("navStop"))
 
   wireSettings()
 }

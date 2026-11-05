@@ -36,6 +36,26 @@ function iosLocalStorage(store: Map<string, string>) {
   }
 }
 
+/** What the fake Mentra answers to location and navigation requests (the real app's reply shapes). */
+const NAV_REPLIES: Record<string, (p: any) => unknown> = {
+  miniapp_location_poll: () => ({lat: 53.3498, lng: -6.2603, accuracy: 12, timestamp: Date.now()}),
+  miniapp_navigation_place_autocomplete: (p) => ({
+    ok: true,
+    suggestions: /trinity/i.test(p.query) ? [{placeId: "poi.trinity", mainText: "Trinity College Dublin", secondaryText: "College Green, Dublin 2"}] : [],
+  }),
+  miniapp_navigation_place_details: (p) => ({
+    ok: true,
+    place: {placeId: p.placeId, name: "Trinity College Dublin", address: "College Green, Dublin 2", lat: 53.3438, lng: -6.2546},
+  }),
+  miniapp_navigation_request_permission: () => ({ok: true, accepted: true}),
+  miniapp_navigation_compute_route: () => ({
+    ok: true,
+    routes: [{points: [{lat: 53.3498, lng: -6.2603}, {lat: 53.3438, lng: -6.2546}], totalDistanceMeters: 850, totalDurationSeconds: 660, steps: []}],
+  }),
+  miniapp_navigation_start: () => ({ok: true}),
+  miniapp_navigation_get_state: () => ({ok: true, state: null}),
+}
+
 function makeHost(openaiAnswers: string[], store = new Map<string, string>()) {
   const sent: Env[] = []
   const openaiCalls: any[] = []
@@ -57,12 +77,13 @@ function makeHost(openaiAnswers: string[], store = new Map<string, string>()) {
           packageName: "com.g1gpt.assistant",
           capabilities: {modelName: "Even Realities G1", display: {width: 640, height: 200, canPosition: false}},
           visibility: "foreground",
-          permissions: {MICROPHONE: true},
+          // canonical names, as Mentra sends them (computed from the installed miniapp.json)
+          permissions: {microphone: true, location: true, camera: false, notifications: false, calendar: false},
           configuration: {},
         },
       })
     } else if (env.requestId) {
-      const data = type === "miniapp_render" ? {status: "displayed", degraded: true} : null
+      const data = type === "miniapp_render" ? {status: "displayed", degraded: true} : (NAV_REPLIES[type]?.(env.payload) ?? null)
       deliver({payload: {type: "miniapp_request_result", ok: true, data}, requestId: env.requestId})
     }
     return null
@@ -310,4 +331,62 @@ test("built bundle: Mentra's speaker label reaches the app («голос 1»)", 
   const st = h.uiReplies().find((e) => e.payload.requestId === "g1")!.payload.payload.result
   expect(st.ownerVoice).toBe("1")
   expect(st.log.some((l: any) => l.msg === "[голос 1] Вопрос, привет")).toBe(true)
+}, 15000)
+
+test("built bundle: navigator — «Проведи до Тринити-колледжа» → Mentra search and route → turns on the glasses", async () => {
+  const h = makeHost(["Trinity College Dublin"])
+  vm.runInContext(readFileSync(BUNDLE, "utf8"), h.ctx, {filename: "background/index.js"})
+  h.ctx.__mentraInitCallback("s")
+  await sleep(50)
+  h.ev("_ui", {type: "UI_OPEN"})
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "saveSettings", payload: {apiKey: "sk-test-abcdefghijklmnop"}, seq: 1, requestId: "r1"})
+  await sleep(30)
+
+  h.ev("transcription:ru-RU", {text: "Проведи до Тринити-колледжа пешком.", isFinal: true})
+  await sleep(120)
+  const types = h.sent.map((e) => e.payload?.type)
+  // the name goes through the AI, then Mentra's map search near the user, then its navigator
+  expect(h.openaiCalls).toHaveLength(1)
+  const auto = h.sent.find((e) => e.payload?.type === "miniapp_navigation_place_autocomplete")!.payload
+  expect(auto.query).toBe("Trinity College Dublin")
+  expect(auto.near).toEqual({lat: 53.3498, lng: -6.2603})
+  const details = h.sent.find((e) => e.payload?.type === "miniapp_navigation_place_details")!.payload
+  expect(details.sessionToken).toBe(auto.sessionToken)
+  expect(types).toContain("miniapp_navigation_request_permission")
+  const start = h.sent.find((e) => e.payload?.type === "miniapp_navigation_start")!.payload
+  expect(start).toMatchObject({lat: 53.3438, lng: -6.2546, mode: "walking"})
+  expect(h.renders()).toContain("Ищу: Тринити-колледжа…")
+  expect(h.renders().at(-1)).toMatch(/^Маршрут до Trinity College Dublin\nпешком/)
+
+  // Mentra's live updates
+  await sleep(4800)
+  h.ev("navigation_update", {kind: "maneuver", maneuverType: "TURN_RIGHT", distanceMeters: 140, nextStepRoad: "Grafton Street", distanceToDestinationMeters: 850, timeToDestinationSeconds: 660})
+  await sleep(30)
+  expect(h.renders().at(-1)).toBe("→ Направо через 140 м\nна Grafton Street\nTrinity College Dublin: 850 м, 11 мин")
+
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "getState", payload: {}, seq: 2, requestId: "g1"})
+  await sleep(30)
+  const st = h.uiReplies().find((e) => e.payload.requestId === "g1")!.payload.payload.result
+  expect(st.nav).toMatchObject({active: true, problem: "", left: "850 м, 11 мин", dest: {name: "Trinity College Dublin"}})
+
+  // stop from the phone
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "navStop", payload: {}, seq: 3, requestId: "n1"})
+  await sleep(30)
+  expect(h.sent.some((e) => e.payload?.type === "miniapp_navigation_stop")).toBe(true)
+  expect(h.renders().at(-1)).toBe("<clear>")
+}, 15000)
+
+test("built bundle: navigator search from the phone", async () => {
+  const h = makeHost([])
+  vm.runInContext(readFileSync(BUNDLE, "utf8"), h.ctx, {filename: "background/index.js"})
+  h.ctx.__mentraInitCallback("s")
+  await sleep(50)
+  h.ev("_ui", {type: "UI_OPEN"})
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "navSearch", payload: {query: "Trinity College"}, seq: 1, requestId: "s1"})
+  await sleep(60)
+  const res = h.uiReplies().find((e) => e.payload.requestId === "s1")!.payload.payload.result
+  expect(res).toEqual({ok: true, results: [{placeId: "poi.trinity", mainText: "Trinity College Dublin", secondaryText: "College Green, Dublin 2"}]})
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "navGo", payload: {...res.results[0], mode: "cycling"}, seq: 2, requestId: "s2"})
+  await sleep(80)
+  expect(h.sent.find((e) => e.payload?.type === "miniapp_navigation_start")!.payload).toMatchObject({mode: "cycling", lat: 53.3438})
 }, 15000)

@@ -360,3 +360,79 @@ export function parsePhraseRequest(text: string): PhraseRequest | null {
   }
   return null
 }
+
+// ───────────────────────── navigator ─────────────────────────
+
+export type TravelMode = "walking" | "driving" | "cycling"
+
+export type NavCommand =
+  | {kind: "go"; query: string; mode: TravelMode | null}
+  | {kind: "stop"}
+  | {kind: "status"}
+  /** «Навигатор», «Проложи маршрут» without a destination: ask where to. */
+  | {kind: "ask"; mode: TravelMode | null}
+
+const NAV_STOP = [
+  "стоп навигация", "стоп навигатор", "стоп маршрут", "выключи навигатор", "выключи навигацию", "отмени маршрут",
+  "отмена маршрута", "конец маршрута", "закончи маршрут", "закончи навигацию", "останови навигацию", "хватит навигации",
+  "навигатор стоп", "навигация стоп", "маршрут стоп", "выключи маршрут",
+  "stop navigation", "end navigation", "cancel route", "cancel navigation",
+]
+const NAV_STATUS = [
+  "сколько осталось", "сколько еще", "сколько еще идти", "сколько еще ехать", "сколько идти", "сколько ехать",
+  "когда придем", "когда приедем", "далеко еще", "долго еще", "how far", "how long", "how much longer",
+]
+// Not a bare «маршрут» or «навигация»: said in passing, they would make the next phrase a destination.
+const NAV_ASK = [
+  "навигатор", "включи навигатор", "включи навигацию", "открой навигатор", "проложи маршрут", "построй маршрут",
+  "проложи мне маршрут", "navigator", "start navigation",
+]
+const NAV_STOP_SET = new Set(NAV_STOP.map((p) => normalize(p)))
+const NAV_ASK_SET = new Set(NAV_ASK.map((p) => normalize(p)))
+const NAV_STATUS_SET = new Set(NAV_STATUS.map((p) => normalize(p)))
+
+/** Phrases that start a route; the destination follows. */
+const NAV_GO =
+  /^(?:(?:ну|а|и|слушай|пожалуйста|давай)\s+)*(?:(?:навигатор|навигация|маршрут)(?:\s+(?:до|к|ко|в|во|на))?|(?:проложи|построй|покажи)\s+(?:мне\s+)?(?:маршрут|дорогу|путь)\s+(?:до|к|ко|в|во|на)|(?:проведи|веди|отведи|доведи|отвези|довези|подвези)\s+(?:меня\s+)?(?:до|к|ко|в|во|на)|как\s+(?:мне\s+)?(?:дойти|пройти|доехать|добраться|проехать|попасть)\s+(?:до|к|ко|в|во|на)|(?:navigate|directions|take me|get me|route)\s+to|how\s+(?:do|can)\s+i\s+get\s+to)\s+(.+)$/iu
+
+const MODE_WORDS: [RegExp, TravelMode][] = [
+  [/\s*,?\s*(?:пешком|на ногах|by foot|on foot|walking)\s*$/iu, "walking"],
+  [/\s*,?\s*(?:на машине|на авто|на автомобиле|на такси|by car|driving)\s*$/iu, "driving"],
+  [/\s*,?\s*(?:на велосипеде|на велике|by bike|cycling)\s*$/iu, "cycling"],
+]
+
+/**
+ * «Проведи до Тринити-колледжа пешком» → go; «Стоп навигация» → stop; «Сколько осталось?» → status.
+ * The mode comes from words («пешком», «на машине», «доехать», «отвези») or is null (use the default).
+ */
+export function parseNavCommand(text: string): NavCommand | null {
+  const raw = String(text ?? "").replace(/\s+/g, " ").trim().replace(/[?？!.…]+$/u, "").trim()
+  if (!raw) return null
+  const n = normalize(raw)
+  if (NAV_STOP_SET.has(n)) return {kind: "stop"}
+  if (NAV_STATUS_SET.has(n)) return {kind: "status"}
+  for (const [re, md] of MODE_WORDS) {
+    const bare = re.test(raw) ? normalize(raw.replace(re, "")) : ""
+    if (bare && NAV_ASK_SET.has(bare)) return {kind: "ask", mode: md}
+  }
+  if (NAV_ASK_SET.has(n)) return {kind: "ask", mode: null}
+  const m = NAV_GO.exec(raw)
+  if (!m) return null
+  let query = m[1].trim()
+  let mode: TravelMode | null = null
+  for (const [re, md] of MODE_WORDS) {
+    if (re.test(query)) {
+      mode = md
+      query = query.replace(re, "").trim()
+      break
+    }
+  }
+  if (!mode) {
+    const verb = normalize(raw.slice(0, raw.length - m[1].length))
+    if (/(доехать|проехать|отвези|довези|подвези)/.test(verb)) mode = "driving"
+    else if (/(дойти|пройти)/.test(verb)) mode = "walking"
+  }
+  query = query.replace(/^[«"“„']+|[»"”']+$/gu, "").replace(/[,.]+$/u, "").trim()
+  if (!query || query.split(/\s+/).length > 10) return null
+  return {kind: "go", query, mode}
+}
