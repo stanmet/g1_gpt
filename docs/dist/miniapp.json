@@ -1,6 +1,6 @@
 {
   "packageName": "com.g1gpt.assistant",
-  "version": "1.12.1",
+  "version": "1.12.2",
   "name": "EVA-IA",
   "description": "Голосовой помощник для Even Realities G1: ChatGPT, Claude или Gemini, перевод речи, тезисы лекций и подсказки в разговоре",
   "icon": "icon.png",

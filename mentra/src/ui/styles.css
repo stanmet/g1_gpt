@@ -938,8 +938,13 @@ p {
   padding: 30px 24px 26px;
   text-align: center;
 }
-.glasses-art.big {
-  width: 160px;
+.app-icon {
+  display: block;
+  width: 104px;
+  height: 104px;
+  margin: 0 auto;
+  border-radius: 23px;
+  box-shadow: 0 10px 26px -10px rgba(0, 0, 0, 0.45);
 }
 .about-name {
   margin-top: 16px;
