@@ -1,6 +1,6 @@
 {
   "packageName": "com.g1gpt.assistant",
-  "version": "1.9.3",
+  "version": "1.10.0",
   "name": "GPT для G1",
   "description": "Голосовой помощник для Even Realities G1: ChatGPT, Claude или Gemini, перевод речи, тезисы лекций и подсказки в разговоре",
   "icon": "icon.png",

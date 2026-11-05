@@ -543,7 +543,7 @@ function renderNotes(s: any) {
   const list = $("lectureNotes")
   list.dataset.empty = isTalk ? "Пока нет подсказок — они появятся, когда в разговоре прозвучит вопрос с фактами." : ""
   list.textContent = ""
-  const who: Record<string, string> = {you: "Вы: ", qa: isTalk ? "Вопрос: " : "Лектор: ", hint: "Подсказка: "}
+  const who: Record<string, string> = {you: "Вы: ", qa: isTalk ? "Вопрос: " : "Лектор: ", hint: "Подсказка: ", quote: "Цитата: "}
   for (const n of [...r.notes].reverse()) {
     const li = document.createElement("li")
     li.className = n.kind

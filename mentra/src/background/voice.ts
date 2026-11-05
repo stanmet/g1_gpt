@@ -287,3 +287,76 @@ export function parseTalkCommand(text: string): TalkCommand | null {
   while (words.length > 1 && FILLERS.test(words[words.length - 1])) words = words.slice(0, -1)
   return TALK_LOOKUP.get(words.join(" ")) ?? null
 }
+
+// ───────────────────────── «как будет на английском …» ─────────────────────────
+
+/** Languages a word or phrase can be asked in; BCP-47-ish short codes. */
+export type PhraseLang = "en" | "ru" | "de" | "fr" | "es" | "it" | "zh" | "ja"
+
+export const PHRASE_LANG_NAME: Record<PhraseLang, string> = {
+  en: "английский", ru: "русский", de: "немецкий", fr: "французский", es: "испанский", it: "итальянский",
+  zh: "китайский", ja: "японский",
+}
+
+const LANG_STEMS: [RegExp, PhraseLang][] = [
+  [/^(англ|english)/, "en"], [/^(русск|russian)/, "ru"], [/^(немец|german)/, "de"], [/^(француз|french)/, "fr"],
+  [/^(испан|spanish)/, "es"], [/^(итальян|italian)/, "it"], [/^(китай|chinese)/, "zh"], [/^(япон|japanese)/, "ja"],
+]
+
+function langOf(word: string | undefined): PhraseLang | null {
+  const w = String(word ?? "").toLowerCase()
+  for (const [re, l] of LANG_STEMS) if (re.test(w)) return l
+  return null
+}
+
+const L = "(англ\\S*|русск\\S*|немецк\\S*|французск\\S*|испанск\\S*|итальянск\\S*|китайск\\S*|японск\\S*)"
+const IN_LANG = `(?:на\\s+${L}(?:\\s+язык\\S*)?|по[-\\s]${L})`
+const ASK = "(?:а\\s+|и\\s+|слушай,?\\s+|скажи,?\\s+)?как\\s+(?:будет|сказать|это\\s+будет|это|перевести|переводится|называется)?"
+const EN_LANGS = "(english|russian|german|french|spanish|italian|chinese|japanese)"
+const PATTERNS: {re: RegExp; lang: (m: RegExpExecArray) => PhraseLang | null; phrase: (m: RegExpExecArray) => string}[] = [
+  // «как будет на английском стол», «как по-английски «спасибо»», «как сказать по-английски: до свидания»
+  {re: new RegExp(`^${ASK}\\s*${IN_LANG}\\s*(?:будет\\s+)?[:,—–-]?\\s*(.*)$`, "iu"), lang: (m) => langOf(m[1] ?? m[2]), phrase: (m) => m[3]},
+  // «как будет стол на английском», «как сказать спасибо по-английски?»
+  {re: new RegExp(`^${ASK}\\s+(.+?)\\s+${IN_LANG}\\s*$`, "iu"), lang: (m) => langOf(m[2] ?? m[3]), phrase: (m) => m[1]},
+  // «переведи на английский стол», «переведи стол на английский»
+  {re: new RegExp(`^(?:пожалуйста,?\\s+)?переведи(?:те)?\\s+${IN_LANG}\\s*[:,—–-]?\\s*(.*)$`, "iu"), lang: (m) => langOf(m[1] ?? m[2]), phrase: (m) => m[3]},
+  {re: new RegExp(`^(?:пожалуйста,?\\s+)?переведи(?:те)?\\s+(.+?)\\s+${IN_LANG}\\s*$`, "iu"), lang: (m) => langOf(m[2] ?? m[3]), phrase: (m) => m[1]},
+  // «how do you say table in Russian», «what is "thank you" in German»
+  {re: new RegExp(`^(?:so\\s+|and\\s+)?how\\s+(?:do\\s+(?:you|i|we)\\s+say|to\\s+say|would\\s+you\\s+say|is)\\s+(.+?)\\s+in\\s+${EN_LANGS}\\s*$`, "iu"), lang: (m) => langOf(m[2]), phrase: (m) => m[1]},
+  {re: new RegExp(`^(?:so\\s+|and\\s+)?what(?:'s|\\s+is)\\s+(.+?)\\s+in\\s+${EN_LANGS}\\s*$`, "iu"), lang: (m) => langOf(m[2]), phrase: (m) => m[1]},
+  {re: new RegExp(`^(?:please\\s+)?translate\\s+(.+?)\\s+(?:in)?to\\s+${EN_LANGS}\\s*$`, "iu"), lang: (m) => langOf(m[2]), phrase: (m) => m[1]},
+]
+
+export interface PhraseRequest {
+  lang: PhraseLang
+  /** The word or phrase to translate; "" when it is still to come («Как будет на английском…» + pause). */
+  phrase: string
+}
+
+/**
+ * «Как будет на английском стол?» → {lang: "en", phrase: "стол"}. Also «как по-английски …»,
+ * «как сказать … по-немецки», «переведи … на английский», «how do you say … in Russian».
+ */
+export function parsePhraseRequest(text: string): PhraseRequest | null {
+  const t = String(text ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[?？!.…]+$/u, "")
+    .trim()
+  if (!t) return null
+  for (const p of PATTERNS) {
+    const m = p.re.exec(t)
+    if (!m) continue
+    const lang = p.lang(m)
+    if (!lang) continue
+    const phrase = String(p.phrase(m) ?? "")
+      .trim()
+      .replace(/^[«"“'„]+|[»"”']+$/gu, "")
+      .replace(/[?？!.…,]+$/u, "")
+      .trim()
+    if (phrase.split(/\s+/).length > 14) return null
+    if (/^(это|этот|эта|это слово|эту фразу)$/i.test(phrase)) return {lang, phrase: ""}
+    return {lang, phrase}
+  }
+  return null
+}

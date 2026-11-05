@@ -1014,3 +1014,8 @@ textarea::placeholder {
 .notes li.tip b {
   font-weight: 600;
 }
+.notes li.quote::before {
+  content: "«";
+  font-weight: 700;
+  color: #e0a100;
+}

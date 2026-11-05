@@ -19,7 +19,7 @@ export interface LectureNote {
    * point = key point from the lecture; qa = someone asked (the lecturer, the other person), the AI
    * answered; you = the user asked («Вопрос, …»); hint = the user trailed off («X — это…») and got a prompt.
    */
-  kind: "point" | "qa" | "you" | "hint" | "tip"
+  kind: "point" | "qa" | "you" | "hint" | "tip" | "quote"
   text: string
   q?: string
 }
@@ -131,6 +131,7 @@ export function buildPointsPrompt(prevPoints: string[], chunk: string, lang: Lan
     "Тебе дают свежий фрагмент речи лектора, распознанный автоматически: возможны ошибки распознавания и обрывки фраз — угадывай смысл по контексту.",
     `Выдели суть: ${maxPoints <= 1 ? "один короткий тезис" : `1–${maxPoints} коротких тезиса (чаще хватает одного)`} на ${langName(lang)} языке, каждый с новой строки и начинается с «• », не длиннее 12 слов.`,
     "Не переводи и не пересказывай дословно — только главное: определения, утверждения, формулы, числа и даты, примеры, выводы. Термины можно оставлять в оригинале.",
+    "Если лектор цитирует кого-то, сделай отдельный тезис «Цитата: автор (источник) — суть»; если цитату приписали не тому — укажи настоящего автора.",
     "Не повторяй уже записанные тезисы. Если во фрагменте нет ничего содержательного (приветствие, организационные моменты, шум, повтор), ответь ровно SKIP.",
     "Без Markdown, без вступлений и пояснений.",
   ].join("\n")
@@ -346,6 +347,23 @@ export class Lecture {
     this.armFlush()
   }
 
+  /** Something answered on its own path («как будет по-английски …»): shown like an answer, held, noted. */
+  async aside(placeholder: string, run: () => Promise<{q: string; a: string} | null>): Promise<void> {
+    if (!this.active) return
+    const session = this.session
+    this.setScreen(answerScreen(placeholder, "…"))
+    try {
+      const qa = await run()
+      if (session !== this.session || !qa) return
+      this.addNote({t: this.deps.now(), kind: "you", q: qa.q, text: qa.a})
+      this.setScreen(answerScreen(qa.q, qa.a))
+      this.hold()
+    } catch (e) {
+      if (session !== this.session) return
+      this.showError(e)
+    }
+  }
+
   /** The user's own question during the lecture («Вопрос, …»). */
   askUser(question: string): void {
     if (!this.active || !question.trim()) return
@@ -504,7 +522,13 @@ export function notesAsText(
   const head = `${opts.title ?? "Конспект лекции"} — ${fmtTime(record.startedAt)}`
   const label = (k: LectureNote["kind"]) => (k === "you" ? "Мой вопрос" : k === "hint" ? "Подсказка" : (opts.asked ?? "Вопрос лектора"))
   const lines = record.notes.map((n) =>
-    n.kind === "point" ? `• ${n.text}` : n.kind === "tip" ? `${n.q}: ${n.text}` : `${label(n.kind)}: ${n.q ?? ""}\n  → ${n.text}`,
+    n.kind === "point"
+      ? `• ${n.text}`
+      : n.kind === "tip"
+        ? `${n.q}: ${n.text}`
+        : n.kind === "quote"
+          ? `Цитата: «${n.q ?? ""}» — ${n.text}`
+          : `${label(n.kind)}: ${n.q ?? ""}\n  → ${n.text}`,
   )
   return [head, "", ...lines].join("\n")
 }

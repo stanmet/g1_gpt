@@ -907,3 +907,66 @@ describe("review fixes", () => {
     expect(e.a.log.some((l) => l.msg.includes("Микрофон выключен"))).toBe(true)
   })
 })
+
+describe("«как будет на английском …» in every mode", () => {
+  test("assistant mode: without the activator, with it, and with the word after a pause", async () => {
+    const e = setup(["table", "thank you", "refrigerator"])
+    e.a.onTranscript("Как будет на английском стол?", true)
+    expect(e.shown.at(-1)).toBe("стол → …")
+    await e.clock.advance(10)
+    expect(e.requests[0].body.instructions).toContain("Переведи слово или фразу на английский")
+    expect(e.requests[0].body.input).toEqual([{role: "user", content: "стол"}])
+    expect(e.requests[0].body.tools).toBeUndefined()
+    expect(e.shown.at(-1)).toBe("стол → table")
+    expect(e.a.phase).toBe("answering")
+    expect(e.a.history.at(-1)!.content).toBe("table")
+
+    e.a.onTranscript("Вопрос, как", false) // the activator starts capturing…
+    e.a.onTranscript("Вопрос, как по-английски спасибо", true) // …and the request is still a translation
+    await e.clock.advance(10)
+    expect(e.requests.length).toBe(2)
+    expect(e.shown.at(-1)).toBe("спасибо → thank you")
+
+    e.a.onTranscript("Как будет на английском", true)
+    expect(e.shown.at(-1)).toContain("Скажите слово или фразу")
+    e.a.onTranscript("Холодильник.", true)
+    await e.clock.advance(10)
+    expect(e.requests[2].body.input).toEqual([{role: "user", content: "Холодильник"}])
+    expect(e.shown.at(-1)).toBe("Холодильник → refrigerator")
+  })
+
+  test("the waiting ends after a while or with «отмена»", async () => {
+    const e = setup([])
+    e.a.onTranscript("Как будет на английском", true)
+    await e.clock.advance(9000)
+    e.a.onTranscript("Привет", true) // too late: ordinary speech again
+    expect(e.requests.length).toBe(0)
+    e.a.onTranscript("Как будет по-английски", true)
+    e.a.onTranscript("Отмена", true)
+    expect(e.requests.length).toBe(0)
+  })
+
+  test("conversation and lecture modes show it in their own way", async () => {
+    const e = setup(["table", "desk"])
+    e.a.onTranscript("Беседа", true)
+    e.a.onTranscript("Как будет по-английски стол?", false) // live text is not a question for the prompter
+    await e.clock.advance(2000)
+    expect(e.requests.length).toBe(0)
+    e.a.onTranscript("Как будет по-английски стол?", true)
+    expect(e.shown.at(-1)).toBe("• стол …")
+    await e.clock.advance(10)
+    expect(e.requests.length).toBe(1)
+    expect(e.shown.at(-1)).toBe("• стол → table")
+    expect(e.a.talk.record!.notes.at(-1)).toMatchObject({kind: "you", q: "стол", text: "table"})
+
+    e.a.onTranscript("Режим лекции", true)
+    e.a.onTranscript("Как будет на английском письменный стол", true)
+    await e.clock.advance(10)
+    expect(e.shown.at(-1)).toBe("? письменный стол\n→ desk")
+    expect(e.a.phase).toBe("lecture")
+    e.a.onTranscript("How do you say table in Russian?", true) // the lecturer's English: lecture content, not a command
+    await e.clock.advance(10)
+    expect(e.requests.length).toBe(3) // only the question to the audience went out
+    expect(e.requests[2].body.instructions).toContain("обратился к аудитории")
+  })
+})

@@ -5072,6 +5072,66 @@
       words = words.slice(0, -1);
     return TALK_LOOKUP.get(words.join(" ")) ?? null;
   }
+  var PHRASE_LANG_NAME = {
+    en: "английский",
+    ru: "русский",
+    de: "немецкий",
+    fr: "французский",
+    es: "испанский",
+    it: "итальянский",
+    zh: "китайский",
+    ja: "японский"
+  };
+  var LANG_STEMS = [
+    [/^(англ|english)/, "en"],
+    [/^(русск|russian)/, "ru"],
+    [/^(немец|german)/, "de"],
+    [/^(француз|french)/, "fr"],
+    [/^(испан|spanish)/, "es"],
+    [/^(итальян|italian)/, "it"],
+    [/^(китай|chinese)/, "zh"],
+    [/^(япон|japanese)/, "ja"]
+  ];
+  function langOf(word) {
+    const w = String(word ?? "").toLowerCase();
+    for (const [re, l] of LANG_STEMS)
+      if (re.test(w))
+        return l;
+    return null;
+  }
+  var L = "(англ\\S*|русск\\S*|немецк\\S*|французск\\S*|испанск\\S*|итальянск\\S*|китайск\\S*|японск\\S*)";
+  var IN_LANG = `(?:на\\s+${L}(?:\\s+язык\\S*)?|по[-\\s]${L})`;
+  var ASK = "(?:а\\s+|и\\s+|слушай,?\\s+|скажи,?\\s+)?как\\s+(?:будет|сказать|это\\s+будет|это|перевести|переводится|называется)?";
+  var EN_LANGS = "(english|russian|german|french|spanish|italian|chinese|japanese)";
+  var PATTERNS = [
+    { re: new RegExp(`^${ASK}\\s*${IN_LANG}\\s*(?:будет\\s+)?[:,—–-]?\\s*(.*)$`, "iu"), lang: (m) => langOf(m[1] ?? m[2]), phrase: (m) => m[3] },
+    { re: new RegExp(`^${ASK}\\s+(.+?)\\s+${IN_LANG}\\s*$`, "iu"), lang: (m) => langOf(m[2] ?? m[3]), phrase: (m) => m[1] },
+    { re: new RegExp(`^(?:пожалуйста,?\\s+)?переведи(?:те)?\\s+${IN_LANG}\\s*[:,—–-]?\\s*(.*)$`, "iu"), lang: (m) => langOf(m[1] ?? m[2]), phrase: (m) => m[3] },
+    { re: new RegExp(`^(?:пожалуйста,?\\s+)?переведи(?:те)?\\s+(.+?)\\s+${IN_LANG}\\s*$`, "iu"), lang: (m) => langOf(m[2] ?? m[3]), phrase: (m) => m[1] },
+    { re: new RegExp(`^(?:so\\s+|and\\s+)?how\\s+(?:do\\s+(?:you|i|we)\\s+say|to\\s+say|would\\s+you\\s+say|is)\\s+(.+?)\\s+in\\s+${EN_LANGS}\\s*$`, "iu"), lang: (m) => langOf(m[2]), phrase: (m) => m[1] },
+    { re: new RegExp(`^(?:so\\s+|and\\s+)?what(?:'s|\\s+is)\\s+(.+?)\\s+in\\s+${EN_LANGS}\\s*$`, "iu"), lang: (m) => langOf(m[2]), phrase: (m) => m[1] },
+    { re: new RegExp(`^(?:please\\s+)?translate\\s+(.+?)\\s+(?:in)?to\\s+${EN_LANGS}\\s*$`, "iu"), lang: (m) => langOf(m[2]), phrase: (m) => m[1] }
+  ];
+  function parsePhraseRequest(text) {
+    const t = String(text ?? "").replace(/\s+/g, " ").trim().replace(/[?？!.…]+$/u, "").trim();
+    if (!t)
+      return null;
+    for (const p of PATTERNS) {
+      const m = p.re.exec(t);
+      if (!m)
+        continue;
+      const lang = p.lang(m);
+      if (!lang)
+        continue;
+      const phrase = String(p.phrase(m) ?? "").trim().replace(/^[«"“'„]+|[»"”']+$/gu, "").replace(/[?？!.…,]+$/u, "").trim();
+      if (phrase.split(/\s+/).length > 14)
+        return null;
+      if (/^(это|этот|эта|это слово|эту фразу)$/i.test(phrase))
+        return { lang, phrase: "" };
+      return { lang, phrase };
+    }
+    return null;
+  }
 
   // src/background/openai.ts
   var OPENAI_URL = "https://api.openai.com/v1/responses";
@@ -5665,6 +5725,7 @@ ${s.instructions.trim()}`);
       "Тебе дают свежий фрагмент речи лектора, распознанный автоматически: возможны ошибки распознавания и обрывки фраз — угадывай смысл по контексту.",
       `Выдели суть: ${maxPoints <= 1 ? "один короткий тезис" : `1–${maxPoints} коротких тезиса (чаще хватает одного)`} на ${langName(lang)} языке, каждый с новой строки и начинается с «• », не длиннее 12 слов.`,
       "Не переводи и не пересказывай дословно — только главное: определения, утверждения, формулы, числа и даты, примеры, выводы. Термины можно оставлять в оригинале.",
+      "Если лектор цитирует кого-то, сделай отдельный тезис «Цитата: автор (источник) — суть»; если цитату приписали не тому — укажи настоящего автора.",
       "Не повторяй уже записанные тезисы. Если во фрагменте нет ничего содержательного (приветствие, организационные моменты, шум, повтор), ответь ровно SKIP.",
       "Без Markdown, без вступлений и пояснений."
     ].join(`
@@ -5854,6 +5915,24 @@ Stop: «стоп лекция»` : `Режим лекции
         this.summarize();
       this.armFlush();
     }
+    async aside(placeholder, run) {
+      if (!this.active)
+        return;
+      const session = this.session;
+      this.setScreen(answerScreen(placeholder, "…"));
+      try {
+        const qa = await run();
+        if (session !== this.session || !qa)
+          return;
+        this.addNote({ t: this.deps.now(), kind: "you", q: qa.q, text: qa.a });
+        this.setScreen(answerScreen(qa.q, qa.a));
+        this.hold();
+      } catch (e) {
+        if (session !== this.session)
+          return;
+        this.showError(e);
+      }
+    }
     askUser(question) {
       if (!this.active || !question.trim())
         return;
@@ -6008,10 +6087,27 @@ Stop: «стоп лекция»` : `Режим лекции
     }
   }
 
+  // src/background/phrase.ts
+  function buildPhrasePrompt(phrase, lang) {
+    const target = PHRASE_LANG_NAME[lang];
+    const system = [
+      `Ты — переводчик в умных очках. Переведи слово или фразу на ${target} язык.`,
+      "Дай самый употребительный вариант. Если у слова несколько значений или есть важный вариант — добавь ещё 1–2 через запятую, с короткой пометкой в скобках по-русски.",
+      "Фраза распознана с речи и может содержать ошибки — угадай смысл.",
+      "Не больше 12 слов. Без кавычек, Markdown, транскрипции и пояснений — только перевод."
+    ].join(`
+`);
+    return { system, user: phrase.trim() };
+  }
+  function cleanPhraseReply(text) {
+    return String(text ?? "").replace(/\*\*/g, "").replace(/^\s*(?:перевод|translation|ответ|answer)\s*[:：]\s*/i, "").split(/\n+/).map((l) => l.trim()).filter(Boolean).slice(0, 2).join(", ").replace(/^[«"“„]+|[»"”]+$/gu, "").trim();
+  }
+
   // src/background/talk.ts
   var TALK_SHOW_MS = 30000;
   var TALK_DEDUPE_MS = 20000;
   var TALK_SETTLE_MS = 900;
+  var TALK_QUOTE_WAIT_MS = 8000;
   var INTRO_MS = 5000;
   var CONTEXT_WORDS2 = 300;
   var PREV_HINTS = 4;
@@ -6156,6 +6252,8 @@ Stop: «стоп лекция»` : `Режим лекции
     const words = contentWords(normalize(s));
     if (words.length < 3)
       return null;
+    if (parsePhraseRequest(s))
+      return null;
     const n = words.join(" ");
     if (SMALL_TALK.some((st) => n === st || n.startsWith(st + " ")))
       return null;
@@ -6191,7 +6289,78 @@ Stop: «стоп лекция»` : `Режим лекции
   function langName2(lang) {
     return lang === "en" ? "английском (English)" : "русском";
   }
+  var QUOTE_CUES = [
+    "как говорил",
+    "как говорила",
+    "как говорили",
+    "как сказал",
+    "как сказала",
+    "как писал",
+    "как писала",
+    "как говорится",
+    "как гласит",
+    "как учил",
+    "есть такая фраза",
+    "есть фраза",
+    "есть такое выражение",
+    "есть выражение",
+    "есть такая поговорка",
+    "есть поговорка",
+    "есть пословица",
+    "как в поговорке",
+    "как в пословице",
+    "по словам",
+    "цитата",
+    "цитирую",
+    "процитирую",
+    "крылатая фраза",
+    "известная фраза",
+    "знаменитая фраза",
+    "сказал однажды",
+    "говорил однажды",
+    "однажды сказал",
+    "as the saying goes",
+    "there s a saying",
+    "there is a saying",
+    "to quote",
+    "famously said",
+    "once said",
+    "in the words of",
+    "as they say"
+  ];
+  var AS_SAID = /\bas\s+(?:[\p{L}.'-]+\s+){1,3}(?:said|says|wrote|put it)\b/iu;
+  var QUOTE_MIN_WORDS = 4;
+  function findQuote(text) {
+    const t = String(text ?? "").replace(/\s+/g, " ").trim();
+    if (!t)
+      return null;
+    const quoted = /[«“„"]([^»”"]{8,})[»”"]/u.exec(t);
+    if (quoted && wordCount(quoted[1]) >= QUOTE_MIN_WORDS)
+      return { text: t, complete: true };
+    const words = normalize(t).split(" ").filter(Boolean);
+    const padded = ` ${words.join(" ")} `;
+    let end = -1;
+    for (const c of QUOTE_CUES) {
+      const i = padded.indexOf(` ${c} `);
+      if (i < 0)
+        continue;
+      const cueEnd = padded.slice(0, i).trim().split(" ").filter(Boolean).length + c.split(" ").length;
+      if (end < 0 || cueEnd < end)
+        end = cueEnd;
+    }
+    const as = AS_SAID.exec(t);
+    if (as) {
+      const cueEnd = normalize(t.slice(0, as.index + as[0].length)).split(" ").filter(Boolean).length;
+      if (end < 0 || cueEnd < end)
+        end = cueEnd;
+    }
+    if (end < 0)
+      return null;
+    return { text: t, complete: words.length - end >= QUOTE_MIN_WORDS };
+  }
   function buildTalkPrompt(context, prevHints, trigger, fromUser, lang) {
+    if (trigger.kind === "quote")
+      return buildQuotePrompt(context, trigger.text, lang);
     const system = [
       "Ты — незаметный суфлёр в умных очках. Пользователь разговаривает с другим человеком; ты видишь распознанную речь (возможны ошибки, неизвестно, кто говорит). Ответ показывается на крошечном дисплее: 5 строк примерно по 30 символов.",
       "Если в последней реплике задан вопрос, требующий точной информации (люди, даты, места, числа, определения, термины, факты), дай эти сведения так, чтобы пользователь мог сразу сказать их вслух.",
@@ -6217,9 +6386,25 @@ ${prevHints.map((h) => `— ${h.q}: ${h.a}`).join(`
     const label = fromUser ? "Вопрос пользователя" : trigger.kind === "prompt" ? "Последняя реплика (оборвана)" : "Последняя реплика";
     return { system, user: `${ctx}${prev}${label}: «${trigger.text.trim()}»` };
   }
+  function buildQuotePrompt(context, text, lang) {
+    const system = [
+      "Ты — незаметный суфлёр в умных очках. В разговоре только что прозвучала цитата, афоризм, крылатая фраза или пословица (речь распознана автоматически, возможны ошибки). Ответ показывается на крошечном дисплее.",
+      "Определи, чья это цитата и откуда: автор, произведение или речь, год. Если цитату приписали не тому человеку или авторство спорно — так и скажи и назови настоящего автора. Для пословицы — чья она (например, русская пословица) и её смысл в двух словах.",
+      `Коротко: до 20 слов, на ${langName2(lang)} языке. Формат ровно две строки:
+Q: <начало цитаты, до 6 слов>
+A: <автор — источник, год>`,
+      "Если это не цитата и не устойчивое выражение — ответь ровно SKIP. Без Markdown и вступлений."
+    ].join(`
+`);
+    const ctx = context.trim() ? `Недавно в разговоре:
+«${context.trim()}»
+
+` : "";
+    return { system, user: `${ctx}Реплика с цитатой: «${text.trim()}»` };
+  }
   var TIP_LABELS = {
-    ru: { fact: "Факт", answer: "Ответ", ask: "Спроси", say: "Скажи" },
-    en: { fact: "Fact", answer: "Answer", ask: "Ask", say: "Say" }
+    ru: { fact: "Факт", answer: "Ответ", ask: "Спроси", say: "Скажи", quote: "Цитата" },
+    en: { fact: "Fact", answer: "Answer", ask: "Ask", say: "Say", quote: "Quote" }
   };
   var TIP_BY_WORD = {
     факт: "fact",
@@ -6234,7 +6419,9 @@ ${prevHints.map((h) => `— ${h.q}: ${h.a}`).join(`
     answer: "answer",
     ask: "ask",
     say: "say",
-    idea: "say"
+    idea: "say",
+    цитата: "quote",
+    quote: "quote"
   };
   function buildTipPrompt(context, prevTips, goal, lang) {
     const L = TIP_LABELS[lang];
@@ -6242,6 +6429,7 @@ ${prevHints.map((h) => `— ${h.q}: ${h.a}`).join(`
       "Ты — суфлёр в умных очках и помогаешь пользователю вести живой разговор. Тебе дают свежую расшифровку речи (возможны ошибки, неизвестно, кто говорит). Подсказка показывается на крошечном дисплее и должна читаться за секунду.",
       `Цель пользователя в разговоре: ${goal.trim() || "поддерживать интересный и содержательный разговор"}.`,
       "Дай ОДНУ самую полезную прямо сейчас подсказку, до 15 слов, ровно в одной строке одного из видов:",
+      `${L.quote}: <автор и источник — если только что прозвучала известная цитата, афоризм или крылатая фраза; это важнее остального>`,
       `${L.fact}: <точная справка о только что упомянутом человеке, месте, термине, событии, числе>`,
       `${L.answer}: <что ответить, если пользователю только что задали вопрос>`,
       `${L.ask}: <вопрос собеседнику, который продвинет разговор к цели или углубит тему>`,
@@ -6285,6 +6473,7 @@ ${prevTips.map((t) => "— " + t).join(`
     recent = [];
     interim = "";
     settleTimer = null;
+    quoteWait = null;
     handled = [];
     qBusy = false;
     qPending = null;
@@ -6373,6 +6562,11 @@ ${prevTips.map((t) => "— " + t).join(`
         this.settleTimer = null;
         if (!this.active || this.interim !== t)
           return;
+        const quote = findQuote(t);
+        if (quote?.complete)
+          return this.request({ kind: "quote", text: quote.text }, "пауза");
+        if (quote)
+          return;
         const trigger = findTalkTrigger(t);
         if (trigger)
           this.request(trigger, "пауза");
@@ -6392,15 +6586,45 @@ ${prevTips.map((t) => "— " + t).join(`
       while (this.recent.length > 1 && words > CONTEXT_WORDS2)
         words -= wordCount(this.recent.shift());
       this.wordsSinceTip += wordCount(t);
-      const trigger = findTalkTrigger(t);
-      if (trigger)
-        this.request(trigger, "");
+      const waiting = this.quoteWait && this.deps.now() < this.quoteWait.until ? this.quoteWait.text : "";
+      this.quoteWait = null;
+      const quote = findQuote(waiting ? `${waiting} ${t}` : t);
+      if (quote?.complete)
+        this.request({ kind: "quote", text: quote.text }, "");
+      else if (quote)
+        this.quoteWait = { text: quote.text, until: this.deps.now() + TALK_QUOTE_WAIT_MS };
+      else {
+        const trigger = findTalkTrigger(t);
+        if (trigger)
+          this.request(trigger, "");
+      }
       this.maybeTip();
     }
     askUser(question) {
       if (!this.active || !question.trim())
         return;
       this.answer({ kind: "question", text: question.trim() }, true);
+    }
+    async aside(placeholder, run, joiner = ": ") {
+      if (!this.active)
+        return;
+      const session = this.session;
+      const id = this.push(`${placeholder} …`);
+      try {
+        const qa = await run();
+        if (session !== this.session)
+          return;
+        if (!qa)
+          return this.drop(id);
+        this.addNote({ t: this.deps.now(), kind: "you", q: qa.q, text: qa.a });
+        this.lastAnswerAt = this.deps.now();
+        this.replace(id, `${qa.q}${joiner}${qa.a}`);
+      } catch (e) {
+        if (session !== this.session)
+          return;
+        this.drop(id);
+        this.showError(e);
+      }
     }
     request(trigger, via) {
       const n = contentWords(normalize(trigger.text)).join(" ");
@@ -6422,7 +6646,8 @@ ${prevTips.map((t) => "— " + t).join(`
       }
       const session = this.session;
       this.qBusy = true;
-      this.deps.log("talk", `${fromUser ? "Ваш вопрос" : trigger.kind === "prompt" ? "Подсказать" : "Вопрос"}: ${trigger.text}`);
+      const what = fromUser ? "Ваш вопрос" : { question: "Вопрос", prompt: "Подсказать", quote: "Цитата" }[trigger.kind];
+      this.deps.log("talk", `${what}: ${trigger.text}`);
       const placeholder = this.push(`${shorten(trigger.text, 40)} …`);
       const prev = (this.record?.notes ?? []).slice(-PREV_HINTS).map((x) => ({ q: x.q ?? "", a: x.text }));
       const context = [...this.recent, this.interim].filter(Boolean).join(" ");
@@ -6437,11 +6662,11 @@ ${prevTips.map((t) => "— " + t).join(`
           this.drop(placeholder);
           return;
         }
-        const kind = fromUser ? "you" : trigger.kind === "prompt" ? "hint" : "qa";
+        const kind = fromUser ? "you" : { question: "qa", prompt: "hint", quote: "quote" }[trigger.kind];
         this.addNote({ t: this.deps.now(), kind, q: qa.q, text: qa.a });
         this.deps.log("talk", `→ ${qa.a}`);
         this.lastAnswerAt = this.deps.now();
-        this.replace(placeholder, `${qa.q}: ${qa.a}`);
+        this.replace(placeholder, kind === "quote" ? `«${qa.q}» — ${qa.a}` : `${qa.q}: ${qa.a}`);
       } catch (e) {
         if (session !== this.session)
           return;
@@ -6767,6 +6992,7 @@ ${prevTips.map((t) => "— " + t).join(`
   var HEAD_UP_HIDES_MS = 4000;
   var DASHBOARD_WARN_EVERY_MS = 60000;
   var DASHBOARD_WARNING = "Mentra считает, что голова поднята, и показывает свою панель (время, заряд) вместо ответа. " + "Опустите голову. Если не помогает: Mentra → Settings → Dashboard → выключите Contextual Dashboard " + "или увеличьте Adjust Head-Up Angle.";
+  var PHRASE_WAIT_MS = 8000;
 
   class Assistant {
     deps;
@@ -6806,6 +7032,7 @@ ${prevTips.map((t) => "— " + t).join(`
     headUpSince = 0;
     lastDashboardWarnAt = -Infinity;
     displayChecked = false;
+    phraseWait = null;
     lecture;
     talk;
     now;
@@ -7007,6 +7234,8 @@ ${prevTips.map((t) => "— " + t).join(`
       }
       const wake = this.wake(t);
       const body = wake.matched ? wake.rest : t;
+      if (this.tryPhrase(body))
+        return;
       if (parseTranslateCommand(body) === "start") {
         this.startTranslation("voice");
         return;
@@ -7149,6 +7378,17 @@ ${prevTips.map((t) => "— " + t).join(`
           this.interim = "";
           this.startTalk("voice");
           return;
+        }
+        if (this.committed.length === 0) {
+          const back = this.pages.length ? "answering" : "idle";
+          if (parsePhraseRequest(clean)) {
+            this.cancelTimer("silenceTimer");
+            this.cancelTimer("wakeTimer");
+            this.interim = "";
+            this.phase = back;
+            this.tryPhrase(clean);
+            return;
+          }
         }
         const goal = this.committed.length === 0 ? goalIn(t) : null;
         if (goal !== null) {
@@ -7425,6 +7665,8 @@ Notes are in the app.` : `Лекция выключена.
       const mine = wake.matched || detectLang(body) === "ru";
       if (mine && this.trySwitchMode(body))
         return;
+      if (mine && this.tryPhrase(body))
+        return;
       const cmd = parseCommand(body);
       if (mine && (cmd === "hide" || cmd === "cancel" || parseTranslateCommand(body) === "stop"))
         return this.stopLecture("voice");
@@ -7434,6 +7676,83 @@ Notes are in the app.` : `Лекция выключена.
         return;
       }
       this.lecture.onSpeech(t);
+    }
+    tryPhrase(body) {
+      const waiting = this.phraseWait && this.now() < this.phraseWait.until ? this.phraseWait : null;
+      this.phraseWait = null;
+      const req = parsePhraseRequest(body);
+      if (req) {
+        if (!req.phrase) {
+          this.phraseWait = { lang: req.lang, until: this.now() + PHRASE_WAIT_MS };
+          this.addLog("cmd", `Перевод на ${PHRASE_LANG_NAME[req.lang]}: жду слово или фразу`);
+          this.flash(`Как будет: ${PHRASE_LANG_NAME[req.lang]}
+Скажите слово или фразу`, PHRASE_WAIT_MS);
+          return true;
+        }
+        this.translatePhrase(req.phrase, req.lang);
+        return true;
+      }
+      const cmd = parseCommand(body);
+      if (waiting && normalize(body).length > 0 && cmd !== "cancel" && cmd !== "hide") {
+        this.translatePhrase(body.replace(/[?？!.…]+$/u, "").trim(), waiting.lang);
+        return true;
+      }
+      return false;
+    }
+    async translatePhrase(phrase, lang) {
+      const provider = asProvider(this.settings.provider);
+      if (!keyFor(this.settings, provider)) {
+        this.flash(explainLLMError(provider, 401, "no_key", ""), 6000);
+        return;
+      }
+      this.addLog("ask", `Перевод на ${PHRASE_LANG_NAME[lang]}: ${phrase}`);
+      const run = async () => {
+        const { system, user } = buildPhrasePrompt(phrase, lang);
+        const a = cleanPhraseReply(await this.completeOnce(system, user));
+        if (!a)
+          return null;
+        this.addLog("display", `${phrase} → ${a}`);
+        return { q: phrase, a };
+      };
+      if (this.phase === "talk")
+        return this.talk.aside(phrase, run, " → ");
+      if (this.phase === "lecture")
+        return this.lecture.aside(phrase, run);
+      if (this.phase === "translating")
+        this.stopTranslation("question", false);
+      const seq = ++this.requestSeq;
+      for (const t of ["silenceTimer", "wakeTimer", "pageTimer", "clearTimer_"])
+        this.cancelTimer(t);
+      this.committed = [];
+      this.interim = "";
+      this.phase = "thinking";
+      this.lastQuestion = phrase;
+      this.lastError = "";
+      this.show(fitScreen(`${phrase} → …`));
+      this.changed();
+      try {
+        const qa = await run();
+        if (seq !== this.requestSeq)
+          return;
+        if (!qa)
+          return this.fail(`Не получилось перевести «${phrase}».`, seq);
+        const at = this.now();
+        this.history.push({ role: "user", content: `Как будет (${PHRASE_LANG_NAME[lang]}): ${phrase}`, at }, { role: "assistant", content: qa.a, at, by: provider });
+        this.lastProvider = provider;
+        this.deps.store.saveHistory(this.history);
+        this.lastAnswer = qa.a;
+        this.pages = paginate(sanitizeForG1(`${phrase} → ${qa.a}`));
+        this.page = 0;
+        this.followUpUntil = 0;
+        this.showPage(0);
+      } catch (e) {
+        if (seq !== this.requestSeq)
+          return;
+        const err = e;
+        const human = explainLLMError(err?.provider ?? provider, Number(err?.status) || 0, String(err?.code ?? ""), String(err?.message ?? ""));
+        this.addLog("error", `${human} [${err?.status ?? 0} ${err?.code ?? ""}]`);
+        this.fail(human, seq);
+      }
     }
     startTalk(source) {
       const provider = asProvider(this.settings.provider);
@@ -7484,6 +7803,8 @@ Hints: ${hints}. The list is in the app.` : `Беседа выключена.
         return;
       const unambiguous = wake.matched || parseTranslateCommand(body) === "start" || normalize(body).split(" ").length >= 2;
       if (unambiguous && this.trySwitchMode(body))
+        return;
+      if (this.tryPhrase(body))
         return;
       const goal = wake.matched ? goalIn(t) : null;
       if (goal !== null)
@@ -7821,7 +8142,7 @@ ${goal}` : "Цель беседы убрана.", 3000);
   }
 
   // src/background/index.ts
-  var APP_VERSION = "1.9.3";
+  var APP_VERSION = "1.10.0";
   function getKV() {
     try {
       const ls = globalThis.localStorage;

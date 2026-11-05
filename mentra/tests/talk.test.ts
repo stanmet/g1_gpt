@@ -334,3 +334,53 @@ describe("proactive hints («Факт», «Спроси», «Скажи»)", () 
     expect(TALK_ANSWER_PRIORITY_MS).toBeGreaterThan(5000)
   })
 })
+
+describe("quotes: who said it", () => {
+  test("finding quotes", async () => {
+    const {findQuote, buildQuotePrompt, parseTip} = await import("../src/background/talk")
+    expect(findQuote("Как говорил Черчилль, успех — это идти от неудачи к неудаче.")?.complete).toBe(true)
+    expect(findQuote("Есть такая фраза: что нас не убивает, делает нас сильнее.")?.complete).toBe(true)
+    expect(findQuote("As Einstein said, imagination is more important than knowledge.")?.complete).toBe(true)
+    expect(findQuote("Он сказал «быть или не быть, вот в чём вопрос».")?.complete).toBe(true)
+    expect(findQuote("Ну как говорится,")).toEqual({text: "Ну как говорится,", complete: false})
+    expect(findQuote("Я вчера говорил с мамой.")).toBeNull()
+    const p = buildQuotePrompt("", "Как говорил Черчилль, успех — это идти от неудачи к неудаче.", "ru")
+    expect(p.system).toContain("приписали не тому")
+    expect(p.system).toContain("SKIP")
+    expect(parseTip("Цитата: Ницше, «Сумерки идолов» (1888)")).toEqual({label: "quote", text: "Ницше, «Сумерки идолов» (1888)"})
+  })
+
+  test("a quote gets its author on the glasses; an announced quote waits for its words", async () => {
+    const e = setup([
+      "Q: Успех — идти от неудачи\nA: Приписывают Черчиллю, но надёжного источника нет.",
+      "Q: Без труда не выловишь\nA: Русская пословица: без усилий нет результата.",
+      "SKIP",
+    ])
+    e.talk.start({en: false})
+    e.talk.onSpeech("Как говорил Черчилль, успех — это идти от неудачи к неудаче без потери энтузиазма.")
+    await e.clock.advance(10)
+    expect(e.calls[0].system).toContain("чья это цитата")
+    expect(e.shown.at(-1)!.replace(/\n/g, " ")).toBe("• «Успех — идти от неудачи» — Приписывают Черчиллю, но надёжного источника нет.")
+    expect(e.talk.record!.notes.at(-1)!.kind).toBe("quote")
+
+    e.talk.onSpeech("Ну как говорится,")
+    await e.clock.advance(10)
+    expect(e.calls.length).toBe(1) // the quote itself is still to come
+    e.talk.onSpeech("без труда не выловишь и рыбку из пруда.")
+    await e.clock.advance(10)
+    expect(e.calls.length).toBe(2)
+    expect(e.calls[1].user).toContain("как говорится, без труда не выловишь")
+    expect(e.shown.at(-1)!.replace(/\n/g, " ")).toContain("Русская пословица")
+
+    e.talk.onSpeech("По словам соседа, завтра будет дождь и сильный ветер.")
+    await e.clock.advance(10)
+    expect(e.calls.length).toBe(3) // checked, but not a known quote: nothing shown
+    expect(e.talk.record!.notes.length).toBe(2)
+  })
+
+  test("lecture key points name quoted authors; proactive hints can flag a quote", async () => {
+    const {buildPointsPrompt} = await import("../src/background/lecture")
+    expect(buildPointsPrompt([], "As Kant wrote...", "ru").system).toContain("Цитата: автор")
+    expect(buildTipPrompt("", [], "", "ru").system).toContain("Цитата:")
+  })
+})

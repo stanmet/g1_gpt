@@ -281,3 +281,18 @@ test("built bundle: conversation mode — a question in the conversation gets fa
   await sleep(30)
   expect(h.renders().at(-1)).toContain("Беседа выключена")
 }, 15000)
+
+test("built bundle: «как будет на английском …» without the activator", async () => {
+  const h = makeHost(["table"])
+  vm.runInContext(readFileSync(BUNDLE, "utf8"), h.ctx, {filename: "background/index.js"})
+  h.ctx.__mentraInitCallback("s")
+  await sleep(50)
+  h.ev("_ui", {type: "UI_OPEN"})
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "saveSettings", payload: {apiKey: "sk-test-abcdefghijklmnop"}, seq: 1, requestId: "r1"})
+  await sleep(30)
+  h.ev("transcription:ru-RU", {text: "Как будет на английском стол?", isFinal: true})
+  await sleep(60)
+  expect(h.openaiCalls.length).toBe(1)
+  expect(h.openaiCalls[0].body.input).toEqual([{role: "user", content: "стол"}])
+  expect(h.renders().at(-1)).toBe("стол → table")
+}, 15000)

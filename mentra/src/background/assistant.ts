@@ -8,6 +8,7 @@
 import {fitScreen, G1_LINES, paginate, sanitizeForG1, wrapLines} from "./g1text"
 import {askLLM, asProvider, displayName, explainLLMError, keyFor, LLMError, PROVIDERS, type Provider} from "./llm"
 import {Lecture, type LectureRecord} from "./lecture"
+import {buildPhrasePrompt, cleanPhraseReply} from "./phrase"
 import {Talk} from "./talk"
 import type {FetchLike} from "./openai"
 import {normalizeSettings, Store, type Message, type Settings} from "./store"
@@ -19,7 +20,10 @@ import {
   normalize,
   parseCommand,
   parseLectureCommand,
+  parsePhraseRequest,
   parseSwitchCommand,
+  PHRASE_LANG_NAME,
+  type PhraseLang,
   parseTalkCommand,
   parseTranslateCommand,
   aiForWakePhrase,
@@ -108,6 +112,9 @@ export const DASHBOARD_WARNING =
   "Опустите голову. Если не помогает: Mentra → Settings → Dashboard → выключите Contextual Dashboard " +
   "или увеличьте Adjust Head-Up Angle."
 
+/** After «Как будет на английском…» and a pause, the next phrase is taken as the word to translate. */
+export const PHRASE_WAIT_MS = 8000
+
 /** Where a paging command came from; shown in the log. key = Bluetooth remote or keyboard. */
 export type CommandSource = "voice" | "ui" | "touch" | "head" | "key"
 
@@ -154,6 +161,8 @@ export class Assistant {
   private headUpSince = 0
   private lastDashboardWarnAt = -Infinity
   private displayChecked = false
+  /** Waiting for the word after «Как будет на английском…» + pause. */
+  private phraseWait: {lang: PhraseLang; until: number} | null = null
   /** Lecture mode: key points of what the lecturer says + answers to questions to the audience. */
   readonly lecture: Lecture
   /** Conversation mode: facts when someone asks, a prompt when the user trails off. */
@@ -387,6 +396,7 @@ export class Assistant {
     const wake = this.wake(t)
     const body = wake.matched ? wake.rest : t
 
+    if (this.tryPhrase(body)) return
     if (parseTranslateCommand(body) === "start") {
       this.startTranslation("voice")
       return
@@ -538,6 +548,17 @@ export class Assistant {
         this.interim = ""
         this.startTalk("voice")
         return
+      }
+      if (this.committed.length === 0) {
+        const back: Phase = this.pages.length ? "answering" : "idle"
+        if (parsePhraseRequest(clean)) {
+          this.cancelTimer("silenceTimer")
+          this.cancelTimer("wakeTimer")
+          this.interim = ""
+          this.phase = back
+          this.tryPhrase(clean)
+          return
+        }
       }
       const goal = this.committed.length === 0 ? goalIn(t) : null
       if (goal !== null) {
@@ -820,6 +841,7 @@ Notes are in the app.`
     // The user's own commands: Russian, or after an activator. English phrases are the lecturer's.
     const mine = wake.matched || detectLang(body) === "ru"
     if (mine && this.trySwitchMode(body)) return
+    if (mine && this.tryPhrase(body)) return
     const cmd = parseCommand(body)
     if (mine && (cmd === "hide" || cmd === "cancel" || parseTranslateCommand(body) === "stop")) return this.stopLecture("voice")
     // «Вопрос, что такое энтропия?» — the user's own question, answered without leaving the lecture
@@ -829,6 +851,88 @@ Notes are in the app.`
       return
     }
     this.lecture.onSpeech(t)
+  }
+
+  // ───────────────────────────── «как будет на английском …» ─────────────────────────────
+
+  /**
+   * «Как будет на английском стол?» in any listening mode but translation. True when the utterance
+   * was handled: a translation request, or the word that followed «Как будет на английском…».
+   */
+  private tryPhrase(body: string): boolean {
+    const waiting = this.phraseWait && this.now() < this.phraseWait.until ? this.phraseWait : null
+    this.phraseWait = null
+    const req = parsePhraseRequest(body)
+    if (req) {
+      if (!req.phrase) {
+        this.phraseWait = {lang: req.lang, until: this.now() + PHRASE_WAIT_MS}
+        this.addLog("cmd", `Перевод на ${PHRASE_LANG_NAME[req.lang]}: жду слово или фразу`)
+        this.flash(`Как будет: ${PHRASE_LANG_NAME[req.lang]}\nСкажите слово или фразу`, PHRASE_WAIT_MS)
+        return true
+      }
+      void this.translatePhrase(req.phrase, req.lang)
+      return true
+    }
+    const cmd = parseCommand(body)
+    if (waiting && normalize(body).length > 0 && cmd !== "cancel" && cmd !== "hide") {
+      void this.translatePhrase(body.replace(/[?？!.…]+$/u, "").trim(), waiting.lang)
+      return true
+    }
+    return false
+  }
+
+  /** Translates a word or phrase with the selected AI and shows «стол → table» in the current mode. */
+  async translatePhrase(phrase: string, lang: PhraseLang): Promise<void> {
+    const provider = asProvider(this.settings.provider)
+    if (!keyFor(this.settings, provider)) {
+      this.flash(explainLLMError(provider, 401, "no_key", ""), 6000)
+      return
+    }
+    this.addLog("ask", `Перевод на ${PHRASE_LANG_NAME[lang]}: ${phrase}`)
+    const run = async () => {
+      const {system, user} = buildPhrasePrompt(phrase, lang)
+      const a = cleanPhraseReply(await this.completeOnce(system, user))
+      if (!a) return null
+      this.addLog("display", `${phrase} → ${a}`)
+      return {q: phrase, a}
+    }
+    if (this.phase === "talk") return this.talk.aside(phrase, run, " → ")
+    if (this.phase === "lecture") return this.lecture.aside(phrase, run)
+
+    // assistant mode: shown like an answer, so paging, «скрой» and the clear timer apply
+    if (this.phase === "translating") this.stopTranslation("question", false)
+    const seq = ++this.requestSeq
+    for (const t of ["silenceTimer", "wakeTimer", "pageTimer", "clearTimer_"] as const) this.cancelTimer(t)
+    this.committed = []
+    this.interim = ""
+    this.phase = "thinking"
+    this.lastQuestion = phrase
+    this.lastError = ""
+    this.show(fitScreen(`${phrase} → …`))
+    this.changed()
+    try {
+      const qa = await run()
+      if (seq !== this.requestSeq) return
+      if (!qa) return this.fail(`Не получилось перевести «${phrase}».`, seq)
+      const at = this.now()
+      this.history.push(
+        {role: "user", content: `Как будет (${PHRASE_LANG_NAME[lang]}): ${phrase}`, at},
+        {role: "assistant", content: qa.a, at, by: provider},
+      )
+      this.lastProvider = provider
+      this.deps.store.saveHistory(this.history)
+      this.lastAnswer = qa.a
+      this.pages = paginate(sanitizeForG1(`${phrase} → ${qa.a}`))
+      this.page = 0
+      this.followUpUntil = 0
+      this.showPage(0)
+    } catch (e) {
+      if (seq !== this.requestSeq) return
+      const err = e as LLMError
+      const human = explainLLMError(err?.provider ?? provider, Number(err?.status) || 0, String(err?.code ?? ""), String(err?.message ?? ""))
+      this.addLog("error", `${human} [${err?.status ?? 0} ${err?.code ?? ""}]`)
+      this.fail(human, seq)
+    }
   }
 
   // ───────────────────────────── conversation mode ─────────────────────────────
@@ -876,6 +980,7 @@ Notes are in the app.`
     // activator («Вопрос, стоп») or an unambiguous phrase («транслейт», «режим лекции», «стоп беседа»).
     const unambiguous = wake.matched || parseTranslateCommand(body) === "start" || normalize(body).split(" ").length >= 2
     if (unambiguous && this.trySwitchMode(body)) return
+    if (this.tryPhrase(body)) return
     // «Вопрос, цель: договориться о скидке» — what the hints should steer toward
     const goal = wake.matched ? goalIn(t) : null
     if (goal !== null) return this.setGoal(goal)

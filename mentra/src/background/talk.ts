@@ -13,7 +13,7 @@
  */
 import {feedScreen, LECTURE_RESUME_MS, parseAnswer, wordCount, type LectureNote, type LectureRecord} from "./lecture"
 import {fitScreen} from "./g1text"
-import {detectLang, normalize, type Lang} from "./voice"
+import {detectLang, normalize, parsePhraseRequest, type Lang} from "./voice"
 
 /** A hint stays on the glasses this long, then the screen clears (the next hint replaces it sooner). */
 export const TALK_SHOW_MS = 30_000
@@ -25,6 +25,8 @@ export const TALK_DEDUPE_MS = 20_000
  * live text has not changed for this long.
  */
 export const TALK_SETTLE_MS = 900
+/** After «Как говорится…» + pause, the next phrase within this time is taken as the quote. */
+export const TALK_QUOTE_WAIT_MS = 8000
 /** The intro screen is cleared after this long. */
 const INTRO_MS = 5000
 const CONTEXT_WORDS = 300
@@ -41,8 +43,11 @@ const NOTES_MAX = 300
 const ERROR_SHOW_EVERY_MS = 60_000
 
 export interface TalkTrigger {
-  /** question = someone asked; prompt = the speaker trailed off on «это», «родился в», «is»… */
-  kind: "question" | "prompt"
+  /**
+   * question = someone asked; prompt = the speaker trailed off on «это», «родился в», «is»…;
+   * quote = someone quoted («как говорил Черчилль, …», «есть такая фраза: …») — who said it, where.
+   */
+  kind: "question" | "prompt" | "quote"
   text: string
 }
 
@@ -96,6 +101,7 @@ const ENDS_WITH_QUESTION = /\?["»”')\s]*$/
 function questionIn(s: string): TalkTrigger | null {
   const words = contentWords(normalize(s))
   if (words.length < 3) return null
+  if (parsePhraseRequest(s)) return null // «как будет по-английски …» is translated on its own path
   const n = words.join(" ")
   if (SMALL_TALK.some((st) => n === st || n.startsWith(st + " "))) return null
   const asked = ENDS_WITH_QUESTION.test(s)
@@ -139,6 +145,50 @@ function langName(lang: Lang): string {
   return lang === "en" ? "английском (English)" : "русском"
 }
 
+// ───────────────────────── quotes ─────────────────────────
+
+/** Words that announce a quote, normalized. */
+const QUOTE_CUES = [
+  "как говорил", "как говорила", "как говорили", "как сказал", "как сказала", "как писал", "как писала",
+  "как говорится", "как гласит", "как учил", "есть такая фраза", "есть фраза", "есть такое выражение", "есть выражение",
+  "есть такая поговорка", "есть поговорка", "есть пословица", "как в поговорке", "как в пословице", "по словам",
+  "цитата", "цитирую", "процитирую", "крылатая фраза", "известная фраза", "знаменитая фраза", "сказал однажды",
+  "говорил однажды", "однажды сказал", "as the saying goes", "there s a saying", "there is a saying", "to quote",
+  "famously said", "once said", "in the words of", "as they say",
+]
+/** «as Churchill said», «as Einstein put it». */
+const AS_SAID = /\bas\s+(?:[\p{L}.'-]+\s+){1,3}(?:said|says|wrote|put it)\b/iu
+/** Words of the quote itself needed before asking who said it. */
+const QUOTE_MIN_WORDS = 4
+
+/**
+ * A quote in the utterance: «Как говорил Черчилль, успех — это…», «Есть такая фраза: …», «as X said»,
+ * or words in «quotes». `complete` is false while the quote itself has not been said yet
+ * («Как говорится…» + pause) — then the next phrase completes it.
+ */
+export function findQuote(text: string): {text: string; complete: boolean} | null {
+  const t = String(text ?? "").replace(/\s+/g, " ").trim()
+  if (!t) return null
+  const quoted = /[«“„"]([^»”"]{8,})[»”"]/u.exec(t)
+  if (quoted && wordCount(quoted[1]) >= QUOTE_MIN_WORDS) return {text: t, complete: true}
+  const words = normalize(t).split(" ").filter(Boolean)
+  const padded = ` ${words.join(" ")} `
+  let end = -1
+  for (const c of QUOTE_CUES) {
+    const i = padded.indexOf(` ${c} `)
+    if (i < 0) continue
+    const cueEnd = padded.slice(0, i).trim().split(" ").filter(Boolean).length + c.split(" ").length
+    if (end < 0 || cueEnd < end) end = cueEnd
+  }
+  const as = AS_SAID.exec(t)
+  if (as) {
+    const cueEnd = normalize(t.slice(0, as.index + as[0].length)).split(" ").filter(Boolean).length
+    if (end < 0 || cueEnd < end) end = cueEnd
+  }
+  if (end < 0) return null
+  return {text: t, complete: words.length - end >= QUOTE_MIN_WORDS}
+}
+
 export function buildTalkPrompt(
   context: string,
   prevHints: {q: string; a: string}[],
@@ -146,6 +196,7 @@ export function buildTalkPrompt(
   fromUser: boolean,
   lang: Lang,
 ): {system: string; user: string} {
+  if (trigger.kind === "quote") return buildQuotePrompt(context, trigger.text, lang)
   const system = [
     "Ты — незаметный суфлёр в умных очках. Пользователь разговаривает с другим человеком; ты видишь распознанную речь (возможны ошибки, неизвестно, кто говорит). Ответ показывается на крошечном дисплее: 5 строк примерно по 30 символов.",
     "Если в последней реплике задан вопрос, требующий точной информации (люди, даты, места, числа, определения, термины, факты), дай эти сведения так, чтобы пользователь мог сразу сказать их вслух.",
@@ -164,17 +215,28 @@ export function buildTalkPrompt(
   return {system, user: `${ctx}${prev}${label}: «${trigger.text.trim()}»`}
 }
 
+export function buildQuotePrompt(context: string, text: string, lang: Lang): {system: string; user: string} {
+  const system = [
+    "Ты — незаметный суфлёр в умных очках. В разговоре только что прозвучала цитата, афоризм, крылатая фраза или пословица (речь распознана автоматически, возможны ошибки). Ответ показывается на крошечном дисплее.",
+    "Определи, чья это цитата и откуда: автор, произведение или речь, год. Если цитату приписали не тому человеку или авторство спорно — так и скажи и назови настоящего автора. Для пословицы — чья она (например, русская пословица) и её смысл в двух словах.",
+    `Коротко: до 20 слов, на ${langName(lang)} языке. Формат ровно две строки:\nQ: <начало цитаты, до 6 слов>\nA: <автор — источник, год>`,
+    "Если это не цитата и не устойчивое выражение — ответь ровно SKIP. Без Markdown и вступлений.",
+  ].join("\n")
+  const ctx = context.trim() ? `Недавно в разговоре:\n«${context.trim()}»\n\n` : ""
+  return {system, user: `${ctx}Реплика с цитатой: «${text.trim()}»`}
+}
+
 // ───────────────────────── proactive hints ─────────────────────────
 
-export type TipLabel = "fact" | "answer" | "ask" | "say"
+export type TipLabel = "fact" | "answer" | "ask" | "say" | "quote"
 
 const TIP_LABELS: Record<Lang, Record<TipLabel, string>> = {
-  ru: {fact: "Факт", answer: "Ответ", ask: "Спроси", say: "Скажи"},
-  en: {fact: "Fact", answer: "Answer", ask: "Ask", say: "Say"},
+  ru: {fact: "Факт", answer: "Ответ", ask: "Спроси", say: "Скажи", quote: "Цитата"},
+  en: {fact: "Fact", answer: "Answer", ask: "Ask", say: "Say", quote: "Quote"},
 }
 const TIP_BY_WORD: Record<string, TipLabel> = {
   факт: "fact", ответ: "answer", ответь: "answer", спроси: "ask", вопрос: "ask", скажи: "say", идея: "say", мысль: "say",
-  fact: "fact", answer: "answer", ask: "ask", say: "say", idea: "say",
+  fact: "fact", answer: "answer", ask: "ask", say: "say", idea: "say", цитата: "quote", quote: "quote",
 }
 
 export function buildTipPrompt(
@@ -188,6 +250,7 @@ export function buildTipPrompt(
     "Ты — суфлёр в умных очках и помогаешь пользователю вести живой разговор. Тебе дают свежую расшифровку речи (возможны ошибки, неизвестно, кто говорит). Подсказка показывается на крошечном дисплее и должна читаться за секунду.",
     `Цель пользователя в разговоре: ${goal.trim() || "поддерживать интересный и содержательный разговор"}.`,
     "Дай ОДНУ самую полезную прямо сейчас подсказку, до 15 слов, ровно в одной строке одного из видов:",
+    `${L.quote}: <автор и источник — если только что прозвучала известная цитата, афоризм или крылатая фраза; это важнее остального>`,
     `${L.fact}: <точная справка о только что упомянутом человеке, месте, термине, событии, числе>`,
     `${L.answer}: <что ответить, если пользователю только что задали вопрос>`,
     `${L.ask}: <вопрос собеседнику, который продвинет разговор к цели или углубит тему>`,
@@ -249,6 +312,8 @@ export class Talk {
   private recent: string[] = []
   private interim = ""
   private settleTimer: unknown = null
+  /** A quote was announced («Как говорится…») and its words are expected in the next phrase. */
+  private quoteWait: {text: string; until: number} | null = null
   /** Recently handled triggers (normalized), so live text and the final do not ask twice. */
   private handled: {n: string; at: number}[] = []
   // questions lane — answers to what was asked, never wait for a proactive hint
@@ -342,6 +407,9 @@ export class Talk {
     this.settleTimer = this.deps.setTimer(() => {
       this.settleTimer = null
       if (!this.active || this.interim !== t) return
+      const quote = findQuote(t)
+      if (quote?.complete) return this.request({kind: "quote", text: quote.text}, "пауза")
+      if (quote) return // the quote itself is still to come
       const trigger = findTalkTrigger(t)
       if (trigger) this.request(trigger, "пауза")
     }, TALK_SETTLE_MS)
@@ -359,8 +427,16 @@ export class Talk {
     let words = wordCount(this.recent.join(" "))
     while (this.recent.length > 1 && words > CONTEXT_WORDS) words -= wordCount(this.recent.shift()!)
     this.wordsSinceTip += wordCount(t)
-    const trigger = findTalkTrigger(t)
-    if (trigger) this.request(trigger, "")
+    // «Как говорится…» + pause: the quote is the next phrase
+    const waiting = this.quoteWait && this.deps.now() < this.quoteWait.until ? this.quoteWait.text : ""
+    this.quoteWait = null
+    const quote = findQuote(waiting ? `${waiting} ${t}` : t)
+    if (quote?.complete) this.request({kind: "quote", text: quote.text}, "")
+    else if (quote) this.quoteWait = {text: quote.text, until: this.deps.now() + TALK_QUOTE_WAIT_MS}
+    else {
+      const trigger = findTalkTrigger(t)
+      if (trigger) this.request(trigger, "")
+    }
     this.maybeTip()
   }
 
@@ -368,6 +444,28 @@ export class Talk {
   askUser(question: string): void {
     if (!this.active || !question.trim()) return
     void this.answer({kind: "question", text: question.trim()}, true)
+  }
+
+  /**
+   * Something the assistant answers on its own path («как будет по-английски стол»): a placeholder
+   * shows at once in the feed, the result («стол → table») replaces it and goes to the list.
+   */
+  async aside(placeholder: string, run: () => Promise<{q: string; a: string} | null>, joiner = ": "): Promise<void> {
+    if (!this.active) return
+    const session = this.session
+    const id = this.push(`${placeholder} …`)
+    try {
+      const qa = await run()
+      if (session !== this.session) return
+      if (!qa) return this.drop(id)
+      this.addNote({t: this.deps.now(), kind: "you", q: qa.q, text: qa.a})
+      this.lastAnswerAt = this.deps.now()
+      this.replace(id, `${qa.q}${joiner}${qa.a}`)
+    } catch (e) {
+      if (session !== this.session) return
+      this.drop(id)
+      this.showError(e)
+    }
   }
 
   // ── questions lane ──
@@ -392,7 +490,8 @@ export class Talk {
     }
     const session = this.session
     this.qBusy = true
-    this.deps.log("talk", `${fromUser ? "Ваш вопрос" : trigger.kind === "prompt" ? "Подсказать" : "Вопрос"}: ${trigger.text}`)
+    const what = fromUser ? "Ваш вопрос" : {question: "Вопрос", prompt: "Подсказать", quote: "Цитата"}[trigger.kind]
+    this.deps.log("talk", `${what}: ${trigger.text}`)
     // show at once that a hint is coming
     const placeholder = this.push(`${shorten(trigger.text, 40)} …`)
     const prev = (this.record?.notes ?? []).slice(-PREV_HINTS).map((x) => ({q: x.q ?? "", a: x.text}))
@@ -407,11 +506,11 @@ export class Talk {
         this.drop(placeholder)
         return
       }
-      const kind: LectureNote["kind"] = fromUser ? "you" : trigger.kind === "prompt" ? "hint" : "qa"
+      const kind: LectureNote["kind"] = fromUser ? "you" : ({question: "qa", prompt: "hint", quote: "quote"} as const)[trigger.kind]
       this.addNote({t: this.deps.now(), kind, q: qa.q, text: qa.a})
       this.deps.log("talk", `→ ${qa.a}`)
       this.lastAnswerAt = this.deps.now()
-      this.replace(placeholder, `${qa.q}: ${qa.a}`)
+      this.replace(placeholder, kind === "quote" ? `«${qa.q}» — ${qa.a}` : `${qa.q}: ${qa.a}`)
     } catch (e) {
       if (session !== this.session) return
       this.drop(placeholder)
