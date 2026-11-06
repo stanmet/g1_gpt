@@ -1,7 +1,8 @@
 /**
  * The navigation screen on the G1 as a picture, like the Even app's navigation: turn arrow,
- * distance and street on the left, a small map on the right — the streets around (OpenStreetMap),
- * the route, where you are and which way you are going (the map turns with you).
+ * distance and street on the left, a small map on the right — streets, paths, water, parks and
+ * buildings around (OpenStreetMap vector tiles), the route, where you are and which way you are
+ * going (the map turns with you).
  *
  *   ┌──────────────────────────────────────────────┐┌──────────────┐
  *   │  ┏━━┓   120 м                                ││   ╲  route   │
@@ -12,19 +13,13 @@
  *
  * Pure: state in, base64 BMP out. Map data (route, position, streets) is gathered elsewhere.
  */
+import {metersPerWorld, toWorld} from "../shared/mvt"
 import {Canvas, capTop, drawText, encodeG1Bmp, fit, g1Canvas, G1_SAFE, lineHeight, measure} from "./glassdraw"
+import type {MapFeature} from "./tiles"
 
 export interface LatLng {
   lat: number
   lng: number
-}
-
-/** 0 = main road, 1 = street, 2 = footpath / cycle path. */
-export type RoadClass = 0 | 1 | 2
-
-export interface Road {
-  c: RoadClass
-  p: LatLng[]
 }
 
 export type MapMode = "walking" | "driving" | "cycling"
@@ -46,7 +41,8 @@ export interface HudState {
   /** Direction of travel, degrees from north; null = north up. */
   heading: number | null
   route: LatLng[]
-  roads: Road[]
+  /** What is around: roads, water, parks, buildings (from the map tiles). */
+  features: MapFeature[]
   dest: LatLng | null
   mode: MapMode
 }
@@ -123,35 +119,8 @@ export function travelHeading(route: LatLng[], me: LatLng, prev: LatLng | null):
   return null
 }
 
-// ───────────────────────── streets (OpenStreetMap via Overpass) ─────────────────────────
-
-const ROAD_CLASS: Record<string, RoadClass> = {
-  motorway: 0, trunk: 0, primary: 0, secondary: 0, motorway_link: 0, trunk_link: 0, primary_link: 0, secondary_link: 0,
-  tertiary: 1, tertiary_link: 1, unclassified: 1, residential: 1, living_street: 1, pedestrian: 1, service: 1, road: 1,
-  footway: 2, path: 2, cycleway: 2, steps: 2, track: 2, bridleway: 2,
-}
-
-/** Map radius in meters by travel mode (what is fetched around you). */
-export const ROADS_RADIUS: Record<MapMode, number> = {walking: 500, cycling: 800, driving: 1400}
-
-/** Overpass query for the streets around a point. Driving skips footpaths and service roads. */
-export function overpassQuery(c: LatLng, radius: number, mode: MapMode): string {
-  const kinds = Object.keys(ROAD_CLASS).filter((k) => mode !== "driving" || (ROAD_CLASS[k] < 2 && k !== "service"))
-  return `[out:json][timeout:20];way["highway"~"^(${kinds.join("|")})$"](around:${Math.round(radius)},${c.lat.toFixed(6)},${c.lng.toFixed(6)});out geom qt;`
-}
-
-export function parseOverpass(json: unknown): Road[] {
-  const els = (json as {elements?: unknown[]})?.elements
-  if (!Array.isArray(els)) return []
-  const roads: Road[] = []
-  for (const e of els as {type?: string; tags?: Record<string, string>; geometry?: {lat: number; lon: number}[]}[]) {
-    if (e?.type !== "way" || !Array.isArray(e.geometry) || e.geometry.length < 2) continue
-    const c = ROAD_CLASS[e.tags?.highway ?? ""]
-    if (c === undefined) continue
-    roads.push({c, p: e.geometry.filter((g) => Number.isFinite(g?.lat) && Number.isFinite(g?.lon)).map((g) => ({lat: g.lat, lng: g.lon}))})
-  }
-  return roads
-}
+/** How far around you map data is taken, by travel mode (meters). */
+export const MAP_RADIUS: Record<MapMode, number> = {walking: 500, cycling: 800, driving: 1400}
 
 // ───────────────────────── drawing ─────────────────────────
 
@@ -189,6 +158,89 @@ function clip(x0: number, y0: number, x1: number, y1: number, w: number, h: numb
   return [x0 + t0 * dx, y0 + t0 * dy, x0 + t1 * dx, y0 + t1 * dy]
 }
 
+/** 1-bit patterns: water hatched, parks dotted. */
+const PATTERN: Record<"water" | "park", (x: number, y: number) => boolean> = {
+  water: (x, y) => (x + y) % 4 === 0,
+  park: (x, y) => x % 6 === 0 && y % 6 === 3,
+}
+
+/** Even-odd scanline fill of rings (screen coordinates), only where `pattern` says. */
+function fillRings(c: Canvas, rings: {x: number; y: number}[][], pattern: (x: number, y: number) => boolean): void {
+  let y0 = Infinity
+  let y1 = -Infinity
+  for (const r of rings) for (const p of r) {
+    if (p.y < y0) y0 = p.y
+    if (p.y > y1) y1 = p.y
+  }
+  y0 = Math.max(0, Math.floor(y0))
+  y1 = Math.min(c.h - 1, Math.ceil(y1))
+  const xs: number[] = []
+  for (let y = y0; y <= y1; y++) {
+    const sy = y + 0.5
+    xs.length = 0
+    for (const r of rings)
+      for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+        const a = r[i]
+        const b = r[j]
+        if (a.y > sy !== b.y > sy) xs.push(a.x + ((sy - a.y) * (b.x - a.x)) / (b.y - a.y))
+      }
+    xs.sort((m, n) => m - n)
+    for (let k = 0; k + 1 < xs.length; k += 2) {
+      const from = Math.max(0, Math.ceil(xs[k] - 0.5))
+      const to = Math.min(c.w - 1, Math.floor(xs[k + 1] - 0.5))
+      for (let x = from; x <= to; x++) if (pattern(x, y)) c.set(x, y)
+    }
+  }
+}
+
+const ROAD_STYLE: Record<string, {t: number; dash?: [number, number]}> = {
+  major: {t: 3},
+  road: {t: 2},
+  minor: {t: 1},
+  path: {t: 1, dash: [1, 3]},
+  waterway: {t: 1},
+}
+
+/**
+ * Map features, back to front: parks, water, then roads with a clear edge. Buildings and railways
+ * are left out: on a 1-bit screen this small they hide the route (checked on Zurich main station).
+ */
+function drawFeatures(c: Canvas, s: HudState, center: LatLng, scale: number, cos: number, sin: number, cx: number, cy: number): void {
+  if (!s.features.length) return
+  const w0 = toWorld(center.lat, center.lng)
+  const mpw = metersPerWorld(center.lat)
+  // visible box in world units (rotation-safe: the diagonal)
+  const reach = (Math.hypot(c.w, c.h) * scale) / mpw
+  const proj = (r: number[]): {x: number; y: number}[] => {
+    const out = new Array<{x: number; y: number}>(r.length / 2)
+    for (let i = 0; i < r.length; i += 2) {
+      const lx = (r[i] - w0.x) * mpw
+      const ly = -(r[i + 1] - w0.y) * mpw
+      out[i / 2] = {x: cx + (lx * cos - ly * sin) / scale, y: cy - (lx * sin + ly * cos) / scale}
+    }
+    return out
+  }
+  const near = (f: MapFeature) => f.b[2] >= w0.x - reach && f.b[0] <= w0.x + reach && f.b[3] >= w0.y - reach && f.b[1] <= w0.y + reach
+  const feats = s.features.filter(near)
+  const lineOf = (pts: {x: number; y: number}[], t: number, v: number, dash?: [number, number]) => {
+    for (let i = 1; i < pts.length; i++) {
+      const cl = clip(pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y, c.w, c.h)
+      if (cl) c.line(cl[0], cl[1], cl[2], cl[3], t, v, dash)
+    }
+  }
+  for (const f of feats) if (f.k === "park" && f.poly) fillRings(c, f.p.map(proj), PATTERN.park)
+  for (const f of feats)
+    if (f.k === "water" && f.poly) {
+      const rings = f.p.map(proj)
+      fillRings(c, rings, PATTERN.water)
+      for (const r of rings) lineOf(r, 1, 1)
+    }
+  const roads = feats.filter((f) => !f.poly && ROAD_STYLE[f.k] && !(s.mode === "driving" && (f.k === "path" || f.k === "minor")))
+  const projected = roads.map((f) => ({f, lines: f.p.map(proj)}))
+  for (const {f, lines} of projected) if (f.k !== "path") for (const l of lines) lineOf(l, ROAD_STYLE[f.k].t + 2, 0)
+  for (const {f, lines} of projected) for (const l of lines) lineOf(l, ROAD_STYLE[f.k].t, 1, ROAD_STYLE[f.k].dash)
+}
+
 /** The map: course-up around you, you a bit below the centre so more of the way ahead shows. */
 export function drawMap(s: HudState, w = MAP_BOX.w, h = MAP_BOX.h): Canvas {
   const c = new Canvas(w, h)
@@ -217,7 +269,7 @@ export function drawMap(s: HudState, w = MAP_BOX.w, h = MAP_BOX.h): Canvas {
       prev = q
     }
   }
-  for (const r of s.roads) seg(r.p, r.c === 0 ? 2 : 1, r.c === 2 ? [2, 3] : undefined)
+  drawFeatures(c, s, center, scale, cos, sin, cx, cy)
   // the route from where you are on
   let route = s.route
   if (s.me && route.length > 1) {
@@ -225,8 +277,8 @@ export function drawMap(s: HudState, w = MAP_BOX.w, h = MAP_BOX.h): Canvas {
     if (n) route = [s.me, ...route.slice(n.index + 1)]
   }
   // a clear border around the route so it reads over the streets, then the route itself
-  seg(route, 9, undefined, 0)
-  seg(route, 4)
+  seg(route, 11, undefined, 0)
+  seg(route, 5)
   if (s.dest) {
     const d = project(s.dest)
     if (d.x >= -8 && d.x <= w + 8 && d.y >= -8 && d.y <= h + 8) {

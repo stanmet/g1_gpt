@@ -678,54 +678,65 @@ p {
   padding: 22px 20px 18px;
   overflow: hidden;
 }
-.trip-map {
+.map-card {
   position: relative;
-  height: 230px;
-  margin: -22px -20px 18px;
-  background: var(--map-bg);
+  height: 340px;
+  overflow: hidden;
+  padding: 0;
+  margin-bottom: 14px;
 }
-.trip-map svg {
+.map-card canvas {
   display: block;
   width: 100%;
   height: 100%;
+  touch-action: none;
 }
-.trip-map .road {
+.map-ctl {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.map-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
+  display: grid;
+  place-items: center;
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+.map-btn svg {
+  width: 20px;
+  height: 20px;
   fill: none;
-  stroke: var(--map-road);
+  stroke: currentColor;
+  stroke-width: 2.2;
   stroke-linecap: round;
   stroke-linejoin: round;
-  vector-effect: non-scaling-stroke;
 }
-.trip-map .road.c0 {
-  stroke-width: 6px;
+.map-btn[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--on-ink);
 }
-.trip-map .road.c1 {
-  stroke-width: 3.5px;
+.map-btn:active {
+  transform: scale(0.94);
 }
-.trip-map .road.c2 {
-  stroke: var(--map-path);
-  stroke-width: 1.5px;
-  stroke-dasharray: 3 4;
-}
-.trip-map .route {
-  fill: none;
-  stroke: var(--map-route);
-  stroke-width: 6px;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  vector-effect: non-scaling-stroke;
-}
-.trip-map .me {
-  fill: var(--map-me);
-  stroke: #fff;
-  stroke-width: 3px;
-  vector-effect: non-scaling-stroke;
-}
-.trip-map .dest {
-  fill: var(--map-route);
-  stroke: var(--map-bg);
-  stroke-width: 3px;
-  vector-effect: non-scaling-stroke;
+.map-note {
+  position: absolute;
+  left: 12px;
+  right: 60px;
+  top: 12px;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: var(--card);
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.3;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 .map-credit {
   position: absolute;
@@ -1313,4 +1324,85 @@ p {
     gap: 12px;
     padding-left: 16px;
   }
+}
+
+/* ───────────── offline maps ───────────── */
+
+.offline {
+  padding: 18px 20px 14px;
+}
+.offline-sum {
+  font-size: 17px;
+}
+.offline-label {
+  margin: 12px 0 10px;
+  font-size: 14px;
+  color: var(--text-2);
+}
+.seg.sizes button {
+  height: 54px;
+  border-radius: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.15;
+}
+.seg.sizes button span {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.seg.sizes button:disabled {
+  opacity: 0.45;
+}
+.dl {
+  margin-top: 14px;
+}
+.bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--soft);
+  overflow: hidden;
+}
+.bar i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--ink);
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+.dl .offline-label {
+  margin: 8px 0 4px;
+}
+.ghost-btn {
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 20px;
+  background: var(--soft);
+  font-size: 15px;
+}
+.ghost-btn.danger {
+  margin-top: 12px;
+  color: #d93025;
+}
+.map-areas:not(:empty) {
+  margin-top: 14px;
+  border-top: 0.5px solid var(--line);
+}
+.map-area {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  border-bottom: 0.5px solid var(--line);
+}
+.map-area .row-label {
+  flex: 1;
+  min-width: 0;
+}
+.map-area button {
+  color: #d93025;
+  font-size: 15px;
+  padding: 8px 0 8px 8px;
 }

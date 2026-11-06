@@ -56,19 +56,41 @@ const NAV_REPLIES: Record<string, (p: any) => unknown> = {
   miniapp_navigation_get_state: () => ({ok: true, state: null}),
 }
 
-/** A few streets around Trinity College, as Overpass returns them. */
-const OVERPASS_SAMPLE = {
-  elements: [
-    {type: "way", tags: {highway: "primary"}, geometry: [{lat: 53.3445, lon: -6.2620}, {lat: 53.3440, lon: -6.2560}]},
-    {type: "way", tags: {highway: "pedestrian"}, geometry: [{lat: 53.3420, lon: -6.2600}, {lat: 53.3445, lon: -6.2598}]},
-    {type: "way", tags: {highway: "footway"}, geometry: [{lat: 53.3430, lon: -6.2590}, {lat: 53.3436, lon: -6.2570}]},
-    {type: "node", lat: 1, lon: 2},
-  ],
+/** A real map tile (Zurich); the fake Mentra serves it for any tile a test asks for. */
+const TILE = readFileSync(new URL("./fixtures/zurich-14-8590-5737.pbf.gz", import.meta.url))
+
+/** Mentra's per-app file storage (`session.blob`), in memory. */
+function fakeBlobHost() {
+  const files = new Map<string, Buffer>()
+  const urls: string[] = []
+  const handles = new Map<string, {key: string; done: boolean}>()
+  const replies: Record<string, (p: any) => unknown> = {
+    miniapp_blob_set_from_url: (p) => {
+      urls.push(p.url)
+      files.set(p.key, TILE)
+      return {key: p.key, bytes: TILE.length, mimeType: "application/x-protobuf", uri: "file:///x", createdAt: 0, updatedAt: 0}
+    },
+    miniapp_blob_list: () => ({blobs: [...files.entries()].map(([key, b]) => ({key, bytes: b.length}))}),
+    miniapp_blob_open_read: (p) => {
+      const handle = `h${handles.size}`
+      handles.set(handle, {key: p.key, done: false})
+      return {handle, meta: {key: p.key, bytes: files.get(p.key)?.length ?? 0}}
+    },
+    miniapp_blob_read: (p) => {
+      const h = handles.get(p.handle)!
+      const b = files.get(h.key)!
+      return {base64: b.toString("base64"), done: true}
+    },
+    miniapp_blob_close_read: () => null,
+    miniapp_blob_delete: (p) => void files.delete(p.key),
+  }
+  return {files, urls, replies}
 }
 
 function makeHost(openaiAnswers: string[], store = new Map<string, string>()) {
   const sent: Env[] = []
   const openaiCalls: any[] = []
+  const blobHost = fakeBlobHost()
   let ctx: any
 
   const deliver = (env: Env) => setTimeout(() => ctx.__mentraDeliverBridgeRaw?.(JSON.stringify(env)), 0)
@@ -93,17 +115,16 @@ function makeHost(openaiAnswers: string[], store = new Map<string, string>()) {
         },
       })
     } else if (env.requestId) {
-      const data = type === "miniapp_render" ? {status: "displayed", degraded: true} : (NAV_REPLIES[type]?.(env.payload) ?? null)
+      const data =
+        type === "miniapp_render" ? {status: "displayed", degraded: true} : ((NAV_REPLIES[type] ?? blobHost.replies[type])?.(env.payload) ?? null)
       deliver({payload: {type: "miniapp_request_result", ok: true, data}, requestId: env.requestId})
     }
     return null
   }
 
-  const overpassCalls: {url: string; body: string}[] = []
   const fetch = async (url: string, init: any) => {
-    if (/overpass/.test(url)) {
-      overpassCalls.push({url, body: String(init?.body ?? "")})
-      const raw = JSON.stringify(OVERPASS_SAMPLE)
+    if (/openfreemap/.test(url)) {
+      const raw = JSON.stringify({tiles: ["https://tiles.openfreemap.org/planet/20251101_001001_pt/{z}/{x}/{y}.pbf"]})
       return {ok: true, status: 200, text: async () => raw, json: async () => JSON.parse(raw)}
     }
     openaiCalls.push({url, init, body: JSON.parse(init.body)})
@@ -138,7 +159,7 @@ function makeHost(openaiAnswers: string[], store = new Map<string, string>()) {
   const renders = () => sent.filter((e) => e.payload?.type === "miniapp_render").map((e) => e.payload.elements?.[0]?.text ?? "<clear>")
   const uiReplies = () => sent.filter((e) => e.payload?.type === "UI_SEND")
   const bitmaps = () => sent.filter((e) => e.payload?.type === "miniapp_display" && e.payload.layout?.layoutType === "bitmap_view").map((e) => e.payload.layout.data as string)
-  return {ctx, sent, openaiCalls, overpassCalls, store, ev, renders, uiReplies, bitmaps}
+  return {ctx, sent, openaiCalls, blobHost, store, ev, renders, uiReplies, bitmaps}
 }
 
 test("built bundle: G1 transcript → OpenAI → render, follow-up keeps context", async () => {
@@ -409,7 +430,7 @@ test("built bundle: navigator search from the phone", async () => {
   expect(h.sent.find((e) => e.payload?.type === "miniapp_navigation_start")!.payload).toMatchObject({mode: "cycling", lat: 53.3438})
 }, 15000)
 
-test("built bundle: navigator map — the route as a G1 picture with streets from OpenStreetMap", async () => {
+test("built bundle: navigator map — the route as a G1 picture, map tiles kept on the phone", async () => {
   const h = makeHost([])
   vm.runInContext(readFileSync(BUNDLE, "utf8"), h.ctx, {filename: "background/index.js"})
   h.ctx.__mentraInitCallback("s")
@@ -417,14 +438,15 @@ test("built bundle: navigator map — the route as a G1 picture with streets fro
   h.ev("_ui", {type: "UI_OPEN"})
   h.ev("_ui", {type: "UI_MESSAGE", channel: "navGo", payload: {placeId: "poi.trinity", mainText: "Trinity College Dublin", secondaryText: "", mode: "walking"}, seq: 1, requestId: "g"})
   await sleep(120)
-  // Mentra sends the route line and positions during the trip
-  h.ev("navigation_route", {points: [{lat: 53.3498, lng: -6.2603}, {lat: 53.3460, lng: -6.2600}, {lat: 53.3438, lng: -6.2546}]})
-  h.ev("location_update", {lat: 53.3497, lng: -6.2603, accuracy: 8})
-  await sleep(80)
-  expect(h.overpassCalls.length).toBe(1)
-  expect(decodeURIComponent(h.overpassCalls[0].body)).toContain("around:500,53.349800,-6.260300") // around the start of the route
+  // Mentra sends the route line and positions during the trip (here: by the lake in Zurich, where the test tile is)
+  h.ev("navigation_route", {points: [{lat: 47.3462, lng: 8.7550}, {lat: 47.3470, lng: 8.7560}, {lat: 47.3480, lng: 8.7575}]})
+  h.ev("location_update", {lat: 47.3462, lng: 8.7550, accuracy: 8})
+  await sleep(200)
+  // tiles are downloaded straight into Mentra's file storage, from the address in OpenFreeMap's TileJSON
+  expect(h.blobHost.urls.length).toBeGreaterThan(0)
+  expect(h.blobHost.urls[0]).toMatch(/^https:\/\/tiles\.openfreemap\.org\/planet\/20251101_001001_pt\/14\/\d+\/\d+\.pbf$/)
   await sleep(4800)
-  h.ev("navigation_update", {kind: "maneuver", maneuverType: "TURN_RIGHT", distanceMeters: 140, nextStepRoad: "Grafton Street", distanceToDestinationMeters: 850, timeToDestinationSeconds: 660})
+  h.ev("navigation_update", {kind: "maneuver", maneuverType: "TURN_RIGHT", distanceMeters: 140, nextStepRoad: "Seestrasse", distanceToDestinationMeters: 850, timeToDestinationSeconds: 660})
   await sleep(1700)
   const pics = h.bitmaps()
   expect(pics.length).toBeGreaterThan(0)
@@ -438,17 +460,47 @@ test("built bundle: navigator map — the route as a G1 picture with streets fro
   h.ev("_ui", {type: "UI_MESSAGE", channel: "getState", payload: {}, seq: 2, requestId: "st"})
   h.ev("_ui", {type: "UI_MESSAGE", channel: "navMap", payload: {}, seq: 3, requestId: "map"})
   h.ev("_ui", {type: "UI_MESSAGE", channel: "navFrame", payload: {}, seq: 4, requestId: "fr"})
-  await sleep(40)
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "mapTile", payload: {z: 14, x: 8590, y: 5737}, seq: 5, requestId: "tile"})
+  await sleep(60)
   const result = (id: string) => h.uiReplies().find((e) => e.payload.requestId === id)!.payload.payload.result
-  expect(result("st")).toMatchObject({glassesBitmap: true, nav: {map: true, canMap: true, streets: 3}})
-  expect(result("map")).toMatchObject({active: true, me: [53.3497, -6.2603], roadsVersion: 1})
-  expect(result("map").roads).toHaveLength(3)
+  const st = result("st")
+  expect(st).toMatchObject({glassesBitmap: true, nav: {map: true, canMap: true}, maps: {available: true}})
+  expect(st.nav.streets).toBeGreaterThan(10) // roads, water, parks from the tile
+  expect(st.maps.tiles).toBeGreaterThan(0)
+  expect(result("map")).toMatchObject({active: true, me: [47.3462, 8.755]})
   expect(result("map").route).toHaveLength(3)
   expect(result("fr").frame).toBe(pics.at(-1))
+  // the phone map gets the tile file as base64
+  expect(Buffer.from(result("tile").b64, "base64").equals(TILE)).toBe(true)
 
   // the test picture from the phone
-  h.ev("_ui", {type: "UI_MESSAGE", channel: "navTestBitmap", payload: {}, seq: 5, requestId: "t"})
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "navTestBitmap", payload: {}, seq: 6, requestId: "t"})
   await sleep(30)
   expect(result("t")).toEqual({ok: true})
   expect(h.bitmaps().length).toBe(pics.length + 1)
+}, 20000)
+
+test("built bundle: offline map — download an area, see progress, delete it", async () => {
+  const h = makeHost([])
+  vm.runInContext(readFileSync(BUNDLE, "utf8"), h.ctx, {filename: "background/index.js"})
+  h.ctx.__mentraInitCallback("s")
+  await sleep(50)
+  h.ev("_ui", {type: "UI_OPEN"})
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "mapEstimate", payload: {lat: 47.3462, lng: 8.755}, seq: 1, requestId: "e"})
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "mapDownload", payload: {lat: 47.3462, lng: 8.755, radiusKm: 2}, seq: 2, requestId: "d"})
+  await sleep(400)
+  const result = (id: string) => h.uiReplies().find((e) => e.payload.requestId === id)!.payload.payload.result
+  expect(result("e")["2"]).toBeGreaterThan(0)
+  expect(result("d")).toEqual({ok: true})
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "getState", payload: {}, seq: 3, requestId: "s"})
+  await sleep(40)
+  const maps = result("s").maps
+  expect(maps.download).toBeNull()
+  expect(maps.areas).toHaveLength(1)
+  expect(maps.areas[0].name).not.toMatch(/^\d/)
+  expect(maps.tiles).toBe(h.blobHost.files.size)
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "mapDelete", payload: {id: maps.areas[0].id}, seq: 4, requestId: "x"})
+  await sleep(100)
+  expect(result("x").maps.areas).toHaveLength(0)
+  expect(h.blobHost.files.size).toBe(0)
 }, 20000)

@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light dark" />
     <title>EVA-IA</title>
     
-  <link rel="stylesheet" crossorigin href="./chunk-tqekcb2j.css"><script type="module" crossorigin src="./chunk-werb0wd4.js"></script></head>
+  <link rel="stylesheet" crossorigin href="./chunk-k547pntf.css"><script type="module" crossorigin src="./chunk-e1vpx233.js"></script></head>
   <body>
     <!-- Icons, referenced with <svg><use href="#i-…"/></svg> -->
     <svg width="0" height="0" style="position: absolute" aria-hidden="true">
@@ -29,6 +29,7 @@
       <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" /></symbol>
       <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></symbol>
       <symbol id="i-send" viewBox="0 0 24 24"><path d="M12 19V6M6 11l6-6 6 6" /></symbol>
+      <symbol id="i-minus" viewBox="0 0 24 24"><path d="M6 12h12" /></symbol>
       <symbol id="i-nav" viewBox="0 0 24 24"><path d="M12 3l7.5 17.5L12 16.5l-7.5 4z" /></symbol>
       <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" /><path d="M15.5 15.5L20 20" /></symbol>
       <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6.5-6-6.5-11.2a6.5 6.5 0 0 1 13 0C18.5 15 12 21 12 21z" /><circle cx="12" cy="9.8" r="2.3" /></symbol>
@@ -441,11 +442,18 @@
     <section class="page" id="page-nav" hidden>
       <header class="page-top"><button class="circle back" type="button" aria-label="Назад"><svg><use href="#i-back" /></svg></button><h1>Навигатор</h1></header>
 
-      <div class="card trip" id="navTrip" hidden>
-        <div class="trip-map" id="navMapBox">
-          <svg id="navMapSvg" aria-label="Карта маршрута" role="img"></svg>
-          <span class="map-credit">© OpenStreetMap</span>
+      <div class="card map-card" id="mapCard">
+        <canvas id="phoneMap" aria-label="Карта"></canvas>
+        <div class="map-ctl">
+          <button class="map-btn" id="mapZoomIn" type="button" aria-label="Крупнее"><svg><use href="#i-plus" /></svg></button>
+          <button class="map-btn" id="mapZoomOut" type="button" aria-label="Мельче"><svg><use href="#i-minus" /></svg></button>
+          <button class="map-btn" id="mapFollow" type="button" aria-label="Где я" aria-pressed="true"><svg><use href="#i-nav" /></svg></button>
         </div>
+        <p class="map-note" id="mapNote" hidden></p>
+        <span class="map-credit">© OpenStreetMap · OpenFreeMap</span>
+      </div>
+
+      <div class="card trip" id="navTrip" hidden>
         <p class="trip-turn" id="navTurn"></p>
         <p class="trip-road" id="navRoad"></p>
         <div class="trip-dest">
@@ -477,6 +485,25 @@
         <button class="item item-btn" id="navTestBtn" type="button"><span class="item-label">Проверить картинку на очках</span></button>
       </div>
 
+      <h2 class="section">Офлайн-карты</h2>
+      <div class="card offline" id="offlineCard">
+        <p class="offline-sum" id="offlineSum"></p>
+        <p class="offline-label">Скачать область вокруг центра карты</p>
+        <div class="seg sizes" id="offlineSizes">
+          <button type="button" data-km="2">2 км<span></span></button>
+          <button type="button" data-km="5">5 км<span></span></button>
+          <button type="button" data-km="15">15 км<span></span></button>
+        </div>
+        <div class="dl" id="offlineProgress" hidden>
+          <div class="bar"><i id="offlineBar"></i></div>
+          <p class="offline-label" id="offlineText"></p>
+          <button class="ghost-btn" id="offlineCancel" type="button">Отменить</button>
+        </div>
+        <div class="map-areas" id="offlineAreas"></div>
+        <button class="ghost-btn danger" id="offlineDeleteAll" type="button" hidden>Удалить все карты</button>
+      </div>
+      <p class="help">Карты — OpenStreetMap через OpenFreeMap. Вдоль маршрута карта сохраняется на телефон сама. Скачанная карта работает без интернета, но маршрут и поиск места строит Mentra — для них интернет нужен.</p>
+
       <h2 class="section">Голосом</h2>
       <div class="card list cmds">
         <div class="cmd"><p class="cmd-say">«Проведи до Тринити-колледжа»</p><p class="cmd-do">Маршрут. Можно добавить «пешком», «на машине», «на велосипеде»</p></div>
@@ -484,7 +511,7 @@
         <div class="cmd"><p class="cmd-say">«Сколько осталось?»</p><p class="cmd-do">Расстояние и время до цели</p></div>
         <div class="cmd"><p class="cmd-say">«Стоп навигация»</p><p class="cmd-do">Завершить маршрут</p></div>
       </div>
-      <p class="help">Когда на очках нет ответа, там стрелка, расстояние и карта: улицы вокруг, маршрут и вы. Близкий поворот на несколько секунд показывается текстом поверх ответа, лекции или перевода. Маршрут строит Mentra, улицы — © участники OpenStreetMap.</p>
+      <p class="help">Когда на очках нет ответа, там стрелка, расстояние и карта: улицы, тропинки, вода и парки вокруг, маршрут и вы. Близкий поворот на несколько секунд показывается текстом поверх ответа, лекции или перевода.</p>
     </section>
 
     <!-- ───────────── Команды ───────────── -->

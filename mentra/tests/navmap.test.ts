@@ -5,14 +5,14 @@ import {
   distanceM,
   MAP_BOX,
   nearestOnRoute,
-  overpassQuery,
-  parseOverpass,
   renderHud,
   travelHeading,
   type HudState,
   type LatLng,
 } from "../src/background/navmap"
 import {Navigator, type NavUpdate, type Place} from "../src/background/navigator"
+import {type MapFeature} from "../src/background/tiles"
+import {toWorld} from "../src/shared/mvt"
 
 const bmp = (b64: string) => Buffer.from(b64, "base64")
 /** Lit pixels of a G1 bitmap (bit 0 = drawn), top-down. */
@@ -25,6 +25,22 @@ function litPixels(b64: string): {x: number; y: number}[] {
   }
   return out
 }
+
+/** A map feature (as the tile store gives them) from lat/lng points. */
+function line(k: MapFeature["k"], ...pts: LatLng[]): MapFeature {
+  const p = pts.flatMap((q) => {
+    const w = toWorld(q.lat, q.lng)
+    return [w.x, w.y]
+  })
+  const xs = p.filter((_, i) => i % 2 === 0)
+  const ys = p.filter((_, i) => i % 2 === 1)
+  return {k, poly: false, p: [p], b: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]}
+}
+function park(c: LatLng, r: number): MapFeature {
+  const f = line("park", at2(c, -r, -r), at2(c, r, -r), at2(c, r, r), at2(c, -r, r), at2(c, -r, -r))
+  return {...f, poly: true}
+}
+const at2 = (c: LatLng, dx: number, dy: number): LatLng => ({lat: c.lat + dy / 111320, lng: c.lng + dx / (111320 * Math.cos((c.lat * Math.PI) / 180))})
 
 // a small street grid around Trinity College
 const O = {lat: 53.343, lng: -6.26}
@@ -88,26 +104,6 @@ describe("map geometry and streets", () => {
     expect(travelHeading(route, at(500, 500), at(500, 480))).toBeCloseTo(0, -1)
     expect(travelHeading(route, at(500, 500), at(500, 498))).toBeNull()
   })
-
-  test("Overpass: the query and its reply", () => {
-    const q = overpassQuery(O, 500, "walking")
-    expect(q).toContain("around:500,53.343000,-6.260000")
-    expect(q).toContain("footway")
-    expect(overpassQuery(O, 1400, "driving")).not.toContain("footway")
-    const roads = parseOverpass({
-      elements: [
-        {type: "way", tags: {highway: "primary"}, geometry: [{lat: 1, lon: 2}, {lat: 3, lon: 4}]},
-        {type: "way", tags: {highway: "footway"}, geometry: [{lat: 1, lon: 2}, {lat: 3, lon: 4}]},
-        {type: "way", tags: {highway: "construction"}, geometry: [{lat: 1, lon: 2}, {lat: 3, lon: 4}]},
-        {type: "way", tags: {highway: "residential"}, geometry: [{lat: 1, lon: 2}]},
-      ],
-    })
-    expect(roads).toEqual([
-      {c: 0, p: [{lat: 1, lng: 2}, {lat: 3, lng: 4}]},
-      {c: 2, p: [{lat: 1, lng: 2}, {lat: 3, lng: 4}]},
-    ])
-    expect(parseOverpass(null)).toEqual([])
-  })
 })
 
 describe("the navigation picture", () => {
@@ -120,10 +116,7 @@ describe("the navigation picture", () => {
     me: at(0, 0),
     heading: 0,
     route: [at(0, -20), at(0, 80), at(140, 80), at(150, 260)],
-    roads: [
-      {c: 1, p: [at(-300, 80), at(300, 80)]},
-      {c: 2, p: [at(-100, -100), at(100, 100)]},
-    ],
+    features: [line("road", at(-300, 80), at(300, 80)), line("path", at(-100, -100), at(100, 100)), park(at(-150, -60), 60)],
     dest: at(150, 260),
     mode: "walking",
   }
@@ -142,7 +135,7 @@ describe("the navigation picture", () => {
     const a = renderHud(state)
     expect(renderHud({...state, maneuver: "TURN_LEFT", verb: "Налево"})).not.toBe(a)
     expect(renderHud({...state, message: "Перестраиваю маршрут…"})).not.toBe(a)
-    expect(bmp(renderHud({...state, roads: [], me: null, heading: null})).length).toBe(9782)
+    expect(bmp(renderHud({...state, features: [], me: null, heading: null})).length).toBe(9782)
     expect(renderHud(state)).toBe(a) // same state, same picture (nothing is resent)
   })
 })
@@ -207,7 +200,7 @@ function setup(mapOn = true) {
     mapOn: () => mapOn,
     roads: async (center, radius) => {
       roadCalls.push({center, radius})
-      return [{c: 1, p: [at(-300, 80), at(300, 80)]}]
+      return [line("road", at(-300, 80), at(300, 80))]
     },
     watch: (cb) => {
       watching++

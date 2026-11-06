@@ -9,7 +9,8 @@
  *
  * Independent of Mentra and of the assistant, so it can be tested with fakes.
  */
-import {distanceM, renderHud, ROADS_RADIUS, travelHeading, type HudState, type LatLng, type Road} from "./navmap"
+import {distanceM, MAP_RADIUS, renderHud, travelHeading, type HudState, type LatLng} from "./navmap"
+import type {MapFeature} from "./tiles"
 import type {TravelMode} from "./voice"
 
 export type {TravelMode}
@@ -50,8 +51,10 @@ export type NavScreenKind = "message" | "turn" | "route"
 export interface NavHost {
   /** Why navigation cannot work right now («нет разрешения…»), or "" when it can. */
   problem?(): string
-  /** Streets around a point for the map (OpenStreetMap via Overpass). */
-  roads?(center: LatLng, radius: number, mode: TravelMode): Promise<Road[]>
+  /** What is around a point for the map (OpenStreetMap vector tiles). */
+  roads?(center: LatLng, radius: number, mode: TravelMode): Promise<MapFeature[]>
+  /** Save the map along a route on the phone. */
+  prefetch?(route: LatLng[]): void
   /** Live position during a trip; returns a function that stops it. */
   watch?(onPosition: (p: {lat: number; lng: number; accuracy?: number}) => void): () => void
   locate(): Promise<{lat: number; lng: number} | null>
@@ -89,8 +92,10 @@ export interface NavigatorDeps {
   ended(): void
   /** Setting «Карта на очках»: the route screen is a picture with a map (like the Even app). */
   mapOn?(): boolean
-  /** Streets around a point, for the map (OpenStreetMap). */
-  roads?(center: LatLng, radius: number, mode: TravelMode): Promise<Road[]>
+  /** What is around a point for the map: roads, water, parks, buildings (map tiles). */
+  roads?(center: LatLng, radius: number, mode: TravelMode): Promise<MapFeature[]>
+  /** The route is known: save the map along it on the phone. */
+  prefetch?(route: LatLng[]): void
   /** Live position during a trip; returns a function that stops it. */
   watch?(onPosition: (p: {lat: number; lng: number; accuracy?: number}) => void): () => void
 }
@@ -261,7 +266,7 @@ export class Navigator {
   me: LatLng | null = null
   /** Direction of travel, degrees from north. */
   heading: number | null = null
-  roads: Road[] = []
+  roads: MapFeature[] = []
   roadsVersion = 0
   /** The navigation screen as a G1 picture (base64 BMP), "" until drawn. */
   frame = ""
@@ -485,6 +490,7 @@ export class Navigator {
     }
     if (!this.active) return
     this.route = pts.map((p) => ({lat: p.lat, lng: p.lng}))
+    this.prefetch()
     this.maybeLoadRoads()
     this.hud(true)
     this.deps.onChange()
@@ -543,8 +549,19 @@ export class Navigator {
       this.unwatch = null
       this.deps.log("info", `Геопозиция для карты: ${explainNavError((e as Error)?.message ?? e)}`)
     }
+    this.prefetch()
     this.maybeLoadRoads()
     this.hud(true)
+  }
+
+  /** Saves the map along the route on the phone, so it works if the connection drops later. */
+  private prefetch(): void {
+    if (!this.mapOn() || this.route.length < 2) return
+    try {
+      this.deps.prefetch?.(this.route)
+    } catch {
+      // the map just loads as you go
+    }
   }
 
   private endMap(): void {
@@ -568,7 +585,7 @@ export class Navigator {
     if (!this.deps.roads || !this.mapOn() || this.roadsBusy || !this.active) return
     const center = this.me ?? this.route[0] ?? (this.dest ? {lat: this.dest.lat, lng: this.dest.lng} : null)
     if (!center) return
-    const radius = ROADS_RADIUS[this.mode]
+    const radius = MAP_RADIUS[this.mode]
     const near = this.roadsCenter && this.roadsMode === this.mode && distanceM(this.roadsCenter, center) < radius * ROADS_RELOAD_SHARE
     if (near) return
     const now = this.deps.now()
@@ -583,14 +600,14 @@ export class Navigator {
         this.roadsCenter = center
         this.roadsMode = mode
         this.roadsVersion++
-        if (this.roadsFailed || this.roadsVersion === 1) this.deps.log("nav", `Карта: загружено улиц вокруг — ${roads.length}`)
+        if (this.roadsFailed || this.roadsVersion === 1) this.deps.log("nav", `Карта вокруг загружена: ${roads.length} объектов`)
         this.roadsFailed = false
         this.hud(false)
         this.deps.onChange()
       })
       .catch((e) => {
         this.roadsNextTry = this.deps.now() + ROADS_FAIL_RETRY_MS
-        if (!this.roadsFailed) this.deps.log("info", `Карта: улицы не загрузились (${String((e as Error)?.message ?? e).slice(0, 80)}) — показываю только маршрут`)
+        if (!this.roadsFailed) this.deps.log("info", `Карта: ${String((e as Error)?.message ?? e).slice(0, 90)} — показываю только маршрут`)
         this.roadsFailed = true
       })
       .finally(() => {
@@ -636,7 +653,7 @@ export class Navigator {
       me: this.me,
       heading: this.heading,
       route: this.route,
-      roads: this.roads,
+      features: this.roads,
       dest: {lat: this.dest.lat, lng: this.dest.lng},
       mode: this.mode,
     }

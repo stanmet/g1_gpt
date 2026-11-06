@@ -269,6 +269,7 @@ export class Assistant {
       },
       mapOn: () => this.navMapOn(),
       roads: deps.nav?.roads ? (c, r, m) => deps.nav!.roads!(c, r, m) : undefined,
+      prefetch: deps.nav?.prefetch ? (route) => deps.nav!.prefetch!(route) : undefined,
       watch: deps.nav?.watch ? (cb) => deps.nav!.watch!(cb) : undefined,
     })
   }

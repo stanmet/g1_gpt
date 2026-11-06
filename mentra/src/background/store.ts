@@ -2,6 +2,7 @@
 
 import type {LectureRecord} from "./lecture"
 import type {NavTrip} from "./navigator"
+import type {OfflineArea} from "./tiles"
 export type ListenMode = "wake" | "always" | "off"
 export type Effort = "auto" | "none" | "low" | "medium" | "high"
 export type SttLanguage = "ru-RU" | "auto"
@@ -139,6 +140,7 @@ const HISTORY_KEY = "g1gpt.history.v1"
 const LECTURE_KEY = "g1gpt.lecture.v1"
 const TALK_KEY = "g1gpt.talk.v1"
 const NAV_KEY = "g1gpt.nav.v1"
+const MAP_AREAS_KEY = "g1gpt.mapAreas.v1"
 
 function clampInt(v: unknown, min: number, max: number, dflt: number): number {
   const n = typeof v === "number" ? v : parseInt(String(v), 10)
@@ -258,6 +260,16 @@ export class Store {
 
   saveTalk(r: LectureRecord): void {
     this.write(TALK_KEY, r)
+  }
+
+  /** Offline map areas the user downloaded. */
+  loadMapAreas(): OfflineArea[] {
+    const a = this.read<OfflineArea[]>(MAP_AREAS_KEY)
+    return Array.isArray(a) ? a.filter((x) => x && typeof x.id === "string" && Number.isFinite(x.lat) && Number.isFinite(x.lng)) : []
+  }
+
+  saveMapAreas(a: OfflineArea[]): void {
+    this.write(MAP_AREAS_KEY, a)
   }
 
   /** The running navigator trip, if any. */

@@ -6184,6 +6184,471 @@ Stop: «стоп лекция»` : `Режим лекции
     }
   }
 
+  // src/shared/inflate.ts
+  var LEN_BASE = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258];
+  var LEN_EXTRA = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0];
+  var DIST_BASE = [1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577];
+  var DIST_EXTRA = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13];
+  var CL_ORDER = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
+  function buildHuff(lengths, n) {
+    const counts = new Uint16Array(16);
+    for (let i = 0;i < n; i++)
+      counts[lengths[i]]++;
+    counts[0] = 0;
+    const offs = new Uint16Array(16);
+    for (let i = 1;i < 16; i++)
+      offs[i] = offs[i - 1] + counts[i - 1];
+    const symbols = new Uint16Array(n);
+    for (let i = 0;i < n; i++)
+      if (lengths[i])
+        symbols[offs[lengths[i]]++] = i;
+    return { counts, symbols };
+  }
+  var FIXED_LIT = null;
+  var FIXED_DIST = null;
+  function fixed() {
+    if (!FIXED_LIT || !FIXED_DIST) {
+      const l = new Uint8Array(288);
+      for (let i = 0;i < 288; i++)
+        l[i] = i < 144 ? 8 : i < 256 ? 9 : i < 280 ? 7 : 8;
+      FIXED_LIT = buildHuff(l, 288);
+      FIXED_DIST = buildHuff(new Uint8Array(30).fill(5), 30);
+    }
+    return [FIXED_LIT, FIXED_DIST];
+  }
+
+  class Bits {
+    src;
+    pos = 0;
+    bitBuf = 0;
+    bitCnt = 0;
+    constructor(src) {
+      this.src = src;
+    }
+    bit() {
+      if (this.bitCnt === 0) {
+        if (this.pos >= this.src.length)
+          throw new Error("inflate: unexpected end of data");
+        this.bitBuf = this.src[this.pos++];
+        this.bitCnt = 8;
+      }
+      const b = this.bitBuf & 1;
+      this.bitBuf >>= 1;
+      this.bitCnt--;
+      return b;
+    }
+    bits(n) {
+      let v = 0;
+      for (let i = 0;i < n; i++)
+        v |= this.bit() << i;
+      return v;
+    }
+    decode(h) {
+      let code = 0;
+      let first = 0;
+      let index = 0;
+      for (let len = 1;len < 16; len++) {
+        code |= this.bit();
+        const count = h.counts[len];
+        if (code - first < count)
+          return h.symbols[index + (code - first)];
+        index += count;
+        first = first + count << 1;
+        code <<= 1;
+      }
+      throw new Error("inflate: bad Huffman code");
+    }
+    alignByte() {
+      this.bitCnt = 0;
+    }
+  }
+
+  class Out {
+    buf;
+    len = 0;
+    constructor(size) {
+      this.buf = new Uint8Array(Math.max(1024, size));
+    }
+    ensure(n) {
+      if (this.len + n <= this.buf.length)
+        return;
+      let cap = this.buf.length * 2;
+      while (cap < this.len + n)
+        cap *= 2;
+      const b = new Uint8Array(cap);
+      b.set(this.buf.subarray(0, this.len));
+      this.buf = b;
+    }
+    push(v) {
+      this.ensure(1);
+      this.buf[this.len++] = v;
+    }
+    copy(dist, n) {
+      if (dist > this.len)
+        throw new Error("inflate: bad distance");
+      this.ensure(n);
+      for (let i = 0;i < n; i++)
+        this.buf[this.len] = this.buf[this.len++ - dist];
+    }
+  }
+  function inflateRaw(src, sizeHint = src.length * 3) {
+    const r = new Bits(src);
+    const out = new Out(sizeHint);
+    for (;; ) {
+      const last = r.bit();
+      const type = r.bits(2);
+      if (type === 0) {
+        r.alignByte();
+        if (r.pos + 4 > src.length)
+          throw new Error("inflate: truncated stored block");
+        const len = src[r.pos] | src[r.pos + 1] << 8;
+        r.pos += 4;
+        if (r.pos + len > src.length)
+          throw new Error("inflate: truncated stored block");
+        out.ensure(len);
+        out.buf.set(src.subarray(r.pos, r.pos + len), out.len);
+        out.len += len;
+        r.pos += len;
+      } else if (type === 1 || type === 2) {
+        let lit;
+        let dist;
+        if (type === 1)
+          [lit, dist] = fixed();
+        else {
+          const hlit = r.bits(5) + 257;
+          const hdist = r.bits(5) + 1;
+          const hclen = r.bits(4) + 4;
+          const cl = new Uint8Array(19);
+          for (let i = 0;i < hclen; i++)
+            cl[CL_ORDER[i]] = r.bits(3);
+          const clh = buildHuff(cl, 19);
+          const lens = new Uint8Array(hlit + hdist);
+          for (let i = 0;i < hlit + hdist; ) {
+            const sym = r.decode(clh);
+            if (sym < 16)
+              lens[i++] = sym;
+            else {
+              let rep = 0;
+              let val = 0;
+              if (sym === 16) {
+                if (i === 0)
+                  throw new Error("inflate: repeat with no previous length");
+                val = lens[i - 1];
+                rep = 3 + r.bits(2);
+              } else if (sym === 17)
+                rep = 3 + r.bits(3);
+              else
+                rep = 11 + r.bits(7);
+              while (rep-- > 0)
+                lens[i++] = val;
+            }
+          }
+          lit = buildHuff(lens.subarray(0, hlit), hlit);
+          dist = buildHuff(lens.subarray(hlit), hdist);
+        }
+        for (;; ) {
+          const sym = r.decode(lit);
+          if (sym < 256)
+            out.push(sym);
+          else if (sym === 256)
+            break;
+          else {
+            const li = sym - 257;
+            if (li >= 29)
+              throw new Error("inflate: bad length symbol");
+            const len = LEN_BASE[li] + r.bits(LEN_EXTRA[li]);
+            const di = r.decode(dist);
+            if (di >= 30)
+              throw new Error("inflate: bad distance symbol");
+            out.copy(DIST_BASE[di] + r.bits(DIST_EXTRA[di]), len);
+          }
+        }
+      } else
+        throw new Error("inflate: bad block type");
+      if (last)
+        break;
+    }
+    return out.buf.subarray(0, out.len);
+  }
+  function maybeInflate(src) {
+    if (src.length > 18 && src[0] === 31 && src[1] === 139 && src[2] === 8) {
+      const flg = src[3];
+      let p = 10;
+      if (flg & 4)
+        p += 2 + (src[p] | src[p + 1] << 8);
+      if (flg & 8)
+        while (p < src.length && src[p++] !== 0)
+          ;
+      if (flg & 16)
+        while (p < src.length && src[p++] !== 0)
+          ;
+      if (flg & 2)
+        p += 2;
+      const isize = src[src.length - 4] | src[src.length - 3] << 8 | src[src.length - 2] << 16 | src[src.length - 1] << 24;
+      return inflateRaw(src.subarray(p, src.length - 8), isize >>> 0);
+    }
+    if (src.length > 2 && (src[0] & 15) === 8 && (src[0] << 8 | src[1]) % 31 === 0)
+      return inflateRaw(src.subarray(2, src.length - 4));
+    return src;
+  }
+
+  // src/shared/mvt.ts
+  class Pbf {
+    buf;
+    end;
+    pos;
+    constructor(buf, start = 0, end = buf.length) {
+      this.buf = buf;
+      this.end = end;
+      this.pos = start;
+    }
+    varint() {
+      let result = 0;
+      let shift = 0;
+      for (;; ) {
+        if (this.pos >= this.end)
+          throw new Error("mvt: truncated varint");
+        const b = this.buf[this.pos++];
+        if (shift < 28)
+          result |= (b & 127) << shift;
+        else
+          result += (b & 127) * 2 ** shift;
+        if (b < 128)
+          break;
+        shift += 7;
+      }
+      return result;
+    }
+    svarint() {
+      const n = this.varint();
+      return n % 2 === 1 ? (n + 1) / -2 : n / 2;
+    }
+    bytesEnd() {
+      const len = this.varint();
+      return this.pos + len;
+    }
+    skip(wire) {
+      if (wire === 0)
+        this.varint();
+      else if (wire === 1)
+        this.pos += 8;
+      else if (wire === 2)
+        this.pos = this.bytesEnd();
+      else if (wire === 5)
+        this.pos += 4;
+      else
+        throw new Error(`mvt: unsupported wire type ${wire}`);
+    }
+    string() {
+      const end = this.bytesEnd();
+      const s = utf8(this.buf, this.pos, end);
+      this.pos = end;
+      return s;
+    }
+    float() {
+      const v = new DataView(this.buf.buffer, this.buf.byteOffset + this.pos, 4).getFloat32(0, true);
+      this.pos += 4;
+      return v;
+    }
+    double() {
+      const v = new DataView(this.buf.buffer, this.buf.byteOffset + this.pos, 8).getFloat64(0, true);
+      this.pos += 8;
+      return v;
+    }
+  }
+  function utf8(b, start, end) {
+    let s = "";
+    let i = start;
+    while (i < end) {
+      const c = b[i++];
+      if (c < 128)
+        s += String.fromCharCode(c);
+      else if (c < 224)
+        s += String.fromCharCode((c & 31) << 6 | b[i++] & 63);
+      else if (c < 240)
+        s += String.fromCharCode((c & 15) << 12 | (b[i++] & 63) << 6 | b[i++] & 63);
+      else {
+        const cp = ((c & 7) << 18 | (b[i++] & 63) << 12 | (b[i++] & 63) << 6 | b[i++] & 63) - 65536;
+        s += String.fromCharCode(55296 + (cp >> 10), 56320 + (cp & 1023));
+      }
+    }
+    return s;
+  }
+  function readValue(p, end) {
+    let v = "";
+    while (p.pos < end) {
+      const tag = p.varint();
+      const field = tag >> 3;
+      const wire = tag & 7;
+      if (field === 1)
+        v = p.string();
+      else if (field === 2)
+        v = p.float();
+      else if (field === 3)
+        v = p.double();
+      else if (field === 4 || field === 5)
+        v = p.varint();
+      else if (field === 6)
+        v = p.svarint();
+      else if (field === 7)
+        v = p.varint() !== 0;
+      else
+        p.skip(wire);
+    }
+    return v;
+  }
+  function decodeGeom(p, end, type) {
+    const out = [];
+    let x = 0;
+    let y = 0;
+    let cur = null;
+    while (p.pos < end) {
+      const cmdInt = p.varint();
+      const cmd = cmdInt & 7;
+      let count = cmdInt >> 3;
+      if (cmd === 1) {
+        while (count-- > 0) {
+          x += p.svarint();
+          y += p.svarint();
+          if (type === 1) {
+            if (!cur)
+              out.push(cur = []);
+            cur.push(x, y);
+          } else {
+            cur = [x, y];
+            out.push(cur);
+          }
+        }
+      } else if (cmd === 2) {
+        while (count-- > 0) {
+          x += p.svarint();
+          y += p.svarint();
+          cur?.push(x, y);
+        }
+      } else if (cmd === 7) {
+        if (cur && cur.length >= 2)
+          cur.push(cur[0], cur[1]);
+      } else
+        throw new Error(`mvt: bad command ${cmd}`);
+    }
+    return out;
+  }
+  function decodeTile(bytes, opts = {}) {
+    const buf = maybeInflate(bytes);
+    const p = new Pbf(buf);
+    const out = {};
+    while (p.pos < p.end) {
+      const tag = p.varint();
+      if (tag >> 3 !== 3 || (tag & 7) !== 2) {
+        p.skip(tag & 7);
+        continue;
+      }
+      const end = p.bytesEnd();
+      const layer = decodeLayer(new Pbf(buf, p.pos, end), opts);
+      if (layer)
+        out[layer.name] = layer;
+      p.pos = end;
+    }
+    return out;
+  }
+  function decodeLayer(p, opts) {
+    let name = "";
+    let extent = 4096;
+    const keys = [];
+    const values = [];
+    const featureSpans = [];
+    while (p.pos < p.end) {
+      const tag = p.varint();
+      const field = tag >> 3;
+      const wire = tag & 7;
+      if (field === 1) {
+        name = p.string();
+        if (opts.layers && !opts.layers.has(name))
+          return null;
+      } else if (field === 2) {
+        const end = p.bytesEnd();
+        featureSpans.push([p.pos, end]);
+        p.pos = end;
+      } else if (field === 3)
+        keys.push(p.string());
+      else if (field === 4) {
+        const end = p.bytesEnd();
+        values.push(readValue(p, end));
+        p.pos = end;
+      } else if (field === 5)
+        extent = p.varint();
+      else
+        p.skip(wire);
+    }
+    if (opts.layers && !opts.layers.has(name))
+      return null;
+    const features = [];
+    for (const [start, end] of featureSpans) {
+      const f = new Pbf(p.buf, start, end);
+      let type = 1;
+      let tagsAt = null;
+      let geomAt = null;
+      while (f.pos < f.end) {
+        const tag = f.varint();
+        const field = tag >> 3;
+        if (field === 2 || field === 4) {
+          const e = f.bytesEnd();
+          if (field === 2)
+            tagsAt = [f.pos, e];
+          else
+            geomAt = [f.pos, e];
+          f.pos = e;
+        } else if (field === 3)
+          type = f.varint();
+        else
+          f.skip(tag & 7);
+      }
+      if (!geomAt)
+        continue;
+      const props = {};
+      if (tagsAt) {
+        const t = new Pbf(p.buf, tagsAt[0], tagsAt[1]);
+        while (t.pos < t.end) {
+          const k = keys[t.varint()];
+          const v = values[t.varint()];
+          if (k !== undefined && (!opts.props || opts.props.has(k)))
+            props[k] = v;
+        }
+      }
+      const g = new Pbf(p.buf, geomAt[0], geomAt[1]);
+      features.push({ type, props, geom: decodeGeom(g, geomAt[1], type) });
+    }
+    return { name, extent, features };
+  }
+  var TILE_ZOOM = 14;
+  var EARTH_CIRCUMFERENCE = 40075016.686;
+  function toWorld(lat, lng) {
+    const s = Math.sin(Math.max(-85.05, Math.min(85.05, lat)) * Math.PI / 180);
+    return { x: (lng + 180) / 360, y: 0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI) };
+  }
+  function metersPerWorld(lat) {
+    return EARTH_CIRCUMFERENCE * Math.cos(lat * Math.PI / 180);
+  }
+  function tileOf(lat, lng, z = TILE_ZOOM) {
+    const w = toWorld(lat, lng);
+    const n = 2 ** z;
+    return { x: Math.min(n - 1, Math.floor(w.x * n)), y: Math.min(n - 1, Math.floor(w.y * n)) };
+  }
+  function tilesAround(lat, lng, radiusM, z = TILE_ZOOM) {
+    const w = toWorld(lat, lng);
+    const r = radiusM / metersPerWorld(lat);
+    const n = 2 ** z;
+    const x0 = Math.max(0, Math.floor((w.x - r) * n));
+    const x1 = Math.min(n - 1, Math.floor((w.x + r) * n));
+    const y0 = Math.max(0, Math.floor((w.y - r) * n));
+    const y1 = Math.min(n - 1, Math.floor((w.y + r) * n));
+    const out = [];
+    for (let y = y0;y <= y1; y++)
+      for (let x = x0;x <= x1; x++)
+        out.push({ x, y });
+    return out;
+  }
+
   // src/background/glassfont.data.ts
   var GLASS_FONTS = { text: { ascent: 19, descent: 5, lineHeight: 24, glyphs: { " ": [5, 0, 0, 0, 0, 0], "!": [6, 2, 5, 3, 14, 0], '"': [10, 2, 5, 6, 6, 14], "#": [12, 0, 5, 12, 14, 20], $: [12, 1, 3, 10, 18, 48], "%": [19, 2, 5, 15, 14, 84], "&": [13, 1, 5, 11, 14, 112], "'": [6, 2, 5, 2, 6, 140], "(": [7, 2, 4, 4, 17, 146], ")": [7, 1, 4, 4, 17, 163], "*": [10, 1, 5, 8, 8, 180], "+": [13, 2, 9, 9, 10, 188], ",": [6, 1, 17, 3, 6, 208], "-": [9, 1, 12, 7, 2, 214], ".": [6, 2, 16, 3, 3, 216], "/": [7, 0, 4, 7, 17, 219], "0": [13, 1, 5, 11, 14, 236], "1": [8, 1, 5, 6, 14, 264], "2": [12, 1, 5, 10, 14, 278], "3": [12, 1, 5, 10, 14, 306], "4": [13, 1, 5, 11, 14, 334], "5": [12, 1, 5, 10, 14, 362], "6": [12, 1, 5, 10, 14, 390], "7": [11, 1, 5, 9, 14, 418], "8": [12, 1, 5, 10, 14, 446], "9": [12, 1, 4, 10, 14, 474], ":": [6, 2, 8, 3, 10, 502], ";": [6, 1, 9, 4, 13, 512], "<": [13, 2, 8, 9, 10, 525], "=": [13, 2, 10, 9, 7, 545], ">": [13, 2, 8, 9, 10, 559], "?": [10, 1, 5, 8, 14, 579], "@": [19, 1, 5, 17, 18, 593], A: [14, 1, 5, 12, 14, 647], B: [13, 1, 5, 11, 14, 675], C: [14, 1, 5, 12, 14, 703], D: [14, 1, 5, 12, 14, 731], E: [12, 1, 5, 9, 14, 759], F: [11, 1, 5, 9, 14, 787], G: [14, 1, 5, 12, 14, 815], H: [14, 1, 5, 12, 14, 843], I: [5, 1, 5, 3, 14, 871], J: [11, 1, 5, 9, 14, 885], K: [13, 1, 5, 12, 14, 913], L: [11, 1, 5, 9, 14, 941], M: [18, 1, 5, 15, 14, 969], N: [14, 1, 5, 12, 14, 997], O: [15, 1, 5, 13, 14, 1025], P: [12, 1, 5, 10, 14, 1053], Q: [15, 1, 5, 13, 15, 1081], R: [12, 1, 5, 11, 14, 1111], S: [12, 1, 5, 10, 14, 1139], T: [13, 1, 5, 11, 14, 1167], U: [14, 1, 5, 12, 14, 1195], V: [14, 1, 5, 12, 14, 1223], W: [19, 1, 5, 18, 14, 1251], X: [14, 1, 5, 12, 14, 1293], Y: [14, 1, 5, 12, 14, 1321], Z: [12, 1, 5, 10, 14, 1349], "[": [7, 2, 4, 4, 18, 1377], "\\": [7, 0, 4, 7, 17, 1395], "]": [7, 1, 4, 4, 18, 1412], "^": [9, 1, 5, 7, 6, 1430], _: [9, 0, 19, 9, 2, 1436], "`": [7, 2, 4, 3, 3, 1440], a: [11, 1, 8, 9, 11, 1443], b: [12, 1, 5, 10, 14, 1465], c: [11, 1, 8, 9, 11, 1493], d: [12, 1, 5, 10, 14, 1515], e: [11, 1, 8, 9, 11, 1543], f: [7, 0, 4, 7, 15, 1565], g: [12, 1, 8, 10, 15, 1580], h: [12, 1, 5, 9, 14, 1610], i: [5, 1, 4, 3, 15, 1638], j: [5, -1, 4, 4, 19, 1653], k: [11, 1, 5, 9, 14, 1672], l: [5, 1, 5, 3, 14, 1700], m: [17, 1, 8, 15, 11, 1714], n: [12, 1, 8, 9, 11, 1736], o: [12, 1, 8, 10, 11, 1758], p: [12, 1, 8, 10, 15, 1780], q: [12, 1, 8, 10, 15, 1810], r: [8, 1, 8, 6, 11, 1840], s: [10, 1, 8, 9, 11, 1851], t: [7, 0, 5, 6, 13, 1873], u: [12, 1, 8, 9, 11, 1886], v: [11, 1, 8, 10, 11, 1908], w: [16, 1, 8, 14, 11, 1930], x: [11, 1, 8, 9, 11, 1952], y: [11, 1, 8, 10, 15, 1974], z: [11, 1, 8, 9, 11, 2004], "{": [9, 1, 4, 7, 18, 2026], "|": [7, 2, 1, 3, 23, 2044], "}": [9, 1, 4, 6, 18, 2067], "~": [13, 1, 11, 10, 5, 2085], "«": [12, 1, 9, 10, 9, 2095], "°": [9, 1, 5, 7, 7, 2113], "·": [6, 2, 11, 3, 3, 2120], "»": [12, 1, 9, 10, 9, 2123], "À": [14, 1, 1, 12, 18, 2141], "Á": [14, 1, 1, 12, 18, 2177], "Â": [14, 1, 1, 12, 18, 2213], "Ã": [14, 1, 1, 12, 18, 2249], "Ä": [14, 1, 1, 12, 18, 2285], "Å": [14, 1, 0, 12, 19, 2321], "Æ": [19, 1, 5, 17, 14, 2359], "Ç": [14, 1, 5, 12, 18, 2401], "È": [12, 1, 1, 9, 18, 2437], "É": [12, 1, 1, 9, 18, 2473], "Ê": [12, 1, 1, 9, 18, 2509], "Ë": [12, 1, 1, 9, 18, 2545], "Ì": [5, -1, 1, 4, 18, 2581], "Í": [5, 1, 1, 4, 18, 2599], "Î": [5, -1, 1, 7, 18, 2617], "Ï": [5, -1, 1, 7, 18, 2635], "Ð": [14, 0, 5, 13, 14, 2653], "Ñ": [14, 1, 1, 12, 18, 2681], "Ò": [15, 1, 1, 13, 18, 2717], "Ó": [15, 1, 1, 13, 18, 2753], "Ô": [15, 1, 1, 13, 18, 2789], "Õ": [15, 1, 1, 13, 18, 2825], "Ö": [15, 1, 1, 13, 18, 2861], "×": [13, 2, 9, 9, 9, 2897], "Ø": [15, 1, 4, 13, 14, 2915], "Ù": [14, 1, 1, 12, 18, 2943], "Ú": [14, 1, 1, 12, 18, 2979], "Û": [14, 1, 1, 12, 18, 3015], "Ü": [14, 1, 1, 12, 18, 3051], "Ý": [14, 1, 1, 12, 18, 3087], "Þ": [12, 1, 5, 10, 14, 3123], "ß": [12, 1, 5, 10, 14, 3151], "à": [11, 1, 4, 9, 15, 3179], "á": [11, 1, 4, 9, 15, 3209], "â": [11, 1, 4, 9, 15, 3239], "ã": [11, 1, 4, 9, 15, 3269], "ä": [11, 1, 4, 9, 15, 3299], "å": [11, 1, 2, 9, 16, 3329], "æ": [17, 1, 8, 16, 11, 3361], "ç": [11, 1, 8, 9, 15, 3383], "è": [11, 1, 4, 9, 15, 3413], "é": [11, 1, 4, 9, 15, 3443], "ê": [11, 1, 4, 9, 15, 3473], "ë": [11, 1, 4, 9, 15, 3503], "ì": [5, -1, 4, 4, 15, 3533], "í": [5, 1, 4, 4, 15, 3548], "î": [5, -2, 4, 7, 15, 3563], "ï": [5, -1, 4, 7, 15, 3578], "ð": [11, 1, 4, 9, 15, 3593], "ñ": [12, 1, 4, 9, 15, 3623], "ò": [12, 1, 4, 10, 15, 3653], "ó": [12, 1, 4, 10, 15, 3683], "ô": [12, 1, 4, 10, 15, 3713], "õ": [12, 1, 4, 10, 15, 3743], "ö": [12, 1, 4, 10, 15, 3773], "÷": [13, 2, 8, 9, 11, 3803], "ø": [12, 1, 7, 10, 11, 3825], "ù": [12, 1, 4, 9, 15, 3847], "ú": [12, 1, 4, 9, 15, 3877], "û": [12, 1, 4, 9, 15, 3907], "ü": [12, 1, 4, 9, 15, 3937], "ý": [11, 1, 4, 10, 19, 3967], "þ": [12, 1, 5, 10, 18, 4005], "ÿ": [11, 1, 4, 10, 19, 4041], "Ё": [12, 1, 1, 9, 18, 4079], "А": [14, 1, 5, 12, 14, 4115], "Б": [12, 1, 5, 10, 14, 4143], "В": [13, 1, 5, 11, 14, 4171], "Г": [11, 1, 5, 9, 14, 4199], "Д": [16, 1, 5, 14, 17, 4227], "Е": [12, 1, 5, 9, 14, 4261], "Ж": [20, 1, 5, 18, 14, 4289], "З": [12, 1, 5, 10, 14, 4331], "И": [14, 1, 5, 12, 14, 4359], "Й": [14, 1, 0, 12, 18, 4387], "К": [13, 1, 5, 11, 14, 4423], "Л": [14, 1, 5, 12, 14, 4451], "М": [18, 1, 5, 15, 14, 4479], "Н": [14, 1, 5, 12, 14, 4507], "О": [15, 1, 5, 13, 14, 4535], "П": [14, 1, 5, 12, 14, 4563], "Р": [12, 1, 5, 10, 14, 4591], "С": [14, 1, 5, 12, 14, 4619], "Т": [13, 1, 5, 11, 14, 4647], "У": [13, 1, 5, 11, 14, 4675], "Ф": [16, 1, 4, 14, 15, 4703], "Х": [14, 1, 5, 12, 14, 4733], "Ц": [14, 1, 5, 13, 17, 4761], "Ч": [13, 1, 5, 11, 14, 4795], "Ш": [19, 1, 5, 16, 14, 4823], "Щ": [19, 1, 5, 18, 17, 4851], "Ъ": [16, 1, 5, 14, 14, 4902], "Ы": [17, 1, 5, 15, 14, 4930], "Ь": [12, 1, 5, 11, 14, 4958], "Э": [14, 1, 5, 12, 14, 4986], "Ю": [20, 1, 5, 18, 14, 5014], "Я": [12, 1, 5, 10, 14, 5056], "а": [11, 1, 8, 9, 11, 5084], "б": [11, 1, 4, 10, 14, 5106], "в": [11, 1, 8, 9, 11, 5134], "г": [8, 1, 8, 7, 11, 5156], "д": [12, 0, 8, 12, 14, 5167], "е": [11, 1, 8, 9, 11, 5195], "ж": [16, 1, 8, 14, 11, 5217], "з": [10, 1, 8, 8, 11, 5239], "и": [12, 1, 8, 9, 11, 5250], "й": [12, 1, 3, 9, 15, 5272], "к": [11, 1, 8, 9, 11, 5302], "л": [11, 0, 8, 10, 11, 5324], "м": [15, 1, 8, 13, 11, 5346], "н": [12, 1, 8, 9, 11, 5368], "о": [12, 1, 8, 10, 11, 5390], "п": [12, 1, 8, 9, 11, 5412], "р": [12, 1, 8, 10, 15, 5434], "с": [11, 1, 8, 9, 11, 5464], "т": [9, 0, 8, 9, 11, 5486], "у": [11, 1, 8, 10, 15, 5508], "ф": [14, 1, 5, 13, 17, 5538], "х": [11, 1, 8, 9, 11, 5572], "ц": [12, 1, 8, 11, 14, 5594], "ч": [11, 1, 8, 9, 11, 5622], "ш": [16, 1, 8, 14, 11, 5644], "щ": [17, 1, 8, 15, 14, 5666], "ъ": [13, 0, 8, 12, 11, 5694], "ы": [15, 1, 8, 13, 11, 5716], "ь": [11, 1, 8, 9, 11, 5738], "э": [11, 1, 8, 9, 11, 5760], "ю": [16, 1, 8, 14, 11, 5782], "я": [11, 1, 8, 9, 11, 5804], "ё": [11, 1, 4, 9, 15, 5826], "–": [10, 0, 12, 10, 2, 5856], "—": [19, 0, 12, 19, 2, 5860], "‘": [6, 2, 5, 3, 6, 5866], "’": [6, 2, 5, 3, 6, 5872], "“": [10, 2, 5, 7, 6, 5878], "”": [10, 2, 5, 7, 6, 5884], "…": [18, 2, 16, 15, 3, 5890], "№": [21, 1, 5, 19, 14, 5896] }, bits: "wMDAwMDAwMDAAADA4MDMzMzMzMwMYAxACMAYwH/wf/AYwBmA/+D/4DGAMYAxgDEABAAEAB8Af4B1wOTA5AB0AH8AH4AFwATAxMDlwH/APwAEAAQAeBj4MMwgzGDMwPiAIYADCAI+BiYMZghmGD4wHB4APwBjAGMAdwA+ADwAfGDu4MfAw8DjwH/APuDAwMDAwMAwcGBg4ODAwMDAwMDg4GBwMMDgYGBwMDAwMDAwMHBwYODAGFj/PD5/GBgYABgAGAAYAP+A/4AYABgAGAAYAGBgYMDAwP7+wODABg4MDAwcGBgYMDAwMGBgYOAfAD+AccDhwODA4MDA4MDg4MDgwOHAccA/gB8APHz8nBwcHBwcHBwcHBw+AH+AY4DhgAGAAYADgAcADgAcADgAcAD/wP/AHgB/gGGA4cABwAOADwAPgAHAAMDhwOHAf4A/AAOAB4APgA2AGYA5gDGAYYDhgP/g/+ABgAGAAYB/gH+AYABgAGAAbwB/gGHAAcAAwOHAYYB/gB4AHwA/gHHAYcDgAM8A34DxwODA4MDgwHHAP4AfAP+A/4ADgAMABwAHAA4ADgAcABwAOAA4AHAAcAAeAH+AYYDhwGHAcYA/AH+A4cDgwODA4cB/gD8AHgB/gOOA4cDAwOHA4cB+wDzAAcDhwGOAfwAeAMDgwAAAAADA4MBgcGAAAAAAAGBgYMDAAYAHgD4A+ADgAPAAfAAfAAOAAID/gP+AAAAAAAAA/4D/gMAA8AB8AA+AA4AHgB8A+ADgAIAAPH/nwwMHDhwYGAAYOBgD4AAf/AA8DgBwBwBhwwDn0YDGMYDMMYDMEYDMEYDMMYDGOwDn/wBhzABwAAA8CAAf+AAD8AAPAA8AHwAbgBuAOYA5wDHAcMB/4H/g4GDgcMBw/wD/gOHA4MDgwOHA/wD/wODA4ODg4OHA/8D/gA+AP8B44GBw4DDgAMAAwADgAOAwYHB44D/AD4D/AP/A4eDg4OBg4HDgcOBw4HDgYODg4eD/wP8A/4D/gOAA4ADgAOAA/4D/gOAA4ADgAOAA/4D/gP+A/4DgAOAA4ADgAP+A/4DgAOAA4ADgAOAA4AAPgD/AeOBwcOBw4ADAAMHw4fDgMGBweOA/4A+A4HDgcOBw4HDgcOBw//D/8OBw4HDgcOBw4HDgcODg4ODg4ODg4ODg4ODgA4ADgAOAA4ADgAOAA4ADgAOAw4DDgOMAfwA+AODg4cDhwOOA5wDuAP4A/gD3AOOA4YDhwODg4HDgAOAA4ADgAOAA4ADgAOAA4ADgAOAA4AD/gP+A8B74Hvg++Db8Nux27HbuZubm5sbnxuPG44bhhuAw8DD4MPgw/DDuMOYw5zDjMOOw4bDg8ODw4HAPgD/AeOBgcOAw4DjAOMA44DjgMGBweOA/wA+A/wD/gOHA4MDgwODA4cD/gP8A4ADgAOAA4ADgAA+AP8B44GBw4DDgOMA4wDjgOOMwY/B54D/AD+AAMP8A/4DhwODA4MDgwOHA/4D/AOMA44DhwOHA4OAfAH+AccDgwOAAcAB/AB+AAcAAwMDA4cB/gD8A/+D/4A4ADgAOAA4ADgAOAA4ADgAOAA4ADgAOAOBw4HDgcOBw4HDgcOBw4HDgcOBwYGB54D/AH4DAcOBw4GBgYHDgcMAwwDnAOYAZgB+AHwAPAA8AwcHAwcHA4eGA4+OAY2OAY2MAc3MAdzcANjcANjYANjYAHh4AHB4AHBwA4GBw4DHAOYAfgA8ADgAPAB8AG4A5wHDAYODgcOBw4OBw4DHAOYAbgB8ADwAGAAYABgAGAAYABgD/wP/AAcADgAMABwAOAAwAHAA4AHAAYAD/wP/A8PDAwMDAwMDAwMDAwMDAwPDwwGBgYHAwMDA4GBgYDAwMDAbw8DAwMDAwMDAwMDAwMDAw8PA4OGxsxsb/gP+AwMBgPgB/AOMAA4APgH+A44DDgMOA/4B7gOAA4ADgAO8A/4DxgOHA4cDgwOHA4cDxgP+A7wA+AH8A44DhAMAAwADAAOGA44B/AD4AAcABwAHAPcB/wOPA4cDBwMHAwcDhwOPAf8A9wD4AfwDjgMGA/4D/gMAA4ADhgH+APgAePjgw/v4wMDAwMDAwMDA9wH/A48DhwMHAwcDBwOHA48B/wD3AAcBhgH+APgDgAOAA4ADvAP+A84DhgOGA4YDhgOGA4YDhgOGA4OBAAODg4ODg4ODg4ODgcHAgAHBwcHBwcHBwcHBwcHDgwOAA4ADgAOOA5wDuAOwA/AD8AO4A7gDnAOOA44Dg4ODg4ODg4ODg4ODg4O44/3zjjuOO447jjuOO447jjuOO447vAP+A84DhgOGA4YDhgOGA4YDhgOGAPgB/AOOA4YDBwMHAwcDhgOOAfwA+AO8A/4DxgOHA4cDgwOHA4cDxgP+A7wDgAOAA4ADgAD3Af8DjwOHAwcDBwMHA4cDjwH/APcABwAHAAcABwOz88ODg4ODg4ODgPgB/AOMA4AD4AH8ADwADgOOA/wA+ADAw/PwwMDAwMDAwPBzhgOGA4YDhgOGA4YDhgOGA44B/gD2AwcDBgOOAY4BjAHcANgA2ADYAHAAcAMMMxwznnOecZ5hkmGz4PPA88DhwOHDjgGMAdwA2ADwAHAA+ADYAdwDjAMOAwcDBgOOAY4BjAHcANgA2ADYAHAAcABwAGAB4APAA/wD/AAcADgAMABwAOAAwAHAA/4D/gA4eGDg4ODgw4PAwODg4ODgeDuDg4ODg4ODg4ODg4ODg4ODg4ODg4ODgwPAwMDAwMDgcHDgwMDAwMPDAAMA8wH/AZ4DAAB3AO4BzAGYA7gBnADMAGYAcwDh8xMbMfDjA4MDuAHcAM4AZgB3AOYAzAGcA7gAcAAwABgAAAA8ADwAfABuAG4A5gDnAMcBwwH/gf+DgYOBwwHADAAMABgAAAA8ADwAfABuAG4A5gDnAMcBwwH/gf+DgYOBwwHAOAB8AGYAAAA8ADwAfABuAG4A5gDnAMcBwwH/gf+DgYOBwwHAdgB+AAAAAAA8ADwAfABuAG4A5gDnAMcBwwH/gf+DgYOBwwHAZgBmAAAAAAA8ADwAfABuAG4A5gDnAMcBwwH/gf+DgYOBwwHAPABkAGQAPAAAADwAPAB8AG4AbgDmAOcAxwHDAf+B/4OBg4HDAcAf/gAf/gAbgAA7gAAzgABzgABj/gDj/gDjgAH/gAH/gAGDgAOD/gMD/gA+AP8B44HBw4DDgAMAAwADgAOAwYHB44D/AD4ACAAcAAYAHABgAGAAMAAAA/4D/gOAA4ADgAOAA/4D/gOAA4ADgAOAA/4D/gAYABgAMAAAA/4D/gOAA4ADgAOAA/4D/gOAA4ADgAOAA/4D/gBwAHgAzAAAA/4D/gOAA4ADgAOAA/4D/gOAA4ADgAOAA/4D/gDMAMwAAAAAA/4D/gOAA4ADgAOAA/4D/gOAA4ADgAOAA/4D/gMBgIABwcHBwcHBwcHBwcHBwcDBgYADg4ODg4ODg4ODg4ODg4DhsxgA4ODg4ODg4ODg4ODg4OGbuRAA4ODg4ODg4ODg4ODg4OD/AP+AwcDA4MDgwGP8Y/xgwGDA4MDgwcD/gP8AMgB+AAAAAAOAw8DD4MPgw/DDuMOYw5zDjMOOw4bDg8ODw4HAMAAYABgAAAA+AP8B44GBw4DDgOMA4wDjgOOAwYHB44D/AD4ADgAMAAgAAAA+AP8B44GBw4DDgOMA4wDjgOOAwYHB44D/AD4AHAA2AGcAAAA+AP8B44GBw4DDgOMA4wDjgOOAwYHB44D/AD4AMgB+AAAAAAA+AP8B44GBw4DDgOMA4wDjgOOAwYHB44D/AD4AZgB3ACIAAAA+AP8B44GBw4DDgOMA4wDjgOOAwYHB44D/AD4BBAOOAdwA+ABwAPgB3AOOAwYAPsD/geOBg8OGw4zjDOMY47DjoMHhweOB/wG+ADAAMAAYAAADgcOBw4HDgcOBw4HDgcOBw4HDgcGBgeeA/wB+AAwADAAYAAADgcOBw4HDgcOBw4HDgcOBw4HDgcGBgeeA/wB+ABgAPABmAAADgcOBw4HDgcOBw4HDgcOBw4HDgcGBgeeA/wB+AGYAZgAAAAADgcOBw4HDgcOBw4HDgcOBw4HDgcGBgeeA/wB+AAwAHAAYAAADgcODgcOAxwDmAG4AfAA8ABgAGAAYABgAGAAYA4ADgAOAA/wD/gOHA4MDgwOHA/4D/AOAA4ADgAD4Af4BzgOGA4YDjgO8A74DhwODA4MDhwO/A7wAwABgAGAAAAD4AfwDjAAOAD4B/gOOAw4DDgP+Ae4AGAAwACAAAAD4AfwDjAAOAD4B/gOOAw4DDgP+Ae4AcADYAZwAAAD4AfwDjAAOAD4B/gOOAw4DDgP+Ae4A6AH4AAAAAAD4AfwDjAAOAD4B/gOOAw4DDgP+Ae4BmAHcAIgAAAD4AfwDjAAOAD4B/gOOAw4DDgP+Ae4AcACYAJgAcAAAAPgB/AOMAA4APgH+A44DDgMOA/4B7gD54f/zjjgOGH/9//+MAw4DDhv/+fHg+AH8A44DhAMAAwADAAOGA44B/AD4ACAAOAAIADgAwABgACAAAAD4AfwDjgMGA/4D/gMAA4ADhgH+APgAGAAwADAAAAD4AfwDjgMGA/4D/gMAA4ADhgH+APgAcADYAcwAAAD4AfwDjgMGA/4D/gMAA4ADhgH+APgAzAHcAIgAAAD4AfwDjgMGA/4D/gMAA4ADhgH+APgDAYGAAcHBwcHBwcHBwcHAwYGAA4ODg4ODg4ODg4OA4bMYAODg4ODg4ODg4ODjO7kQAODg4ODg4ODg4ODghAD8AHAA2AAMAP4B/gOOAwYDBgMGAwYDjgH8APgA7AD4AAAAAAO8A/4DzgOGA4YDhgOGA4YDhgOGA4YA4ABgADAAAAD4AfwDjgOGAwcDBwMHA4YDjgH8APgAGAAwADAAAAD4AfwDjgOGAwcDBwMHA4YDjgH8APgAcADYAcwAAAD4AfwDjgOGAwcDBwMHA4YDjgH8APgA7AC4AAAAAAD4AfwDjgOGAwcDBwMHA4YDjgH8APgAzAHMAIgAAAD4AfwDjgOGAwcDBwMHA4YDjgH8APgAYABwAGAAAAAAA/4D/gAAAGAAcABgAPsB/gOOA44DFwM3A2cDxgOOAfwC+ADgAGAAMAAAA4YDhgOGA4YDhgOGA4YDhgOOAf4A9gAYABgAMAAAA4YDhgOGA4YDhgOGA4YDhgOOAf4A9gBwAPgBzAAAA4YDhgOGA4YDhgOGA4YDhgOOAf4A9gDMAMwAiAAAA4YDhgOGA4YDhgOGA4YDhgOOAf4A9gAYADAAMAAAAwcDBgOOAY4BjAHcANgA2ADYAHAAcABwAGAB4APAA4ADgAOAA7wD/gPGA4cDhwODA4cDhwPGA/4DvAOAA4ADgAOAAMwB3ACIAAADBwMGA44BjgGMAdwA2ADYANgAcABwAHAAYAHgA8AAzADMAAAAAAP+A/4DgAOAA4ADgAP+A/4DgAOAA4ADgAP+A/4APAA8AHwAbgBuAOYA5wDHAcMB/4H/g4GDgcMBw/4D/gOAA4ADgAOAA/wD/wOHA4MDgwOHA/8D/AP8A/4DhwODA4MDhwP8A/8DgwODg4ODhwP/A/4D/gP+A4ADgAOAA4ADgAOAA4ADgAOAA4ADgAOAAH/gf+Bw4HDgcOBg4GDgYOBg4ODg4OHA4//z//MAMwAzADP+A/4DgAOAA4ADgAP+A/4DgAOAA4ADgAP+A/4DgwcBww4BwxwA4xwAYzgAczAAP/AAf/AAYzgA4xgAwxwBww4Dgw4DgwcAeAH+AYYDhwAHAA4APAA+AAcAAwOHA4cB/gD8A4HDg8ODw4bDjsOMw5zDmcO5w/HD4cPhw8HDgcBmADwAAAAAA4HDg8ODw4bDjsOMw5zDmcO5w/HD4cPhw8HDgcODg4ODhwOOA4wDnAP4A/gDnAOOA44DhwODg4GAf8B/wGHA4cDhwOHA4cDhwMHAwcDBwcHDgcMBw8B74Hvg++Db8Nux27HbuZubm5sbnxuPG44bhhuBw4HDgcOBw4HDgcP/w//DgcOBw4HDgcOBw4HAPgD/AeOBgcOAw4DjAOMA44DjgMGBweOA/wA+A//D/8OBw4HDgcOBw4HDgcOBw4HDgcOBw4HDgcP8A/4DhwODA4MDgwOHA/4D/AOAA4ADgAOAA4AAPgD/AeOBgcOAw4ADAAMAA4ADgMGBweOA/wA+A/+D/4A4ADgAOAA4ADgAOAA4ADgAOAA4ADgAOAODg4OBgwHHAMYA7gBuAGwAfAA4ADgAMAHwAeAADAA+AP/B7eGMY4xzDHMMcwxzjHHM4P/Af4AMAAwDgYHDgMcA5gB+ADwAOAA8AHwAbgDnAcMBg4OBw4GDgYOBg4GDgYOBg4GDgYOBg4GDgYOBg//j/+AA4ADgAOOBg4GDgYOBg4GDgYHDgf+A/YABgAGAAYABgAGDhw+HD4cPhw+HD4cPhw+HD4cPhw+HD4cP/////4cMA4cMA4cMA4cMA4cMA4cMA4cMA4cMA4cMA4cMA4cMA4cMA///A///AAAHAAAHAAAHA/AD8AAwADAAMAA/gD/gMOAwcDBwMHAw4D/gP4OAO4A7gDuAO4A7/Dv/O4c7g7uDu4O7hzv/O/w7gAOAA4ADgAOAA/wD/wOHA4ODg4ODg4cD/wP8AHwA/wHHg4GDAcABwD/AP8ABwwHDgYHHgP8AfAOB8AOH+AOPHAOODgOcBgOcBwP4BwP4BwOcBwOcBgOMDgOPHAOH/AOB8AD/Af8DgwODAwMDgwODAf8A/wDjAcMBwwODAwMA+AH8A4wADgA+Af4DjgMOAw4D/gHuAH4B/gGAAwADeAP+A44DBwMHAwcDhgOOAfwA+AP4A/wDjgOMA/wD/AOOA4YDhgP+A/wD+/uDg4ODg4ODg4B/AH8AYwBjAOMA4wDDAMMAwwP/w//DgMOAw4DA+AH8A44DBgP+A/4DAAOAA4YB/gD4A4xxjGHM4O3Af4B/gO3AzMHM44xzjHDz+xwceHgcHx/584YDjgOOA54DvgO2A+YD5gPGA4YDhgDMAHgAAAAAA4YDjgOOA54DvgO2A+YD5gPGA4YDhgOOA44DnAOYA7gD8APwA7gDnAOOA44A/wD/AOMA4wDDAMMAwwDDAMMDwwODA8HjwePjY+Nj82O3Y7ZjtmOcY5xjnGOGA4YDhgOGA/4D/gOGA4YDhgOGA4YA+AH8A44DhgMHAwcDBwOGA44B/AD4A/4D/gOGA4YDhgOGA4YDhgOGA4YDhgO8A/4DxgOHA4cDgwOHA4cDxgP+A7wDgAOAA4ADgAD4AfwDjgOEAwADAAMAA4YDjgH8APgD/gP+AHAAcABwAHAAcABwAHAAcABwAwcDBgOOAY4BjAHcANgA2ADYAHAAcABwAGAB4APAABgAGAAYAH8B/4GZw5jDGMMY4xjDmMHZwf+AfwAYABgAGAOOAYwB3ADYAPAAcAD4ANgB3AOMAw4DhgOGA4YDhgOGA4YDhgOGA4YD/4P/gAOAA4ADg4YDhgOGA4YDhgOGAf4A/gAGAAYABgOMc4xzjHOMc4xzjHOMc4xzjHP/8//zjHOMc4xzjHOMc4xzjHOMc4xz//v/+AAYABgAG+AD4ABgAGAAfwB/gGHAYcBhwH+AfwOA44DjgOOA4/jj/uOO44bjjuP+4/jjgAOAA4ADgAP4A/4DjgOGA44D/gP4APgB/AOOAw4AfgB+AAYDDgOMAfwA+AOHw4/jnHOYM/gz+DOYM5gznHOP44fA/gP+A44DDgMOA/4B/gHOAY4DjgMOAMwB3ACIAAAA+AH8A44DBgP+A/4DAAOAA4YB/gD4A/8D/wP//4P//4GBgwMDAwODAwMDAgGZmzMzMzO7MzMzImMMM447DDODngODvwPDsQPDsYPjsQOzvwOzngObgAObvwOPvwOPgAOHgAODgAODgAA==" }, big: { ascent: 33, descent: 9, lineHeight: 42, glyphs: { " ": [8, 0, 0, 0, 0, 0], ",": [11, 2, 29, 6, 10, 0], "-": [16, 2, 21, 12, 4, 10], ".": [11, 3, 27, 6, 6, 18], "0": [23, 2, 8, 19, 25, 24], "1": [15, 2, 8, 10, 25, 99], "2": [21, 2, 8, 18, 25, 149], "3": [22, 2, 8, 18, 25, 224], "4": [23, 2, 8, 19, 25, 299], "5": [22, 2, 8, 18, 25, 374], "6": [22, 2, 8, 19, 25, 449], "7": [20, 1, 8, 18, 25, 524], "8": [22, 2, 8, 19, 25, 599], "9": [22, 2, 7, 19, 25, 674], ":": [11, 3, 15, 6, 18, 749], h: [21, 2, 8, 17, 25, 767], i: [9, 2, 6, 5, 26, 842], k: [20, 2, 8, 17, 25, 868], m: [31, 2, 14, 27, 19, 943], n: [21, 2, 14, 17, 19, 1019], "и": [21, 2, 14, 17, 19, 1076], "к": [20, 2, 14, 17, 19, 1133], "м": [28, 2, 14, 23, 19, 1190], "н": [21, 2, 14, 17, 19, 1247], "с": [20, 1, 14, 18, 19, 1304], "ч": [20, 2, 14, 16, 19, 1361], "–": [17, 0, 21, 17, 4, 1399] }, bits: "fHx8eHh4cPDw8P/w//D/8P/wMPj4/PhwA/gAD/4AH/8AP/+Afx+Afg/A/AfA+Afg+APg+APg+APg+APg+APg+APg+APg+APg+APg+Afg/AfAfg/Afx/AP/+AH/8AD/4AA/gAD8AfwH/A/8D/wPfAx8CHwAfAB8AHwAfAB8AHwAfAB8AHwAfAB8AHwAfAB8AHwAfAB8AH8AAf/AA//gB//wD+P4D4D4D4D4D4D4AAD4AAD4AAHwAAPwAAfgAA/AAB+AAD8AAH4AAPwAAfgAA/AAB+AAD//8D//8D//8D//8AD8AAf/AA//wB//4B+H4D8D4D4D4AAB4AAD4AAH4AD/wAD/AAD/gAD/wAAH4AAD8AAB8AAB8D4B8D4D8D+H8B//4A//wAf/gAH+AAAPwAAfwAA/wAA/wAB/wAD/wAD7wAHzwAHzwAPjwAfDwAfDwA+DwB8DwB8DwD4DwD//+D//+D//+D//+AAHwAAHwAAHwAAHwAAHwA//4A//4A//4A//4B8AAB8AAB8AAB8AAB88AB7/gB//wB//4B+H4AID8AAB8AAB8AAB8AAB8D4B8D8D8B+H4B//4A//wAf/AAD8AAD+AAP/gAf/wA//4A/n4B+D8B8B8D4AAD4AAD4/AD7/gD//4D//4D+D8D8B8D4B8D4A+D4A+D4B8B8B8B+H8A//4Af/wAP/gAD+AD//8D//8D//8D//8AAD4AAD4AAHwAAHwAAPgAAPgAAfAAAfAAA+AAA+AAB8AAB8AAD4AAD4AAHwAAHwAAPgAAPgAAfAAAfAAA+AAAD8AAf/gA//wB//4B+H4B8D8D4B8B4B8B8D4B+H4A//wAP/AAf/gA//wB+H4D8B8D4B8D4B+D4B+D4B8D8D8B//4A//4Af/gAH+AAH8AAf/AA//gB//wD+H4D4D4D4B8D4B8DwB8D4B8D4D8D8H+B//+B/+8Af98APx8AAB8AAB8D4D4D8H4B+PwB//wA//gAf/AAH8ABw+Pz4+DAAAAAAAAAw+Pj8+HD4AAD4AAD4AAD4AAD4AAD4AAD4+AD5/gD7/wD//wD+P4D8H4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4Bw+Pj4cAAA+Pj4+Pj4+Pj4+Pj4+Pj4+Pj4+PgAAPgAAPgAAPgAAPgAAPgAAPgfgPg/APh+APh8APj4APn4APvwAP/gAP/AAP/gAP/wAP3wAPn4APj8APh+APh+APg/APgfgPgfgPjwPwD7/H+A+/z/wP///8D+P8/g/B8H4PgfA+D4HwPg+B8D4PgfA+D4HwPg+B8D4PgfA+D4HwPg+B8D4PgfA+D4HwPg+B8D4PgfA+D4+AD5/gD7/wD//wD+P4D8H4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4H4D4P4D4P4D4f4D4/4D4/4D574D774D7z4D/j4D/j4D/D4D+D4D+D4D8D4D4D4D4D4D4H4D4H4D4PwD4fgD4fgD4/AD5+AD58AD/8AD/4AD/8AD/8AD5+AD4/AD4fAD4fgD4PwD4H4D4H4D/AP7/Af7/gf7/gf7/g/7/w97/w977x97759775575557575757x74/x74/h74/h74fh74fB74PB74D4D4D4D4D4D4D4D4D4D4D4D4D4D//4D//4D//4D//4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4AD+AAP/gAf/wA//4B+H4B8D8B8BwD8AAD4AAD4AAD4AAD8AAB8BwB8D8B+H4A//4Af/wAP/gAD+AD4H/gf+B/4H/gf+B/4H/gf/B9//3//P/8H/wAfAB8AHwAfAB8AH///gP//gP//gP//gA==" } };
 
@@ -6518,50 +6983,7 @@ Stop: «стоп лекция»` : `Режим лекции
       return bearing(prev, me);
     return null;
   }
-  var ROAD_CLASS = {
-    motorway: 0,
-    trunk: 0,
-    primary: 0,
-    secondary: 0,
-    motorway_link: 0,
-    trunk_link: 0,
-    primary_link: 0,
-    secondary_link: 0,
-    tertiary: 1,
-    tertiary_link: 1,
-    unclassified: 1,
-    residential: 1,
-    living_street: 1,
-    pedestrian: 1,
-    service: 1,
-    road: 1,
-    footway: 2,
-    path: 2,
-    cycleway: 2,
-    steps: 2,
-    track: 2,
-    bridleway: 2
-  };
-  var ROADS_RADIUS = { walking: 500, cycling: 800, driving: 1400 };
-  function overpassQuery(c, radius, mode) {
-    const kinds = Object.keys(ROAD_CLASS).filter((k) => mode !== "driving" || ROAD_CLASS[k] < 2 && k !== "service");
-    return `[out:json][timeout:20];way["highway"~"^(${kinds.join("|")})$"](around:${Math.round(radius)},${c.lat.toFixed(6)},${c.lng.toFixed(6)});out geom qt;`;
-  }
-  function parseOverpass(json) {
-    const els = json?.elements;
-    if (!Array.isArray(els))
-      return [];
-    const roads = [];
-    for (const e of els) {
-      if (e?.type !== "way" || !Array.isArray(e.geometry) || e.geometry.length < 2)
-        continue;
-      const c = ROAD_CLASS[e.tags?.highway ?? ""];
-      if (c === undefined)
-        continue;
-      roads.push({ c, p: e.geometry.filter((g) => Number.isFinite(g?.lat) && Number.isFinite(g?.lon)).map((g) => ({ lat: g.lat, lng: g.lon })) });
-    }
-    return roads;
-  }
+  var MAP_RADIUS = { walking: 500, cycling: 800, driving: 1400 };
   var MAP_SCALE = { walking: 2, cycling: 3.5, driving: 7 };
   var MAP_BOX = { x: G1_SAFE.x + G1_SAFE.w - 184, y: G1_SAFE.y, w: 182, h: G1_SAFE.h };
   function clip(x0, y0, x1, y1, w, h) {
@@ -6596,6 +7018,94 @@ Stop: «стоп лекция»` : `Режим лекции
     }
     return [x0 + t0 * dx, y0 + t0 * dy, x0 + t1 * dx, y0 + t1 * dy];
   }
+  var PATTERN = {
+    water: (x, y) => (x + y) % 4 === 0,
+    park: (x, y) => x % 6 === 0 && y % 6 === 3
+  };
+  function fillRings(c, rings, pattern) {
+    let y0 = Infinity;
+    let y1 = -Infinity;
+    for (const r of rings)
+      for (const p of r) {
+        if (p.y < y0)
+          y0 = p.y;
+        if (p.y > y1)
+          y1 = p.y;
+      }
+    y0 = Math.max(0, Math.floor(y0));
+    y1 = Math.min(c.h - 1, Math.ceil(y1));
+    const xs = [];
+    for (let y = y0;y <= y1; y++) {
+      const sy = y + 0.5;
+      xs.length = 0;
+      for (const r of rings)
+        for (let i = 0, j = r.length - 1;i < r.length; j = i++) {
+          const a = r[i];
+          const b = r[j];
+          if (a.y > sy !== b.y > sy)
+            xs.push(a.x + (sy - a.y) * (b.x - a.x) / (b.y - a.y));
+        }
+      xs.sort((m, n) => m - n);
+      for (let k = 0;k + 1 < xs.length; k += 2) {
+        const from = Math.max(0, Math.ceil(xs[k] - 0.5));
+        const to = Math.min(c.w - 1, Math.floor(xs[k + 1] - 0.5));
+        for (let x = from;x <= to; x++)
+          if (pattern(x, y))
+            c.set(x, y);
+      }
+    }
+  }
+  var ROAD_STYLE = {
+    major: { t: 3 },
+    road: { t: 2 },
+    minor: { t: 1 },
+    path: { t: 1, dash: [1, 3] },
+    waterway: { t: 1 }
+  };
+  function drawFeatures(c, s, center, scale, cos, sin, cx, cy) {
+    if (!s.features.length)
+      return;
+    const w0 = toWorld(center.lat, center.lng);
+    const mpw = metersPerWorld(center.lat);
+    const reach = Math.hypot(c.w, c.h) * scale / mpw;
+    const proj = (r) => {
+      const out = new Array(r.length / 2);
+      for (let i = 0;i < r.length; i += 2) {
+        const lx = (r[i] - w0.x) * mpw;
+        const ly = -(r[i + 1] - w0.y) * mpw;
+        out[i / 2] = { x: cx + (lx * cos - ly * sin) / scale, y: cy - (lx * sin + ly * cos) / scale };
+      }
+      return out;
+    };
+    const near = (f) => f.b[2] >= w0.x - reach && f.b[0] <= w0.x + reach && f.b[3] >= w0.y - reach && f.b[1] <= w0.y + reach;
+    const feats = s.features.filter(near);
+    const lineOf = (pts, t, v, dash) => {
+      for (let i = 1;i < pts.length; i++) {
+        const cl = clip(pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y, c.w, c.h);
+        if (cl)
+          c.line(cl[0], cl[1], cl[2], cl[3], t, v, dash);
+      }
+    };
+    for (const f of feats)
+      if (f.k === "park" && f.poly)
+        fillRings(c, f.p.map(proj), PATTERN.park);
+    for (const f of feats)
+      if (f.k === "water" && f.poly) {
+        const rings = f.p.map(proj);
+        fillRings(c, rings, PATTERN.water);
+        for (const r of rings)
+          lineOf(r, 1, 1);
+      }
+    const roads = feats.filter((f) => !f.poly && ROAD_STYLE[f.k] && !(s.mode === "driving" && (f.k === "path" || f.k === "minor")));
+    const projected = roads.map((f) => ({ f, lines: f.p.map(proj) }));
+    for (const { f, lines } of projected)
+      if (f.k !== "path")
+        for (const l of lines)
+          lineOf(l, ROAD_STYLE[f.k].t + 2, 0);
+    for (const { f, lines } of projected)
+      for (const l of lines)
+        lineOf(l, ROAD_STYLE[f.k].t, 1, ROAD_STYLE[f.k].dash);
+  }
   function drawMap(s, w = MAP_BOX.w, h = MAP_BOX.h) {
     const c = new Canvas(w, h);
     const center = s.me ?? s.route[0] ?? s.dest;
@@ -6625,16 +7135,15 @@ Stop: «стоп лекция»` : `Режим лекции
         prev = q;
       }
     };
-    for (const r of s.roads)
-      seg(r.p, r.c === 0 ? 2 : 1, r.c === 2 ? [2, 3] : undefined);
+    drawFeatures(c, s, center, scale, cos, sin, cx, cy);
     let route = s.route;
     if (s.me && route.length > 1) {
       const n = nearestOnRoute(route, s.me);
       if (n)
         route = [s.me, ...route.slice(n.index + 1)];
     }
-    seg(route, 9, undefined, 0);
-    seg(route, 4);
+    seg(route, 11, undefined, 0);
+    seg(route, 5);
     if (s.dest) {
       const d = project(s.dest);
       if (d.x >= -8 && d.x <= w + 8 && d.y >= -8 && d.y <= h + 8) {
@@ -7113,6 +7622,7 @@ ${modeLabel(mode)}
       if (!this.active)
         return;
       this.route = pts.map((p) => ({ lat: p.lat, lng: p.lng }));
+      this.prefetch();
       this.maybeLoadRoads();
       this.hud(true);
       this.deps.onChange();
@@ -7167,8 +7677,16 @@ ${modeLabel(mode)}
         this.unwatch = null;
         this.deps.log("info", `Геопозиция для карты: ${explainNavError(e?.message ?? e)}`);
       }
+      this.prefetch();
       this.maybeLoadRoads();
       this.hud(true);
+    }
+    prefetch() {
+      if (!this.mapOn() || this.route.length < 2)
+        return;
+      try {
+        this.deps.prefetch?.(this.route);
+      } catch {}
     }
     endMap() {
       this.cancelFrameTimer();
@@ -7189,7 +7707,7 @@ ${modeLabel(mode)}
       const center = this.me ?? this.route[0] ?? (this.dest ? { lat: this.dest.lat, lng: this.dest.lng } : null);
       if (!center)
         return;
-      const radius = ROADS_RADIUS[this.mode];
+      const radius = MAP_RADIUS[this.mode];
       const near = this.roadsCenter && this.roadsMode === this.mode && distanceM(this.roadsCenter, center) < radius * ROADS_RELOAD_SHARE;
       if (near)
         return;
@@ -7205,14 +7723,14 @@ ${modeLabel(mode)}
         this.roadsMode = mode;
         this.roadsVersion++;
         if (this.roadsFailed || this.roadsVersion === 1)
-          this.deps.log("nav", `Карта: загружено улиц вокруг — ${roads.length}`);
+          this.deps.log("nav", `Карта вокруг загружена: ${roads.length} объектов`);
         this.roadsFailed = false;
         this.hud(false);
         this.deps.onChange();
       }).catch((e) => {
         this.roadsNextTry = this.deps.now() + ROADS_FAIL_RETRY_MS;
         if (!this.roadsFailed)
-          this.deps.log("info", `Карта: улицы не загрузились (${String(e?.message ?? e).slice(0, 80)}) — показываю только маршрут`);
+          this.deps.log("info", `Карта: ${String(e?.message ?? e).slice(0, 90)} — показываю только маршрут`);
         this.roadsFailed = true;
       }).finally(() => {
         this.roadsBusy = false;
@@ -7256,7 +7774,7 @@ ${modeLabel(mode)}
         me: this.me,
         heading: this.heading,
         route: this.route,
-        roads: this.roads,
+        features: this.roads,
         dest: { lat: this.dest.lat, lng: this.dest.lng },
         mode: this.mode
       };
@@ -8123,6 +8641,7 @@ ${prevTips.map((t) => "— " + t).join(`
   var LECTURE_KEY = "g1gpt.lecture.v1";
   var TALK_KEY = "g1gpt.talk.v1";
   var NAV_KEY = "g1gpt.nav.v1";
+  var MAP_AREAS_KEY = "g1gpt.mapAreas.v1";
   function clampInt(v, min, max, dflt) {
     const n = typeof v === "number" ? v : parseInt(String(v), 10);
     if (!Number.isFinite(n))
@@ -8226,6 +8745,13 @@ ${prevTips.map((t) => "— " + t).join(`
     }
     saveTalk(r) {
       this.write(TALK_KEY, r);
+    }
+    loadMapAreas() {
+      const a = this.read(MAP_AREAS_KEY);
+      return Array.isArray(a) ? a.filter((x) => x && typeof x.id === "string" && Number.isFinite(x.lat) && Number.isFinite(x.lng)) : [];
+    }
+    saveMapAreas(a) {
+      this.write(MAP_AREAS_KEY, a);
     }
     loadNav() {
       const t = this.read(NAV_KEY);
@@ -8381,6 +8907,7 @@ ${prevTips.map((t) => "— " + t).join(`
         },
         mapOn: () => this.navMapOn(),
         roads: deps.nav?.roads ? (c, r, m) => deps.nav.roads(c, r, m) : undefined,
+        prefetch: deps.nav?.prefetch ? (route) => deps.nav.prefetch(route) : undefined,
         watch: deps.nav?.watch ? (cb) => deps.nav.watch(cb) : undefined
       });
     }
@@ -9766,8 +10293,400 @@ ${goal}` : "Цель беседы убрана.", 3000);
     return Boolean(parseCommand(t) || parseTranslateCommand(t) || parseLectureCommand(t) || parseTalkCommand(t) || parsePhraseRequest(t) || parseSwitchCommand(t));
   }
 
+  // src/background/tiles.ts
+  var TILEJSON_URL = "https://tiles.openfreemap.org/planet";
+  var FALLBACK_TEMPLATE = "https://tiles.openfreemap.org/planet/latest/{z}/{x}/{y}.pbf";
+  var OVERVIEW_ZOOM = 12;
+  var AVG_TILE_KB = 160;
+  var GLASSES_LAYERS = new Set(["transportation", "water", "waterway", "park", "landcover"]);
+  var DECODED_MAX = 16;
+  var PARALLEL = 3;
+  var key = (z, x, y) => `map/${z}/${x}/${y}`;
+  function classify(layer, f) {
+    const cls = String(f.props.class ?? "");
+    switch (layer) {
+      case "transportation": {
+        if (f.props.brunnel === "tunnel" || cls.endsWith("_construction"))
+          return null;
+        if (cls === "motorway" || cls === "trunk" || cls === "primary")
+          return "major";
+        if (cls === "secondary" || cls === "tertiary")
+          return "road";
+        if (cls === "minor" || cls === "service" || cls === "track" || cls === "busway" || cls === "raceway")
+          return "minor";
+        if (cls === "path")
+          return f.props.subclass === "platform" ? null : "path";
+        if (cls === "rail" || cls === "transit")
+          return "rail";
+        return null;
+      }
+      case "water":
+        return cls === "swimming_pool" ? null : "water";
+      case "waterway":
+        return cls === "river" || cls === "canal" || cls === "stream" ? "waterway" : null;
+      case "park":
+        return "park";
+      case "landcover":
+        return cls === "wood" || cls === "grass" ? "park" : null;
+      case "building":
+        return "building";
+    }
+    return null;
+  }
+  function ringArea(r) {
+    let a = 0;
+    for (let i = 0;i + 3 < r.length; i += 2)
+      a += r[i] * r[i + 3] - r[i + 2] * r[i + 1];
+    return Math.abs(a / 2);
+  }
+  function tileFeatures(bytes, z, x, y) {
+    const tile = decodeTile(bytes, { layers: GLASSES_LAYERS, props: new Set(["class", "subclass", "brunnel"]) });
+    const n = 2 ** z;
+    const out = [];
+    for (const [name, layer] of Object.entries(tile)) {
+      const s = 1 / (layer.extent * n);
+      const ox = x / n;
+      const oy = y / n;
+      for (const f of layer.features) {
+        const k = classify(name, f);
+        if (!k)
+          continue;
+        const poly = f.type === 3;
+        if (k === "park" && poly && f.geom.reduce((a, r) => a + ringArea(r), 0) < 6000)
+          continue;
+        let bx0 = Infinity;
+        let by0 = Infinity;
+        let bx1 = -Infinity;
+        let by1 = -Infinity;
+        const p = f.geom.map((r) => {
+          const w = new Array(r.length);
+          for (let i = 0;i < r.length; i += 2) {
+            const wx = ox + r[i] * s;
+            const wy = oy + r[i + 1] * s;
+            w[i] = wx;
+            w[i + 1] = wy;
+            if (wx < bx0)
+              bx0 = wx;
+            if (wx > bx1)
+              bx1 = wx;
+            if (wy < by0)
+              by0 = wy;
+            if (wy > by1)
+              by1 = wy;
+          }
+          return w;
+        });
+        if (p.length && Number.isFinite(bx0))
+          out.push({ k, poly, p, b: [bx0, by0, bx1, by1] });
+      }
+    }
+    return out;
+  }
+  function placeName(bytes, z, x, y, lat, lng) {
+    const tile = decodeTile(bytes, { layers: new Set(["place"]), props: new Set(["class", "name", "name:latin"]) });
+    const layer = tile.place;
+    if (!layer)
+      return "";
+    const rank = { city: 0, town: 1, village: 2, suburb: 3, quarter: 4, neighbourhood: 5, hamlet: 6 };
+    const w = toWorld(lat, lng);
+    const n = 2 ** z;
+    let best = null;
+    for (const f of layer.features) {
+      const name = String(f.props.name ?? f.props["name:latin"] ?? "").trim();
+      const r = rank[String(f.props.class ?? "")];
+      if (!name || r === undefined || !f.geom[0])
+        continue;
+      const fx = (x + f.geom[0][0] / layer.extent) / n;
+      const fy = (y + f.geom[0][1] / layer.extent) / n;
+      const d = Math.hypot(fx - w.x, fy - w.y) * metersPerWorld(lat);
+      const score = r * 1500 + d;
+      if (!best || score < best.score)
+        best = { name, score };
+    }
+    return best?.name ?? "";
+  }
+
+  class TileStore {
+    deps;
+    index = new Map;
+    indexReady = null;
+    template = null;
+    templateAt = 0;
+    inflight = new Map;
+    decoded = new Map;
+    failedAt = new Map;
+    download = null;
+    cancelled = false;
+    areas;
+    constructor(deps) {
+      this.deps = deps;
+      this.areas = deps.loadAreas();
+    }
+    get available() {
+      return Boolean(this.deps.blob);
+    }
+    stats() {
+      let bytes = 0;
+      for (const b of this.index.values())
+        bytes += b;
+      return { tiles: this.index.size, bytes };
+    }
+    ready() {
+      if (!this.indexReady) {
+        this.indexReady = (async () => {
+          if (!this.deps.blob)
+            return;
+          try {
+            for (const b of await this.deps.blob.list())
+              if (b.key.startsWith("map/"))
+                this.index.set(b.key, b.bytes);
+          } catch (e) {
+            this.deps.log("info", `Офлайн-карты: список не прочитан (${String(e?.message ?? e)})`);
+          }
+          this.deps.onChange();
+        })();
+      }
+      return this.indexReady;
+    }
+    has(z, x, y) {
+      return this.index.has(key(z, x, y));
+    }
+    async tileUrl(z, x, y) {
+      if (!this.template || this.deps.now() - this.templateAt > 6 * 3600000) {
+        try {
+          const tj = await this.deps.fetchJson(TILEJSON_URL);
+          const t = Array.isArray(tj?.tiles) ? String(tj.tiles[0] ?? "") : "";
+          if (/\{z\}.*\{x\}.*\{y\}/.test(t)) {
+            this.template = t;
+            this.templateAt = this.deps.now();
+          }
+        } catch {}
+      }
+      return (this.template ?? FALLBACK_TEMPLATE).replace("{z}", String(z)).replace("{x}", String(x)).replace("{y}", String(y));
+    }
+    ensure(z, x, y) {
+      const k = key(z, x, y);
+      if (this.index.has(k))
+        return Promise.resolve(true);
+      const blob = this.deps.blob;
+      if (!blob)
+        return Promise.resolve(false);
+      const failed = this.failedAt.get(k);
+      if (failed && this.deps.now() - failed < 60000)
+        return Promise.resolve(false);
+      let p = this.inflight.get(k);
+      if (!p) {
+        p = (async () => {
+          try {
+            await this.ready();
+            if (this.index.has(k))
+              return true;
+            const meta = await blob.setFromUrl(k, await this.tileUrl(z, x, y), { mimeType: "application/x-protobuf" });
+            this.index.set(k, Number(meta?.bytes) || 0);
+            this.failedAt.delete(k);
+            return true;
+          } catch {
+            this.failedAt.set(k, this.deps.now());
+            return false;
+          } finally {
+            this.inflight.delete(k);
+          }
+        })();
+        this.inflight.set(k, p);
+      }
+      return p;
+    }
+    async raw(z, x, y, fetch2 = true) {
+      await this.ready();
+      if (!this.has(z, x, y) && !(fetch2 && await this.ensure(z, x, y)))
+        return null;
+      try {
+        return await this.deps.blob?.bytes(key(z, x, y)) ?? null;
+      } catch {
+        return null;
+      }
+    }
+    async features(center, radiusM) {
+      await this.ready();
+      const tiles = tilesAround(center.lat, center.lng, radiusM);
+      const w = toWorld(center.lat, center.lng);
+      const r = radiusM / metersPerWorld(center.lat);
+      const box = [w.x - r, w.y - r, w.x + r, w.y + r];
+      const out = [];
+      let missing = 0;
+      for (const t of tiles) {
+        const k = key(TILE_ZOOM, t.x, t.y);
+        let feats = this.decoded.get(k);
+        if (!feats) {
+          const bytes = await this.raw(TILE_ZOOM, t.x, t.y);
+          if (!bytes) {
+            missing++;
+            continue;
+          }
+          try {
+            feats = tileFeatures(bytes, TILE_ZOOM, t.x, t.y);
+          } catch (e) {
+            this.deps.log("error", `Карта: участок ${t.x}/${t.y} не прочитан (${String(e?.message ?? e)})`);
+            missing++;
+            continue;
+          }
+          this.decoded.set(k, feats);
+          if (this.decoded.size > DECODED_MAX)
+            this.decoded.delete(this.decoded.keys().next().value);
+        }
+        for (const f of feats)
+          if (f.b[2] >= box[0] && f.b[0] <= box[2] && f.b[3] >= box[1] && f.b[1] <= box[3])
+            out.push(f);
+      }
+      if (missing === tiles.length)
+        throw new Error("нет карты этого места (нет интернета и не скачана заранее)");
+      return out;
+    }
+    async prefetchRoute(points) {
+      if (!this.deps.blob || points.length < 2)
+        return 0;
+      await this.ready();
+      const want = new Set;
+      const add = (p) => {
+        for (const t of tilesAround(p.lat, p.lng, 300))
+          want.add(`${t.x}/${t.y}`);
+      };
+      add(points[0]);
+      for (let i = 1;i < points.length; i++) {
+        const a = points[i - 1];
+        const b = points[i];
+        const steps = Math.ceil(Math.hypot(b.lat - a.lat, b.lng - a.lng) * 111000 / 400);
+        for (let s = 1;s <= steps; s++)
+          add({ lat: a.lat + (b.lat - a.lat) * s / steps, lng: a.lng + (b.lng - a.lng) * s / steps });
+      }
+      const list = [...want].map((s) => s.split("/").map(Number)).filter(([x, y]) => !this.has(TILE_ZOOM, x, y));
+      let got = 0;
+      for (let i = 0;i < list.length; i += PARALLEL) {
+        const r = await Promise.all(list.slice(i, i + PARALLEL).map(([x, y]) => this.ensure(TILE_ZOOM, x, y)));
+        got += r.filter(Boolean).length;
+      }
+      if (got) {
+        this.deps.log("nav", `Карта маршрута сохранена на телефоне: ${got} участк.`);
+        this.deps.onChange();
+      }
+      return got;
+    }
+    areaTiles(lat, lng, radiusKm) {
+      const m = radiusKm * 1000;
+      return [
+        ...tilesAround(lat, lng, m, OVERVIEW_ZOOM).map((t) => ({ z: OVERVIEW_ZOOM, ...t })),
+        ...tilesAround(lat, lng, m).map((t) => ({ z: TILE_ZOOM, ...t }))
+      ];
+    }
+    estimateMb(lat, lng, radiusKm) {
+      const n = this.areaTiles(lat, lng, radiusKm).filter((t) => !this.has(t.z, t.x, t.y)).length;
+      return Math.max(1, Math.round(n * AVG_TILE_KB / 1024));
+    }
+    async downloadArea(lat, lng, radiusKm) {
+      if (!this.deps.blob || this.download)
+        return null;
+      const tiles = this.areaTiles(lat, lng, radiusKm);
+      const id = `a${this.deps.now().toString(36)}`;
+      this.cancelled = false;
+      this.download = { areaId: id, name: "", radiusKm, done: 0, total: tiles.length, failed: 0, bytes: 0 };
+      await this.ready();
+      this.deps.log("nav", `Офлайн-карта: скачиваю ${tiles.length} участков вокруг (${radiusKm} км)`);
+      this.deps.onChange();
+      const c = tileOf(lat, lng);
+      tiles.sort((a, b) => a.z === TILE_ZOOM && a.x === c.x && a.y === c.y ? -1 : b.z === TILE_ZOOM && b.x === c.x && b.y === c.y ? 1 : 0);
+      let lastPush = 0;
+      for (let i = 0;i < tiles.length && !this.cancelled; i += PARALLEL) {
+        const batch = tiles.slice(i, i + PARALLEL);
+        const ok = await Promise.all(batch.map((t) => this.ensure(t.z, t.x, t.y)));
+        const d = this.download;
+        if (!d)
+          break;
+        d.done += batch.length;
+        d.failed += ok.filter((v) => !v).length;
+        d.bytes = batch.reduce((a, t) => a + (this.index.get(key(t.z, t.x, t.y)) ?? 0), d.bytes);
+        if (d.failed >= 9 && d.failed === d.done)
+          break;
+        if (this.deps.now() - lastPush > 700) {
+          lastPush = this.deps.now();
+          this.deps.onChange();
+        }
+      }
+      const d = this.download;
+      this.download = null;
+      if (this.cancelled || d.failed === d.done) {
+        this.deps.log(d.failed === d.done ? "error" : "nav", d.failed === d.done ? "Офлайн-карта не скачалась: нет связи с сервером карт" : "Скачивание карты остановлено");
+        this.deps.onChange();
+        return null;
+      }
+      let name = "";
+      try {
+        const bytes = await this.raw(TILE_ZOOM, c.x, c.y, false);
+        if (bytes)
+          name = placeName(bytes, TILE_ZOOM, c.x, c.y, lat, lng);
+      } catch {}
+      const area = {
+        id,
+        name: name || `${lat.toFixed(3)}, ${lng.toFixed(3)}`,
+        lat,
+        lng,
+        radiusKm,
+        tiles: d.done - d.failed,
+        bytes: tiles.reduce((a, t) => a + (this.index.get(key(t.z, t.x, t.y)) ?? 0), 0),
+        at: this.deps.now()
+      };
+      this.areas = [area, ...this.areas];
+      this.deps.saveAreas(this.areas);
+      this.deps.log("nav", `Офлайн-карта «${area.name}» скачана: ${area.tiles} участков, ${(area.bytes / 1048576).toFixed(1)} МБ${d.failed ? `, не скачалось ${d.failed}` : ""}`);
+      this.deps.onChange();
+      return area;
+    }
+    cancelDownload() {
+      this.cancelled = true;
+    }
+    async deleteArea(id) {
+      const area = this.areas.find((a) => a.id === id);
+      if (!area || !this.deps.blob)
+        return;
+      const keep = new Set;
+      for (const o of this.areas)
+        if (o.id !== id)
+          for (const t of this.areaTiles(o.lat, o.lng, o.radiusKm))
+            keep.add(key(t.z, t.x, t.y));
+      for (const t of this.areaTiles(area.lat, area.lng, area.radiusKm)) {
+        const k = key(t.z, t.x, t.y);
+        if (keep.has(k) || !this.index.has(k))
+          continue;
+        try {
+          await this.deps.blob.delete(k);
+          this.index.delete(k);
+          this.decoded.delete(k);
+        } catch {}
+      }
+      this.areas = this.areas.filter((a) => a.id !== id);
+      this.deps.saveAreas(this.areas);
+      this.deps.log("nav", `Офлайн-карта «${area.name}» удалена`);
+      this.deps.onChange();
+    }
+    async deleteAll() {
+      if (!this.deps.blob)
+        return;
+      await this.ready();
+      for (const k of [...this.index.keys()]) {
+        try {
+          await this.deps.blob.delete(k);
+          this.index.delete(k);
+        } catch {}
+      }
+      this.decoded.clear();
+      this.areas = [];
+      this.deps.saveAreas(this.areas);
+      this.deps.log("nav", "Все карты удалены с телефона");
+      this.deps.onChange();
+    }
+  }
+
   // src/background/index.ts
-  var APP_VERSION = "1.14.0";
+  var APP_VERSION = "1.15.0";
   function newToken() {
     return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
       const r = Math.random() * 16 | 0;
@@ -9775,7 +10694,6 @@ ${goal}` : "Цель беседы убрана.", 3000);
     });
   }
   var asMode = (m) => m === "driving" || m === "cycling" ? m : "walking";
-  var OVERPASS = ["https://overpass-api.de/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"];
   function withTimeout2(p, ms, what) {
     return new Promise((resolve, reject) => {
       const t = setTimeout(() => reject(new Error(`${what}: timeout`)), ms);
@@ -9788,28 +10706,7 @@ ${goal}` : "Цель беседы убрана.", 3000);
       });
     });
   }
-  async function loadRoads(center, radius, mode) {
-    const q = overpassQuery(center, radius, mode);
-    let last = null;
-    for (const base of OVERPASS) {
-      try {
-        const res = await withTimeout2(globalThis.fetch(base, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: "data=" + encodeURIComponent(q)
-        }), 25000, "Overpass");
-        if (!res?.ok) {
-          last = new Error(`Overpass HTTP ${res?.status}`);
-          continue;
-        }
-        return parseOverpass(JSON.parse(await res.text()));
-      } catch (e) {
-        last = e;
-      }
-    }
-    throw last ?? new Error("Overpass недоступен");
-  }
-  function makeNavHost(session, log) {
+  function makeNavHost(session, log, tiles) {
     const nav = session.navigation;
     if (!nav || typeof nav.start !== "function")
       return;
@@ -9863,7 +10760,8 @@ ${goal}` : "Цель беседы убрана.", 3000);
       stop() {
         nav.stop();
       },
-      roads: loadRoads,
+      roads: (center, radius) => tiles.features(center, radius),
+      prefetch: (route) => void tiles.prefetchRoute(route),
       watch(onPosition) {
         const off = session.location?.onUpdate?.((p) => onPosition({ lat: Number(p?.lat), lng: Number(p?.lng), accuracy: p?.accuracy }));
         return () => {
@@ -9903,7 +10801,33 @@ ${goal}` : "Цель беседы убрана.", 3000);
       const d = session.capabilities?.display;
       return { x: 0, y: 0, w: d?.width ?? 576, h: d?.height ?? 200 };
     };
-    const snap = () => ({ ...assistant.snapshot(), version: APP_VERSION });
+    const snap = () => ({ ...assistant.snapshot(), version: APP_VERSION, maps: mapsState() });
+    const blob = session.blob;
+    const tiles = new TileStore({
+      blob: blob && typeof blob.setFromUrl === "function" ? {
+        setFromUrl: (k, url, o) => withTimeout2(blob.setFromUrl(k, url, o), 60000, "map download"),
+        bytes: (k) => blob.bytes(k),
+        list: () => blob.list(),
+        delete: (k) => blob.delete(k)
+      } : null,
+      fetchJson: async (url) => {
+        const res = await withTimeout2(globalThis.fetch(url), 15000, "TileJSON");
+        if (!res?.ok)
+          throw new Error(`HTTP ${res?.status}`);
+        return JSON.parse(await res.text());
+      },
+      log: (kind, msg) => assistant.addLog(kind, msg),
+      now: () => Date.now(),
+      onChange: () => pushState(),
+      loadAreas: () => store.loadMapAreas(),
+      saveAreas: (a) => store.saveMapAreas(a)
+    });
+    const mapsState = () => ({
+      available: tiles.available,
+      ...tiles.stats(),
+      download: tiles.download,
+      areas: tiles.areas
+    });
     const assistant = new Assistant({
       store,
       fetch: (url, init) => globalThis.fetch(url, init),
@@ -9916,7 +10840,7 @@ ${goal}` : "Цель беседы убрана.", 3000);
         session.sendRequest({ type: "miniapp_display", view: "main", layout: { layoutType: "bitmap_view", data } })?.catch?.((e) => assistant.addLog("error", `Картинка на очках: ${String(e?.message ?? e)}`));
       },
       onChange: pushState,
-      nav: makeNavHost(session, (msg) => assistant.addLog("info", msg))
+      nav: makeNavHost(session, (msg) => assistant.addLog("info", msg), tiles)
     });
     assistant.addLog("info", `Запущено, версия ${APP_VERSION}`);
     const storageOk = store.selfTest();
@@ -10067,10 +10991,52 @@ ${goal}` : "Цель беседы убрана.", 3000);
         me: n.me ? round(n.me) : null,
         heading: n.heading,
         dest: n.dest ? round(n.dest) : null,
-        route: n.route.map(round),
-        roadsVersion: n.roadsVersion,
-        roads: p?.have === n.roadsVersion ? null : n.roads.map((r) => ({ c: r.c, p: r.p.map(round) }))
+        route: n.route.map(round)
       };
+    });
+    session.ui.handle("mapTile", async (p) => {
+      const z = Math.round(Number(p?.z));
+      const x = Math.round(Number(p?.x));
+      const y = Math.round(Number(p?.y));
+      if (![z, x, y].every(Number.isFinite))
+        return { ok: false };
+      const bytes = await tiles.raw(z, x, y, p?.fetch !== false);
+      return bytes ? { ok: true, b64: toBase64(bytes) } : { ok: false };
+    });
+    session.ui.handle("mapLocate", async () => {
+      try {
+        const fix = await withTimeout2(session.location.getOnce(), 15000, "location");
+        return Number.isFinite(fix?.lat) ? { ok: true, lat: fix.lat, lng: fix.lng } : { ok: false };
+      } catch (e) {
+        return { ok: false, error: String(e?.message ?? e) };
+      }
+    });
+    session.ui.handle("mapEstimate", (p) => {
+      const lat = Number(p?.lat);
+      const lng = Number(p?.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng))
+        return {};
+      return { 2: tiles.estimateMb(lat, lng, 2), 5: tiles.estimateMb(lat, lng, 5), 15: tiles.estimateMb(lat, lng, 15) };
+    });
+    session.ui.handle("mapDownload", (p) => {
+      const lat = Number(p?.lat);
+      const lng = Number(p?.lng);
+      const r = [2, 5, 15].includes(Number(p?.radiusKm)) ? Number(p.radiusKm) : 5;
+      if (!Number.isFinite(lat) || !Number.isFinite(lng))
+        return { ok: false };
+      tiles.downloadArea(lat, lng, r);
+      return { ok: true };
+    });
+    session.ui.handle("mapCancel", () => {
+      tiles.cancelDownload();
+      return { ok: true };
+    });
+    session.ui.handle("mapDelete", async (p) => {
+      if (p?.all)
+        await tiles.deleteAll();
+      else if (p?.id)
+        await tiles.deleteArea(String(p.id));
+      return snap();
     });
     session.ui.handle("navTestBitmap", () => ({ ok: assistant.testBitmap(testPattern()) }));
     session.ui.handle("getLecture", () => assistant.lecture.record);

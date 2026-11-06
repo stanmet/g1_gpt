@@ -27,6 +27,7 @@ declare global {
 import {PROVIDERS, type Provider} from "../background/llm"
 import {remoteCommand} from "./remote"
 import {notesAsText, type LectureRecord} from "../background/lecture"
+import {PhoneMap} from "./map"
 
 const AI_FOOTER: Record<Provider, string> = {
   openai: "Terra — быстро и дёшево. Sol и Astra умнее, но дороже.",
@@ -52,6 +53,7 @@ let lastLens = ""
 
 function previewBridge(): Bridge {
   const now = Date.now()
+  const listeners: ((s: any) => void)[] = []
   const state: any = {
     phase: "answering",
     page: 0,
@@ -109,6 +111,13 @@ function previewBridge(): Bridge {
       canMap: true,
       frameId: 0,
       streets: 0,
+    },
+    maps: {
+      available: true,
+      tiles: 64,
+      bytes: 12_400_000,
+      download: null,
+      areas: [{id: "a0", name: "Zürich", lat: 47.3779, lng: 8.5403, radiusKm: 5, tiles: 64, bytes: 12_400_000, at: Date.now() - 86400000}],
     },
     historyCount: 4,
     history: [
@@ -199,10 +208,22 @@ function previewBridge(): Bridge {
       }
       if (channel === "navFrame") return {frame: (window as any).__previewFrame ?? "", frameId: 1}
       if (channel === "navTestBitmap") return {ok: true}
-      if (channel === "navMap") return previewMap(payload?.have)
+      if (channel === "navMap") return previewMap()
+      if (channel === "mapTile") {
+        const b64 = (window as any).__previewTiles?.[`${payload.z}/${payload.x}/${payload.y}`]
+        return b64 ? {ok: true, b64} : {ok: false}
+      }
+      if (channel === "mapLocate") return {ok: true, lat: 47.3779, lng: 8.5403}
+      if (channel === "mapEstimate") return {2: 4, 5: 18, 15: 96}
+      if (channel === "mapDownload") {
+        state.maps = {...state.maps, download: {areaId: "a1", name: "", radiusKm: payload.radiusKm, done: 23, total: 64, failed: 0, bytes: 4_200_000}}
+        setTimeout(() => listeners.forEach((fn) => fn(state)), 50)
+        return {ok: true}
+      }
       return state
     },
-    on() {
+    on(_channel: string, fn: (s: any) => void) {
+      listeners.push(fn)
       return () => {}
     },
   }
@@ -417,23 +438,17 @@ function renderGlasses(s: any, st: any) {
   if (document.activeElement !== quick) quick.value = p
 }
 
-/** Sample map for the preview (a street grid around Trinity College). */
-function previewMap(have?: number) {
-  const o = [53.343, -6.26]
+/** Sample trip for the preview (Zurich main station). */
+function previewMap() {
+  const o = [47.3779, 8.5403]
   const m = (dx: number, dy: number) => [o[0] + dy / 111320, o[1] + dx / (111320 * Math.cos((o[0] * Math.PI) / 180))]
-  const roads: {c: number; p: number[][]}[] = []
-  for (let i = -6; i <= 6; i++) roads.push({c: i % 3 === 0 ? 0 : 1, p: [m(i * 70, -500), m(i * 70 + 30, 500)]})
-  for (let j = -6; j <= 6; j++) roads.push({c: j === 1 ? 0 : 1, p: [m(-500, j * 80), m(500, j * 80 - 20)]})
-  roads.push({c: 2, p: [m(-200, -200), m(-50, -60), m(60, 150)]})
   return {
     active: true,
     mode: "walking",
     me: m(0, 0),
-    heading: 2,
-    dest: m(150, 260),
-    route: [m(0, -20), m(3, 77), m(140, 73), m(150, 260)],
-    roadsVersion: 1,
-    roads: have === 1 ? null : roads,
+    heading: 20,
+    dest: m(260, 420),
+    route: [m(0, -10), m(40, 150), m(200, 210), m(260, 420)],
   }
 }
 
@@ -474,12 +489,11 @@ function renderNavigator(s: any, st: any) {
   $("navMapSub").textContent =
     nav.canMap === false
       ? "Эта версия Mentra не показывает картинки"
-      : nav.active && sw.checked
-        ? nav.streets
-          ? `Стрелка, расстояние и карта · улиц на карте: ${nav.streets}`
-          : "Стрелка, расстояние и маршрут · улицы загружаются"
+      : nav.active && sw.checked && !nav.streets
+        ? "Стрелка, расстояние и маршрут · карта загружается"
         : "Стрелка, расстояние и карта, как в приложении Even"
-  if (nav.active) void refreshMap()
+  void refreshMap()
+  renderOffline(s)
   $("navProblem").textContent = nav.problem ? `${capitalize(nav.problem)}.` : ""
   $("navProblem").hidden = !nav.problem
   // what the navigator said last (searching, not found…) — only while it is current
@@ -548,25 +562,60 @@ async function mirrorFrame(id: number) {
 
 // ── the map on the phone ──
 
-let mapRoads: {c: number; p: number[][]}[] = []
-let mapRoadsVersion = -1
+const FOLLOW_ZOOM: Record<string, number> = {walking: 16.6, cycling: 15.8, driving: 15.2}
+let phoneMap: PhoneMap | null = null
 let mapBusy = false
 let mapAt = 0
-const MAP_SPAN: Record<string, number> = {walking: 520, cycling: 900, driving: 1800}
+let mapLocated = false
 
+function b64ToBytes(b64: string): Uint8Array {
+  const s = atob(b64)
+  const out = new Uint8Array(s.length)
+  for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i)
+  return out
+}
+
+function ensurePhoneMap(): PhoneMap {
+  if (phoneMap) return phoneMap
+  const m = new PhoneMap($<HTMLCanvasElement>("phoneMap"), async (z, x, y) => {
+    const r: any = await bridge.request("mapTile", {z, x, y}, {timeout: 60000})
+    return r?.ok && r.b64 ? b64ToBytes(r.b64) : null
+  })
+  m.onNoMap = (none) => {
+    $("mapNote").hidden = !none
+    $("mapNote").textContent = "Карты этого места нет: нет интернета, и эта область не скачана."
+  }
+  m.onUserMove = () => {
+    $("mapFollow").setAttribute("aria-pressed", String(m.follow))
+    scheduleEstimate()
+  }
+  phoneMap = m
+  return m
+}
+
+/** The phone map: where you are, the route; refreshed while the page is open. */
 async function refreshMap(force = false) {
   if ($("page-nav").hidden || mapBusy) return
   if (!force && Date.now() - mapAt < 2500) return
+  const m = ensurePhoneMap()
   mapBusy = true
   try {
-    const r: any = await bridge.request("navMap", {have: mapRoadsVersion}, {timeout: 8000})
+    const r: any = await bridge.request("navMap", {}, {timeout: 8000})
     mapAt = Date.now()
-    if (!r?.active) return
-    if (r.roads) {
-      mapRoads = r.roads
-      mapRoadsVersion = r.roadsVersion
+    if (r?.active) {
+      m.setOverlay({me: r.me, heading: r.heading, route: r.route ?? [], dest: r.dest}, FOLLOW_ZOOM[r.mode] ?? 16.5)
+    } else {
+      m.setOverlay({me: m.overlay.me, heading: null, route: [], dest: null})
+      if (!mapLocated) {
+        mapLocated = true
+        const loc: any = await bridge.request("mapLocate", {}, {timeout: 20000}).catch(() => null)
+        if (loc?.ok) {
+          m.setOverlay({me: [loc.lat, loc.lng], heading: null, route: [], dest: null}, 15.5)
+          if (m.follow) m.setCenter(loc.lat, loc.lng)
+        }
+      }
     }
-    drawPhoneMap(r)
+    scheduleEstimate()
   } catch {
     // try again on the next update
   } finally {
@@ -574,43 +623,95 @@ async function refreshMap(force = false) {
   }
 }
 
-/** North-up map around you: streets, the route, you and the destination. */
-function drawPhoneMap(r: any) {
-  const svg = $("navMapSvg") as unknown as SVGSVGElement
-  const box = $("navMapBox")
-  const W = box.clientWidth || 360
-  const H = box.clientHeight || 230
-  const center: number[] | null = r.me ?? r.route?.[0] ?? r.dest
-  if (!center) return
-  const span = MAP_SPAN[r.mode] ?? 520
-  const kx = 111320 * Math.cos((center[0] * Math.PI) / 180)
-  const ky = 111320
-  const scale = W / span // px per meter
-  const pt = (p: number[]) => `${(((p[1] - center[1]) * kx) * scale + W / 2).toFixed(1)},${(H / 2 - (p[0] - center[0]) * ky * scale).toFixed(1)}`
-  const path = (pts: number[][]) => (pts.length > 1 ? "M" + pts.map(pt).join("L") : "")
-  const parts: string[] = []
-  for (const c of [2, 1, 0]) {
-    const d = mapRoads
-      .filter((x) => x.c === c)
-      .map((x) => path(x.p))
-      .join("")
-    if (d) parts.push(`<path class="road c${c}" d="${d}"/>`)
+// ── offline maps ──
+
+let estimateTimer = 0
+let estimateKey = ""
+
+function scheduleEstimate() {
+  clearTimeout(estimateTimer)
+  estimateTimer = window.setTimeout(async () => {
+    if (!phoneMap || $("page-nav").hidden) return
+    const c = phoneMap.center()
+    const k = `${c.lat.toFixed(2)},${c.lng.toFixed(2)}`
+    if (k === estimateKey) return
+    estimateKey = k
+    const e: any = await bridge.request("mapEstimate", c, {timeout: 8000}).catch(() => null)
+    if (!e) return
+    $("offlineSizes")
+      .querySelectorAll<HTMLButtonElement>("[data-km]")
+      .forEach((b) => {
+        const mb = e[b.dataset.km!]
+        b.querySelector("span")!.textContent = mb != null ? (mb <= 1 ? "уже есть" : `≈ ${mb} МБ`) : ""
+      })
+  }, 800)
+}
+
+const fmtMb = (bytes: number) => (bytes < 1048576 ? `${Math.max(0.1, bytes / 1048576).toFixed(1)} МБ` : `${(bytes / 1048576).toFixed(bytes < 10 * 1048576 ? 1 : 0)} МБ`.replace(".", ","))
+
+let lastDownloading = false
+
+function renderOffline(s: any) {
+  const maps = s.maps ?? {}
+  $("offlineCard").hidden = maps.available === false
+  const d = maps.download
+  $("offlineSum").textContent = maps.available === false
+    ? "Эта версия Mentra не умеет хранить карты"
+    : maps.tiles
+      ? `На телефоне: ${maps.tiles} участков карты, ${fmtMb(maps.bytes ?? 0)}`
+      : "Карт на телефоне пока нет"
+  $("offlineProgress").hidden = !d
+  $("offlineSizes")
+    .querySelectorAll<HTMLButtonElement>("button")
+    .forEach((b) => (b.disabled = Boolean(d)))
+  if (d) {
+    ;($("offlineBar") as HTMLElement).style.width = `${Math.round((100 * d.done) / Math.max(1, d.total))}%`
+    $("offlineText").textContent = `Скачано ${d.done} из ${d.total} · ${fmtMb(d.bytes ?? 0)}${d.failed ? ` · не скачалось ${d.failed}` : ""}`
   }
-  if (r.route?.length > 1) parts.push(`<path class="route" d="${path(r.route)}"/>`)
-  if (r.dest) {
-    const [x, y] = pt(r.dest).split(",").map(Number)
-    parts.push(`<circle class="dest" cx="${x}" cy="${y}" r="7"/>`)
+  if (lastDownloading && !d) phoneMap?.retryMissing()
+  lastDownloading = Boolean(d)
+
+  const box = $("offlineAreas")
+  const areas: any[] = maps.areas ?? []
+  const sig = JSON.stringify(areas.map((a) => a.id))
+  if (box.dataset.sig !== sig) {
+    box.dataset.sig = sig
+    box.textContent = ""
+    for (const a of areas) {
+      const row = document.createElement("div")
+      row.className = "map-area"
+      const label = document.createElement("span")
+      label.className = "row-label"
+      label.textContent = a.name
+      const sub = document.createElement("span")
+      sub.className = "row-sub"
+      sub.textContent = `${a.radiusKm} км вокруг · ${fmtMb(a.bytes ?? 0)} · ${new Date(a.at).toLocaleDateString("ru-RU", {day: "numeric", month: "short"})}`
+      label.appendChild(sub)
+      const del = document.createElement("button")
+      del.type = "button"
+      del.textContent = "Удалить"
+      del.addEventListener("click", () => confirmTap(del, "Точно?", () => call("mapDelete", {id: a.id})))
+      row.append(label, del)
+      box.appendChild(row)
+    }
   }
-  if (r.me) {
-    const [x, y] = pt(r.me).split(",").map(Number)
-    if (typeof r.heading === "number") {
-      parts.push(
-        `<path class="me" transform="translate(${x} ${y}) rotate(${r.heading.toFixed(0)})" d="M0,-12 L9,9 L0,4 L-9,9 Z"/>`,
-      )
-    } else parts.push(`<circle class="me" cx="${x}" cy="${y}" r="8"/>`)
+  $("offlineDeleteAll").hidden = !maps.tiles
+}
+
+/** Two taps instead of a dialog: the first asks, the second does it. */
+function confirmTap(b: HTMLButtonElement, ask: string, go: () => void) {
+  if (b.dataset.armed === "1") {
+    b.dataset.armed = ""
+    go()
+    return
   }
-  svg.setAttribute("viewBox", `0 0 ${W} ${H}`)
-  svg.innerHTML = parts.join("")
+  const was = b.textContent
+  b.dataset.armed = "1"
+  b.textContent = ask
+  setTimeout(() => {
+    b.dataset.armed = ""
+    b.textContent = was
+  }, 3000)
 }
 
 function renderNavResults() {
@@ -1253,6 +1354,30 @@ function wire() {
       }),
     )
   $("navStop").addEventListener("click", () => call("navStop"))
+  $("mapZoomIn").addEventListener("click", () => ensurePhoneMap().zoomBy(1))
+  $("mapZoomOut").addEventListener("click", () => ensurePhoneMap().zoomBy(-1))
+  $("mapFollow").addEventListener("click", () => {
+    const m = ensurePhoneMap()
+    m.setFollow(!m.follow)
+    void refreshMap(true)
+  })
+  $("offlineSizes")
+    .querySelectorAll<HTMLButtonElement>("[data-km]")
+    .forEach((b) =>
+      b.addEventListener("click", async () => {
+        const c = ensurePhoneMap().center()
+        await bridge.request("mapDownload", {...c, radiusKm: Number(b.dataset.km)}, {timeout: 8000}).catch(() => null)
+        toast(`Скачиваю карту ${b.dataset.km} км вокруг центра карты`)
+        estimateKey = ""
+      }),
+    )
+  $("offlineCancel").addEventListener("click", () => bridge.request("mapCancel", {}, {timeout: 5000}).catch(() => null))
+  $("offlineDeleteAll").addEventListener("click", (e) =>
+    confirmTap(e.currentTarget as HTMLButtonElement, "Нажмите ещё раз, чтобы удалить", () => {
+      estimateKey = ""
+      void call("mapDelete", {all: true})
+    }),
+  )
   $<HTMLInputElement>("navMapSwitch").addEventListener("change", (e) => {
     queueSave({navMap: (e.target as HTMLInputElement).checked}, 0)
   })

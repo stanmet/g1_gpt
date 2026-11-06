@@ -7,8 +7,9 @@ import {registerMiniapp} from "@mentra/miniapp/background"
 import {Assistant} from "./assistant"
 import {asProvider, keyFor, PROVIDERS} from "./llm"
 import type {NavHost, Place, TravelMode} from "./navigator"
-import {overpassQuery, parseOverpass, type Road} from "./navmap"
 import {testPattern} from "./glassdraw"
+import {TileStore, type BlobApi} from "./tiles"
+import {toBase64} from "./glassdraw"
 import type {FetchLike} from "./openai"
 import {Store, type KV, type Settings} from "./store"
 
@@ -29,9 +30,6 @@ const asMode = (m: unknown): TravelMode => (m === "driving" || m === "cycling" ?
  * in miniapp.json — Mentra takes the permission list from the manifest it installed, so an app
  * updated without reinstalling may not have it yet.
  */
-/** Public Overpass servers (OpenStreetMap data); the second is tried when the first fails. */
-const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"]
-
 function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const t = setTimeout(() => reject(new Error(`${what}: timeout`)), ms)
@@ -48,34 +46,7 @@ function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
   })
 }
 
-/** Streets around a point from OpenStreetMap, for the glasses map. */
-async function loadRoads(center: {lat: number; lng: number}, radius: number, mode: TravelMode): Promise<Road[]> {
-  const q = overpassQuery(center, radius, mode)
-  let last: unknown = null
-  for (const base of OVERPASS) {
-    try {
-      const res: any = await withTimeout(
-        (globalThis as any).fetch(base, {
-          method: "POST",
-          headers: {"Content-Type": "application/x-www-form-urlencoded"},
-          body: "data=" + encodeURIComponent(q),
-        }),
-        25_000,
-        "Overpass",
-      )
-      if (!res?.ok) {
-        last = new Error(`Overpass HTTP ${res?.status}`)
-        continue
-      }
-      return parseOverpass(JSON.parse(await res.text()))
-    } catch (e) {
-      last = e
-    }
-  }
-  throw last ?? new Error("Overpass недоступен")
-}
-
-function makeNavHost(session: any, log: (msg: string) => void): NavHost | undefined {
+function makeNavHost(session: any, log: (msg: string) => void, tiles: TileStore): NavHost | undefined {
   const nav = session.navigation
   if (!nav || typeof nav.start !== "function") return undefined
   let token = newToken()
@@ -127,7 +98,8 @@ function makeNavHost(session: any, log: (msg: string) => void): NavHost | undefi
     stop() {
       nav.stop()
     },
-    roads: loadRoads,
+    roads: (center, radius) => tiles.features(center, radius),
+    prefetch: (route) => void tiles.prefetchRoute(route),
     watch(onPosition) {
       const off = session.location?.onUpdate?.((p: any) => onPosition({lat: Number(p?.lat), lng: Number(p?.lng), accuracy: p?.accuracy}))
       return () => {
@@ -173,7 +145,37 @@ registerMiniapp((session: any) => {
     return {x: 0, y: 0, w: d?.width ?? 576, h: d?.height ?? 200}
   }
 
-  const snap = () => ({...assistant.snapshot(), version: APP_VERSION})
+  const snap = () => ({...assistant.snapshot(), version: APP_VERSION, maps: mapsState()})
+
+  // ── Map tiles on the phone (offline maps) ───────────────────────
+  const blob = session.blob
+  const tiles = new TileStore({
+    blob:
+      blob && typeof blob.setFromUrl === "function"
+        ? ({
+            setFromUrl: (k, url, o) => withTimeout(blob.setFromUrl(k, url, o), 60_000, "map download"),
+            bytes: (k) => blob.bytes(k),
+            list: () => blob.list(),
+            delete: (k) => blob.delete(k),
+          } as BlobApi)
+        : null,
+    fetchJson: async (url) => {
+      const res: any = await withTimeout((globalThis as any).fetch(url), 15_000, "TileJSON")
+      if (!res?.ok) throw new Error(`HTTP ${res?.status}`)
+      return JSON.parse(await res.text())
+    },
+    log: (kind, msg) => assistant.addLog(kind, msg),
+    now: () => Date.now(),
+    onChange: () => pushState(),
+    loadAreas: () => store.loadMapAreas(),
+    saveAreas: (a) => store.saveMapAreas(a),
+  })
+  const mapsState = () => ({
+    available: tiles.available,
+    ...tiles.stats(),
+    download: tiles.download,
+    areas: tiles.areas,
+  })
 
   const assistant = new Assistant({
     store,
@@ -192,7 +194,7 @@ registerMiniapp((session: any) => {
         ?.catch?.((e: unknown) => assistant.addLog("error", `Картинка на очках: ${String((e as Error)?.message ?? e)}`))
     },
     onChange: pushState,
-    nav: makeNavHost(session, (msg) => assistant.addLog("info", msg)),
+    nav: makeNavHost(session, (msg) => assistant.addLog("info", msg), tiles),
   })
 
   assistant.addLog("info", `Запущено, версия ${APP_VERSION}`)
@@ -379,9 +381,54 @@ registerMiniapp((session: any) => {
       heading: n.heading,
       dest: n.dest ? round(n.dest) : null,
       route: n.route.map(round),
-      roadsVersion: n.roadsVersion,
-      roads: p?.have === n.roadsVersion ? null : n.roads.map((r) => ({c: r.c, p: r.p.map(round)})),
     }
+  })
+
+  // ── the phone map and offline maps ──
+  // A map tile for the phone map (base64 of the stored file; downloaded first when online).
+  session.ui.handle("mapTile", async (p: {z: number; x: number; y: number; fetch?: boolean}) => {
+    const z = Math.round(Number(p?.z))
+    const x = Math.round(Number(p?.x))
+    const y = Math.round(Number(p?.y))
+    if (![z, x, y].every(Number.isFinite)) return {ok: false}
+    const bytes = await tiles.raw(z, x, y, p?.fetch !== false)
+    return bytes ? {ok: true, b64: toBase64(bytes)} : {ok: false}
+  })
+
+  // Where you are, for the phone map without a trip.
+  session.ui.handle("mapLocate", async () => {
+    try {
+      const fix: any = await withTimeout(session.location.getOnce(), 15_000, "location")
+      return Number.isFinite(fix?.lat) ? {ok: true, lat: fix.lat, lng: fix.lng} : {ok: false}
+    } catch (e) {
+      return {ok: false, error: String((e as Error)?.message ?? e)}
+    }
+  })
+
+  session.ui.handle("mapEstimate", (p: {lat: number; lng: number}) => {
+    const lat = Number(p?.lat)
+    const lng = Number(p?.lng)
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return {}
+    return {2: tiles.estimateMb(lat, lng, 2), 5: tiles.estimateMb(lat, lng, 5), 15: tiles.estimateMb(lat, lng, 15)}
+  })
+
+  // Download the map around a point (the phone map's centre or where you are).
+  session.ui.handle("mapDownload", (p: {lat: number; lng: number; radiusKm: number}) => {
+    const lat = Number(p?.lat)
+    const lng = Number(p?.lng)
+    const r = [2, 5, 15].includes(Number(p?.radiusKm)) ? Number(p.radiusKm) : 5
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return {ok: false}
+    void tiles.downloadArea(lat, lng, r)
+    return {ok: true}
+  })
+  session.ui.handle("mapCancel", () => {
+    tiles.cancelDownload()
+    return {ok: true}
+  })
+  session.ui.handle("mapDelete", async (p: {id?: string; all?: boolean}) => {
+    if (p?.all) await tiles.deleteAll()
+    else if (p?.id) await tiles.deleteArea(String(p.id))
+    return snap()
   })
 
   // «Проверить картинку на очках»: a test frame with the visible area outlined.
