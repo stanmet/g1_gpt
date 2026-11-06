@@ -83,6 +83,8 @@ export interface AssistantDeps {
   onChange?: () => void
   /** Mentra's location, place search and navigator; absent where the host has no navigation. */
   nav?: NavHost
+  /** A full-screen picture on the glasses (base64 G1 BMP) — the navigation map. */
+  showBitmap?(base64: string): void
 }
 
 /** How long a pause in speech ends a question. */
@@ -265,6 +267,9 @@ export class Assistant {
       ended: () => {
         if (this.phase === "idle" && this.clearTimer_ == null) this.clearDisplay()
       },
+      mapOn: () => this.navMapOn(),
+      roads: deps.nav?.roads ? (c, r, m) => deps.nav!.roads!(c, r, m) : undefined,
+      watch: deps.nav?.watch ? (cb) => deps.nav!.watch!(cb) : undefined,
     })
   }
 
@@ -308,7 +313,40 @@ export class Assistant {
     }
   }
 
+  /** The navigation screen is a picture with a map (setting, and a host that can show pictures). */
+  navMapOn(): boolean {
+    return this.settings.navMap && Boolean(this.deps.showBitmap)
+  }
+
+  /** The glasses show a picture now (the navigation map), not text. */
+  glassesBitmap = false
+  private lastBitmap = ""
+
+  private showBitmap(b64: string): void {
+    if (this.glassesBitmap && b64 === this.lastBitmap) return
+    try {
+      this.deps.showBitmap?.(b64)
+    } catch (e) {
+      this.addLog("error", `Дисплей (картинка): ${String((e as Error)?.message ?? e)}`)
+      return
+    }
+    this.glassesBitmap = true
+    this.lastBitmap = b64
+    this.warnIfDashboard()
+    this.changed()
+  }
+
+  /** The route on the glasses: the map picture, or text when the map is off. */
+  private showRoute(): void {
+    if (this.navMapOn() && this.nav.frame) this.showBitmap(this.nav.frame)
+    else if (this.nav.screen) this.show(fitScreen(this.nav.screen))
+  }
+
   private show(text: string): void {
+    if (this.glassesBitmap) {
+      this.glassesBitmap = false
+      this.changed()
+    }
     let r: Promise<DisplayResultInfo | void> | void
     try {
       r = this.deps.show(text)
@@ -335,10 +373,11 @@ export class Assistant {
 
   /** Nothing else to show: the glasses go blank, or show the route while a trip is on. */
   private clearDisplay(): void {
-    if (this.nav.active && this.nav.screen) {
-      this.show(fitScreen(this.nav.screen))
+    if (this.nav.active && (this.nav.screen || (this.navMapOn() && this.nav.frame))) {
+      this.showRoute()
       return
     }
+    this.glassesBitmap = false
     try {
       this.deps.clear()
     } catch {
@@ -361,9 +400,14 @@ export class Assistant {
     if (patch.apiKey === undefined || patch.apiKey === null) merged.apiKey = this.settings.apiKey
     if (patch.anthropicKey === undefined || patch.anthropicKey === null) merged.anthropicKey = this.settings.anthropicKey
     if (patch.geminiKey === undefined || patch.geminiKey === null) merged.geminiKey = this.settings.geminiKey
+    const mapWas = this.navMapOn()
     this.settings = merged
     this.deps.store.saveSettings(merged)
     this.addLog("info", "Настройки сохранены")
+    if (mapWas !== this.navMapOn()) {
+      this.nav.mapChanged()
+      if (this.nav.active && this.phase === "idle" && this.clearTimer_ == null) this.clearDisplay()
+    }
     return merged
   }
 
@@ -1260,7 +1304,10 @@ Notes are in the app.`
       if (!up && this.phase === "answering" && this.pages.length) this.show(this.pages[this.page]) // repaint after the dashboard
       if (!up && this.phase === "lecture" && this.lecture.screen) this.show(this.lecture.screen)
       if (!up && this.phase === "talk" && this.talk.screen) this.show(this.talk.screen)
-      if (!up && this.phase === "idle" && this.nav.active && this.nav.screen && this.clearTimer_ == null) this.show(fitScreen(this.nav.screen))
+      if (!up && this.phase === "idle" && this.nav.active && this.clearTimer_ == null) {
+        this.lastBitmap = "" // the dashboard covered it: send again
+        this.showRoute()
+      }
       this.changed()
     }
     if (!up || !this.settings.headNod) return
@@ -1466,8 +1513,25 @@ Notes are in the app.`
    */
   private navScreen(text: string, kind: NavScreenKind): void {
     if (kind === "message") this.flash(text, this.nav.busy ? NAV_BUSY_MS : NAV_MSG_MS)
-    else if (this.phase === "idle" && this.clearTimer_ == null) this.show(fitScreen(text))
-    else if (kind === "turn") this.flash(text, NAV_TURN_MS)
+    else if (this.phase === "idle" && this.clearTimer_ == null) {
+      if (this.navMapOn() && this.nav.frame) this.showBitmap(this.nav.frame)
+      else this.show(fitScreen(text))
+    } else if (kind === "turn") this.flash(text, NAV_TURN_MS)
+  }
+
+  /** «Проверить карту»: a test picture on the glasses for a few seconds. */
+  testBitmap(b64: string): boolean {
+    if (!this.deps.showBitmap) return false
+    this.cancelTimer("clearTimer_")
+    this.lastBitmap = ""
+    this.showBitmap(b64)
+    this.addLog("display", "Проверка картинки на очках")
+    this.clearTimer_ = this.setTimer(() => {
+      this.clearTimer_ = null
+      if (this.phase === "idle") this.clearDisplay()
+      else if (this.phase === "answering") this.showPage(this.page)
+    }, 8000)
+    return true
   }
 
   private async locate(): Promise<{lat: number; lng: number} | null> {
@@ -1570,6 +1634,8 @@ Notes are in the app.`
                 ? this.nav.screen
                 : this.pages[this.page] ?? "",
       translating: this.phase === "translating",
+      /** The glasses show the navigation map picture (the phone mirrors it). */
+      glassesBitmap: this.glassesBitmap,
       lastTranscript: this.lastTranscript,
       lastQuestion: this.lastQuestion,
       lastAnswer: this.lastAnswer,
@@ -1587,6 +1653,10 @@ Notes are in the app.`
         screen: this.nav.screen,
         message: this.nav.message,
         left: this.nav.left(),
+        map: this.navMapOn(),
+        canMap: Boolean(this.deps.showBitmap),
+        frameId: this.nav.frameId,
+        streets: this.nav.roads.length,
       },
       glassesConnected: this.glassesConnected,
       settings: {

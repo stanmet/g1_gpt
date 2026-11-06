@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light dark" />
     <title>EVA-IA</title>
     
-  <link rel="stylesheet" crossorigin href="./chunk-q71p70cx.css"><script type="module" crossorigin src="./chunk-1rr6w9pk.js"></script></head>
+  <link rel="stylesheet" crossorigin href="./chunk-tqekcb2j.css"><script type="module" crossorigin src="./chunk-werb0wd4.js"></script></head>
   <body>
     <!-- Icons, referenced with <svg><use href="#i-…"/></svg> -->
     <svg width="0" height="0" style="position: absolute" aria-hidden="true">
@@ -59,6 +59,7 @@
       </div>
 
       <figure class="lens" id="lens" data-mode="assistant">
+        <canvas class="lens-img" id="lensImg" width="526" height="100" hidden aria-label="Карта на очках"></canvas>
         <p class="lens-text" id="lensText"></p>
         <figcaption class="lens-foot">
           <span id="lensState">Готов</span>
@@ -441,6 +442,10 @@
       <header class="page-top"><button class="circle back" type="button" aria-label="Назад"><svg><use href="#i-back" /></svg></button><h1>Навигатор</h1></header>
 
       <div class="card trip" id="navTrip" hidden>
+        <div class="trip-map" id="navMapBox">
+          <svg id="navMapSvg" aria-label="Карта маршрута" role="img"></svg>
+          <span class="map-credit">© OpenStreetMap</span>
+        </div>
         <p class="trip-turn" id="navTurn"></p>
         <p class="trip-road" id="navRoad"></p>
         <div class="trip-dest">
@@ -464,6 +469,14 @@
       <p class="help" id="navMsg"></p>
       <div class="card list places" id="navResults" hidden></div>
 
+      <div class="card list nav-opts">
+        <label class="item">
+          <span class="row-label">Карта на очках<span class="row-sub" id="navMapSub">Стрелка, расстояние и карта, как в приложении Even</span></span>
+          <input class="switch" type="checkbox" id="navMapSwitch" />
+        </label>
+        <button class="item item-btn" id="navTestBtn" type="button"><span class="item-label">Проверить картинку на очках</span></button>
+      </div>
+
       <h2 class="section">Голосом</h2>
       <div class="card list cmds">
         <div class="cmd"><p class="cmd-say">«Проведи до Тринити-колледжа»</p><p class="cmd-do">Маршрут. Можно добавить «пешком», «на машине», «на велосипеде»</p></div>
@@ -471,7 +484,7 @@
         <div class="cmd"><p class="cmd-say">«Сколько осталось?»</p><p class="cmd-do">Расстояние и время до цели</p></div>
         <div class="cmd"><p class="cmd-say">«Стоп навигация»</p><p class="cmd-do">Завершить маршрут</p></div>
       </div>
-      <p class="help">Повороты видны на очках, когда там нет ответа. Близкий поворот на несколько секунд показывается поверх ответа, лекции или перевода. Маршрут строит Mentra.</p>
+      <p class="help">Когда на очках нет ответа, там стрелка, расстояние и карта: улицы вокруг, маршрут и вы. Близкий поворот на несколько секунд показывается текстом поверх ответа, лекции или перевода. Маршрут строит Mentra, улицы — © участники OpenStreetMap.</p>
     </section>
 
     <!-- ───────────── Команды ───────────── -->

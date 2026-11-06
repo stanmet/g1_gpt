@@ -443,3 +443,59 @@ describe("navigator in the assistant", () => {
     expect(shown.at(-1)!.replace(/\n/g, " ")).toBe("Навигация недоступна в этой версии Mentra.")
   })
 })
+
+describe("the map picture in the assistant", () => {
+  test("the route is a picture when nothing else is shown; an answer is text; then the picture comes back", async () => {
+    const kv = new MemKV()
+    const store = new Store(kv)
+    store.saveSettings({...DEFAULT_SETTINGS, apiKey: "sk-test-1234567890abcdef"})
+    const clock = new Clock()
+    const shown: string[] = []
+    const pictures: string[] = []
+    const answers = ["Trinity College Dublin", "Колизей открыт с 9 утра."]
+    const fetch = async () => ({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({model: "gpt-6.1-terra", output: [{type: "message", content: [{type: "output_text", text: answers.shift() ?? "Готово."}]}]}),
+    })
+    const {host} = fakeHost()
+    let a!: Assistant
+    a = new Assistant({
+      store,
+      fetch: fetch as any,
+      show: (t) => void shown.push(t),
+      clear: () => void shown.push("<clear>"),
+      showBitmap: (b) => void pictures.push(b),
+      now: clock.now,
+      setTimer: clock.set,
+      clearTimer: clock.clear,
+      nav: {
+        ...host,
+        start: async (place, mode) => {
+          a.nav.onRoute([{lat: 53.3498, lng: -6.2603}, {lat: 53.346, lng: -6.26}, {lat: TRINITY.lat, lng: TRINITY.lng}])
+          return host.start(place, mode)
+        },
+      },
+    })
+    a.onTranscript("Проведи до Тринити-колледжа", true)
+    await flush()
+    expect(a.nav.active).toBe(true)
+    await clock.advance(NAV_TURN_MS + 100)
+    expect(pictures.length).toBe(1)
+    expect(a.glassesBitmap).toBe(true)
+    expect(a.snapshot().glassesBitmap).toBe(true)
+
+    a.onTranscript("Вопрос, когда открывается Колизей?", true)
+    await clock.advance(2000)
+    expect(shown.at(-1)).toBe("Колизей открыт с 9 утра.")
+    expect(a.glassesBitmap).toBe(false)
+    a.onTranscript("Скрой", true)
+    expect(pictures.length).toBe(2) // sent again: the text replaced it on the glasses
+    expect(pictures[1]).toBe(pictures[0])
+
+    // map off in the settings: text again
+    a.updateSettings({navMap: false})
+    expect(shown.at(-1)).toMatch(/^Маршрут до Trinity College Dublin/)
+    expect(a.glassesBitmap).toBe(false)
+  })
+})

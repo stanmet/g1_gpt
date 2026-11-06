@@ -56,6 +56,16 @@ const NAV_REPLIES: Record<string, (p: any) => unknown> = {
   miniapp_navigation_get_state: () => ({ok: true, state: null}),
 }
 
+/** A few streets around Trinity College, as Overpass returns them. */
+const OVERPASS_SAMPLE = {
+  elements: [
+    {type: "way", tags: {highway: "primary"}, geometry: [{lat: 53.3445, lon: -6.2620}, {lat: 53.3440, lon: -6.2560}]},
+    {type: "way", tags: {highway: "pedestrian"}, geometry: [{lat: 53.3420, lon: -6.2600}, {lat: 53.3445, lon: -6.2598}]},
+    {type: "way", tags: {highway: "footway"}, geometry: [{lat: 53.3430, lon: -6.2590}, {lat: 53.3436, lon: -6.2570}]},
+    {type: "node", lat: 1, lon: 2},
+  ],
+}
+
 function makeHost(openaiAnswers: string[], store = new Map<string, string>()) {
   const sent: Env[] = []
   const openaiCalls: any[] = []
@@ -89,7 +99,13 @@ function makeHost(openaiAnswers: string[], store = new Map<string, string>()) {
     return null
   }
 
+  const overpassCalls: {url: string; body: string}[] = []
   const fetch = async (url: string, init: any) => {
+    if (/overpass/.test(url)) {
+      overpassCalls.push({url, body: String(init?.body ?? "")})
+      const raw = JSON.stringify(OVERPASS_SAMPLE)
+      return {ok: true, status: 200, text: async () => raw, json: async () => JSON.parse(raw)}
+    }
     openaiCalls.push({url, init, body: JSON.parse(init.body)})
     const text = openaiAnswers.shift() ?? "Готово."
     const raw = JSON.stringify({model: "gpt-6.1-terra", output: [{type: "message", content: [{type: "output_text", text}]}]})
@@ -121,7 +137,8 @@ function makeHost(openaiAnswers: string[], store = new Map<string, string>()) {
   const ev = (streamType: string, data: unknown) => deliver({payload: {type: "miniapp_event", streamType, data}})
   const renders = () => sent.filter((e) => e.payload?.type === "miniapp_render").map((e) => e.payload.elements?.[0]?.text ?? "<clear>")
   const uiReplies = () => sent.filter((e) => e.payload?.type === "UI_SEND")
-  return {ctx, sent, openaiCalls, store, ev, renders, uiReplies}
+  const bitmaps = () => sent.filter((e) => e.payload?.type === "miniapp_display" && e.payload.layout?.layoutType === "bitmap_view").map((e) => e.payload.layout.data as string)
+  return {ctx, sent, openaiCalls, overpassCalls, store, ev, renders, uiReplies, bitmaps}
 }
 
 test("built bundle: G1 transcript → OpenAI → render, follow-up keeps context", async () => {
@@ -339,7 +356,8 @@ test("built bundle: navigator — «Проведи до Тринити-колл�
   h.ctx.__mentraInitCallback("s")
   await sleep(50)
   h.ev("_ui", {type: "UI_OPEN"})
-  h.ev("_ui", {type: "UI_MESSAGE", channel: "saveSettings", payload: {apiKey: "sk-test-abcdefghijklmnop"}, seq: 1, requestId: "r1"})
+  // text screens here; the map picture has its own test below
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "saveSettings", payload: {apiKey: "sk-test-abcdefghijklmnop", navMap: false}, seq: 1, requestId: "r1"})
   await sleep(30)
 
   h.ev("transcription:ru-RU", {text: "Проведи до Тринити-колледжа пешком.", isFinal: true})
@@ -390,3 +408,47 @@ test("built bundle: navigator search from the phone", async () => {
   await sleep(80)
   expect(h.sent.find((e) => e.payload?.type === "miniapp_navigation_start")!.payload).toMatchObject({mode: "cycling", lat: 53.3438})
 }, 15000)
+
+test("built bundle: navigator map — the route as a G1 picture with streets from OpenStreetMap", async () => {
+  const h = makeHost([])
+  vm.runInContext(readFileSync(BUNDLE, "utf8"), h.ctx, {filename: "background/index.js"})
+  h.ctx.__mentraInitCallback("s")
+  await sleep(50)
+  h.ev("_ui", {type: "UI_OPEN"})
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "navGo", payload: {placeId: "poi.trinity", mainText: "Trinity College Dublin", secondaryText: "", mode: "walking"}, seq: 1, requestId: "g"})
+  await sleep(120)
+  // Mentra sends the route line and positions during the trip
+  h.ev("navigation_route", {points: [{lat: 53.3498, lng: -6.2603}, {lat: 53.3460, lng: -6.2600}, {lat: 53.3438, lng: -6.2546}]})
+  h.ev("location_update", {lat: 53.3497, lng: -6.2603, accuracy: 8})
+  await sleep(80)
+  expect(h.overpassCalls.length).toBe(1)
+  expect(decodeURIComponent(h.overpassCalls[0].body)).toContain("around:500,53.349800,-6.260300") // around the start of the route
+  await sleep(4800)
+  h.ev("navigation_update", {kind: "maneuver", maneuverType: "TURN_RIGHT", distanceMeters: 140, nextStepRoad: "Grafton Street", distanceToDestinationMeters: 850, timeToDestinationSeconds: 660})
+  await sleep(1700)
+  const pics = h.bitmaps()
+  expect(pics.length).toBeGreaterThan(0)
+  const bmp = Buffer.from(pics.at(-1)!, "base64")
+  expect(bmp.subarray(0, 2).toString()).toBe("BM")
+  expect(bmp.length).toBe(9782)
+  expect(bmp.readUInt32LE(18)).toBe(576)
+  expect(bmp.readUInt32LE(22)).toBe(135)
+  expect(bmp.readUInt16LE(28)).toBe(1)
+
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "getState", payload: {}, seq: 2, requestId: "st"})
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "navMap", payload: {}, seq: 3, requestId: "map"})
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "navFrame", payload: {}, seq: 4, requestId: "fr"})
+  await sleep(40)
+  const result = (id: string) => h.uiReplies().find((e) => e.payload.requestId === id)!.payload.payload.result
+  expect(result("st")).toMatchObject({glassesBitmap: true, nav: {map: true, canMap: true, streets: 3}})
+  expect(result("map")).toMatchObject({active: true, me: [53.3497, -6.2603], roadsVersion: 1})
+  expect(result("map").roads).toHaveLength(3)
+  expect(result("map").route).toHaveLength(3)
+  expect(result("fr").frame).toBe(pics.at(-1))
+
+  // the test picture from the phone
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "navTestBitmap", payload: {}, seq: 5, requestId: "t"})
+  await sleep(30)
+  expect(result("t")).toEqual({ok: true})
+  expect(h.bitmaps().length).toBe(pics.length + 1)
+}, 20000)

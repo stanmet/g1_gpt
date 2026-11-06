@@ -6184,7 +6184,585 @@ Stop: «стоп лекция»` : `Режим лекции
     }
   }
 
+  // src/background/glassfont.data.ts
+  var GLASS_FONTS = { text: { ascent: 19, descent: 5, lineHeight: 24, glyphs: { " ": [5, 0, 0, 0, 0, 0], "!": [6, 2, 5, 3, 14, 0], '"': [10, 2, 5, 6, 6, 14], "#": [12, 0, 5, 12, 14, 20], $: [12, 1, 3, 10, 18, 48], "%": [19, 2, 5, 15, 14, 84], "&": [13, 1, 5, 11, 14, 112], "'": [6, 2, 5, 2, 6, 140], "(": [7, 2, 4, 4, 17, 146], ")": [7, 1, 4, 4, 17, 163], "*": [10, 1, 5, 8, 8, 180], "+": [13, 2, 9, 9, 10, 188], ",": [6, 1, 17, 3, 6, 208], "-": [9, 1, 12, 7, 2, 214], ".": [6, 2, 16, 3, 3, 216], "/": [7, 0, 4, 7, 17, 219], "0": [13, 1, 5, 11, 14, 236], "1": [8, 1, 5, 6, 14, 264], "2": [12, 1, 5, 10, 14, 278], "3": [12, 1, 5, 10, 14, 306], "4": [13, 1, 5, 11, 14, 334], "5": [12, 1, 5, 10, 14, 362], "6": [12, 1, 5, 10, 14, 390], "7": [11, 1, 5, 9, 14, 418], "8": [12, 1, 5, 10, 14, 446], "9": [12, 1, 4, 10, 14, 474], ":": [6, 2, 8, 3, 10, 502], ";": [6, 1, 9, 4, 13, 512], "<": [13, 2, 8, 9, 10, 525], "=": [13, 2, 10, 9, 7, 545], ">": [13, 2, 8, 9, 10, 559], "?": [10, 1, 5, 8, 14, 579], "@": [19, 1, 5, 17, 18, 593], A: [14, 1, 5, 12, 14, 647], B: [13, 1, 5, 11, 14, 675], C: [14, 1, 5, 12, 14, 703], D: [14, 1, 5, 12, 14, 731], E: [12, 1, 5, 9, 14, 759], F: [11, 1, 5, 9, 14, 787], G: [14, 1, 5, 12, 14, 815], H: [14, 1, 5, 12, 14, 843], I: [5, 1, 5, 3, 14, 871], J: [11, 1, 5, 9, 14, 885], K: [13, 1, 5, 12, 14, 913], L: [11, 1, 5, 9, 14, 941], M: [18, 1, 5, 15, 14, 969], N: [14, 1, 5, 12, 14, 997], O: [15, 1, 5, 13, 14, 1025], P: [12, 1, 5, 10, 14, 1053], Q: [15, 1, 5, 13, 15, 1081], R: [12, 1, 5, 11, 14, 1111], S: [12, 1, 5, 10, 14, 1139], T: [13, 1, 5, 11, 14, 1167], U: [14, 1, 5, 12, 14, 1195], V: [14, 1, 5, 12, 14, 1223], W: [19, 1, 5, 18, 14, 1251], X: [14, 1, 5, 12, 14, 1293], Y: [14, 1, 5, 12, 14, 1321], Z: [12, 1, 5, 10, 14, 1349], "[": [7, 2, 4, 4, 18, 1377], "\\": [7, 0, 4, 7, 17, 1395], "]": [7, 1, 4, 4, 18, 1412], "^": [9, 1, 5, 7, 6, 1430], _: [9, 0, 19, 9, 2, 1436], "`": [7, 2, 4, 3, 3, 1440], a: [11, 1, 8, 9, 11, 1443], b: [12, 1, 5, 10, 14, 1465], c: [11, 1, 8, 9, 11, 1493], d: [12, 1, 5, 10, 14, 1515], e: [11, 1, 8, 9, 11, 1543], f: [7, 0, 4, 7, 15, 1565], g: [12, 1, 8, 10, 15, 1580], h: [12, 1, 5, 9, 14, 1610], i: [5, 1, 4, 3, 15, 1638], j: [5, -1, 4, 4, 19, 1653], k: [11, 1, 5, 9, 14, 1672], l: [5, 1, 5, 3, 14, 1700], m: [17, 1, 8, 15, 11, 1714], n: [12, 1, 8, 9, 11, 1736], o: [12, 1, 8, 10, 11, 1758], p: [12, 1, 8, 10, 15, 1780], q: [12, 1, 8, 10, 15, 1810], r: [8, 1, 8, 6, 11, 1840], s: [10, 1, 8, 9, 11, 1851], t: [7, 0, 5, 6, 13, 1873], u: [12, 1, 8, 9, 11, 1886], v: [11, 1, 8, 10, 11, 1908], w: [16, 1, 8, 14, 11, 1930], x: [11, 1, 8, 9, 11, 1952], y: [11, 1, 8, 10, 15, 1974], z: [11, 1, 8, 9, 11, 2004], "{": [9, 1, 4, 7, 18, 2026], "|": [7, 2, 1, 3, 23, 2044], "}": [9, 1, 4, 6, 18, 2067], "~": [13, 1, 11, 10, 5, 2085], "«": [12, 1, 9, 10, 9, 2095], "°": [9, 1, 5, 7, 7, 2113], "·": [6, 2, 11, 3, 3, 2120], "»": [12, 1, 9, 10, 9, 2123], "À": [14, 1, 1, 12, 18, 2141], "Á": [14, 1, 1, 12, 18, 2177], "Â": [14, 1, 1, 12, 18, 2213], "Ã": [14, 1, 1, 12, 18, 2249], "Ä": [14, 1, 1, 12, 18, 2285], "Å": [14, 1, 0, 12, 19, 2321], "Æ": [19, 1, 5, 17, 14, 2359], "Ç": [14, 1, 5, 12, 18, 2401], "È": [12, 1, 1, 9, 18, 2437], "É": [12, 1, 1, 9, 18, 2473], "Ê": [12, 1, 1, 9, 18, 2509], "Ë": [12, 1, 1, 9, 18, 2545], "Ì": [5, -1, 1, 4, 18, 2581], "Í": [5, 1, 1, 4, 18, 2599], "Î": [5, -1, 1, 7, 18, 2617], "Ï": [5, -1, 1, 7, 18, 2635], "Ð": [14, 0, 5, 13, 14, 2653], "Ñ": [14, 1, 1, 12, 18, 2681], "Ò": [15, 1, 1, 13, 18, 2717], "Ó": [15, 1, 1, 13, 18, 2753], "Ô": [15, 1, 1, 13, 18, 2789], "Õ": [15, 1, 1, 13, 18, 2825], "Ö": [15, 1, 1, 13, 18, 2861], "×": [13, 2, 9, 9, 9, 2897], "Ø": [15, 1, 4, 13, 14, 2915], "Ù": [14, 1, 1, 12, 18, 2943], "Ú": [14, 1, 1, 12, 18, 2979], "Û": [14, 1, 1, 12, 18, 3015], "Ü": [14, 1, 1, 12, 18, 3051], "Ý": [14, 1, 1, 12, 18, 3087], "Þ": [12, 1, 5, 10, 14, 3123], "ß": [12, 1, 5, 10, 14, 3151], "à": [11, 1, 4, 9, 15, 3179], "á": [11, 1, 4, 9, 15, 3209], "â": [11, 1, 4, 9, 15, 3239], "ã": [11, 1, 4, 9, 15, 3269], "ä": [11, 1, 4, 9, 15, 3299], "å": [11, 1, 2, 9, 16, 3329], "æ": [17, 1, 8, 16, 11, 3361], "ç": [11, 1, 8, 9, 15, 3383], "è": [11, 1, 4, 9, 15, 3413], "é": [11, 1, 4, 9, 15, 3443], "ê": [11, 1, 4, 9, 15, 3473], "ë": [11, 1, 4, 9, 15, 3503], "ì": [5, -1, 4, 4, 15, 3533], "í": [5, 1, 4, 4, 15, 3548], "î": [5, -2, 4, 7, 15, 3563], "ï": [5, -1, 4, 7, 15, 3578], "ð": [11, 1, 4, 9, 15, 3593], "ñ": [12, 1, 4, 9, 15, 3623], "ò": [12, 1, 4, 10, 15, 3653], "ó": [12, 1, 4, 10, 15, 3683], "ô": [12, 1, 4, 10, 15, 3713], "õ": [12, 1, 4, 10, 15, 3743], "ö": [12, 1, 4, 10, 15, 3773], "÷": [13, 2, 8, 9, 11, 3803], "ø": [12, 1, 7, 10, 11, 3825], "ù": [12, 1, 4, 9, 15, 3847], "ú": [12, 1, 4, 9, 15, 3877], "û": [12, 1, 4, 9, 15, 3907], "ü": [12, 1, 4, 9, 15, 3937], "ý": [11, 1, 4, 10, 19, 3967], "þ": [12, 1, 5, 10, 18, 4005], "ÿ": [11, 1, 4, 10, 19, 4041], "Ё": [12, 1, 1, 9, 18, 4079], "А": [14, 1, 5, 12, 14, 4115], "Б": [12, 1, 5, 10, 14, 4143], "В": [13, 1, 5, 11, 14, 4171], "Г": [11, 1, 5, 9, 14, 4199], "Д": [16, 1, 5, 14, 17, 4227], "Е": [12, 1, 5, 9, 14, 4261], "Ж": [20, 1, 5, 18, 14, 4289], "З": [12, 1, 5, 10, 14, 4331], "И": [14, 1, 5, 12, 14, 4359], "Й": [14, 1, 0, 12, 18, 4387], "К": [13, 1, 5, 11, 14, 4423], "Л": [14, 1, 5, 12, 14, 4451], "М": [18, 1, 5, 15, 14, 4479], "Н": [14, 1, 5, 12, 14, 4507], "О": [15, 1, 5, 13, 14, 4535], "П": [14, 1, 5, 12, 14, 4563], "Р": [12, 1, 5, 10, 14, 4591], "С": [14, 1, 5, 12, 14, 4619], "Т": [13, 1, 5, 11, 14, 4647], "У": [13, 1, 5, 11, 14, 4675], "Ф": [16, 1, 4, 14, 15, 4703], "Х": [14, 1, 5, 12, 14, 4733], "Ц": [14, 1, 5, 13, 17, 4761], "Ч": [13, 1, 5, 11, 14, 4795], "Ш": [19, 1, 5, 16, 14, 4823], "Щ": [19, 1, 5, 18, 17, 4851], "Ъ": [16, 1, 5, 14, 14, 4902], "Ы": [17, 1, 5, 15, 14, 4930], "Ь": [12, 1, 5, 11, 14, 4958], "Э": [14, 1, 5, 12, 14, 4986], "Ю": [20, 1, 5, 18, 14, 5014], "Я": [12, 1, 5, 10, 14, 5056], "а": [11, 1, 8, 9, 11, 5084], "б": [11, 1, 4, 10, 14, 5106], "в": [11, 1, 8, 9, 11, 5134], "г": [8, 1, 8, 7, 11, 5156], "д": [12, 0, 8, 12, 14, 5167], "е": [11, 1, 8, 9, 11, 5195], "ж": [16, 1, 8, 14, 11, 5217], "з": [10, 1, 8, 8, 11, 5239], "и": [12, 1, 8, 9, 11, 5250], "й": [12, 1, 3, 9, 15, 5272], "к": [11, 1, 8, 9, 11, 5302], "л": [11, 0, 8, 10, 11, 5324], "м": [15, 1, 8, 13, 11, 5346], "н": [12, 1, 8, 9, 11, 5368], "о": [12, 1, 8, 10, 11, 5390], "п": [12, 1, 8, 9, 11, 5412], "р": [12, 1, 8, 10, 15, 5434], "с": [11, 1, 8, 9, 11, 5464], "т": [9, 0, 8, 9, 11, 5486], "у": [11, 1, 8, 10, 15, 5508], "ф": [14, 1, 5, 13, 17, 5538], "х": [11, 1, 8, 9, 11, 5572], "ц": [12, 1, 8, 11, 14, 5594], "ч": [11, 1, 8, 9, 11, 5622], "ш": [16, 1, 8, 14, 11, 5644], "щ": [17, 1, 8, 15, 14, 5666], "ъ": [13, 0, 8, 12, 11, 5694], "ы": [15, 1, 8, 13, 11, 5716], "ь": [11, 1, 8, 9, 11, 5738], "э": [11, 1, 8, 9, 11, 5760], "ю": [16, 1, 8, 14, 11, 5782], "я": [11, 1, 8, 9, 11, 5804], "ё": [11, 1, 4, 9, 15, 5826], "–": [10, 0, 12, 10, 2, 5856], "—": [19, 0, 12, 19, 2, 5860], "‘": [6, 2, 5, 3, 6, 5866], "’": [6, 2, 5, 3, 6, 5872], "“": [10, 2, 5, 7, 6, 5878], "”": [10, 2, 5, 7, 6, 5884], "…": [18, 2, 16, 15, 3, 5890], "№": [21, 1, 5, 19, 14, 5896] }, bits: "wMDAwMDAwMDAAADA4MDMzMzMzMwMYAxACMAYwH/wf/AYwBmA/+D/4DGAMYAxgDEABAAEAB8Af4B1wOTA5AB0AH8AH4AFwATAxMDlwH/APwAEAAQAeBj4MMwgzGDMwPiAIYADCAI+BiYMZghmGD4wHB4APwBjAGMAdwA+ADwAfGDu4MfAw8DjwH/APuDAwMDAwMAwcGBg4ODAwMDAwMDg4GBwMMDgYGBwMDAwMDAwMHBwYODAGFj/PD5/GBgYABgAGAAYAP+A/4AYABgAGAAYAGBgYMDAwP7+wODABg4MDAwcGBgYMDAwMGBgYOAfAD+AccDhwODA4MDA4MDg4MDgwOHAccA/gB8APHz8nBwcHBwcHBwcHBw+AH+AY4DhgAGAAYADgAcADgAcADgAcAD/wP/AHgB/gGGA4cABwAOADwAPgAHAAMDhwOHAf4A/AAOAB4APgA2AGYA5gDGAYYDhgP/g/+ABgAGAAYB/gH+AYABgAGAAbwB/gGHAAcAAwOHAYYB/gB4AHwA/gHHAYcDgAM8A34DxwODA4MDgwHHAP4AfAP+A/4ADgAMABwAHAA4ADgAcABwAOAA4AHAAcAAeAH+AYYDhwGHAcYA/AH+A4cDgwODA4cB/gD8AHgB/gOOA4cDAwOHA4cB+wDzAAcDhwGOAfwAeAMDgwAAAAADA4MBgcGAAAAAAAGBgYMDAAYAHgD4A+ADgAPAAfAAfAAOAAID/gP+AAAAAAAAA/4D/gMAA8AB8AA+AA4AHgB8A+ADgAIAAPH/nwwMHDhwYGAAYOBgD4AAf/AA8DgBwBwBhwwDn0YDGMYDMMYDMEYDMEYDMMYDGOwDn/wBhzABwAAA8CAAf+AAD8AAPAA8AHwAbgBuAOYA5wDHAcMB/4H/g4GDgcMBw/wD/gOHA4MDgwOHA/wD/wODA4ODg4OHA/8D/gA+AP8B44GBw4DDgAMAAwADgAOAwYHB44D/AD4D/AP/A4eDg4OBg4HDgcOBw4HDgYODg4eD/wP8A/4D/gOAA4ADgAOAA/4D/gOAA4ADgAOAA/4D/gP+A/4DgAOAA4ADgAP+A/4DgAOAA4ADgAOAA4AAPgD/AeOBwcOBw4ADAAMHw4fDgMGBweOA/4A+A4HDgcOBw4HDgcOBw//D/8OBw4HDgcOBw4HDgcODg4ODg4ODg4ODg4ODgA4ADgAOAA4ADgAOAA4ADgAOAw4DDgOMAfwA+AODg4cDhwOOA5wDuAP4A/gD3AOOA4YDhwODg4HDgAOAA4ADgAOAA4ADgAOAA4ADgAOAA4AD/gP+A8B74Hvg++Db8Nux27HbuZubm5sbnxuPG44bhhuAw8DD4MPgw/DDuMOYw5zDjMOOw4bDg8ODw4HAPgD/AeOBgcOAw4DjAOMA44DjgMGBweOA/wA+A/wD/gOHA4MDgwODA4cD/gP8A4ADgAOAA4ADgAA+AP8B44GBw4DDgOMA4wDjgOOMwY/B54D/AD+AAMP8A/4DhwODA4MDgwOHA/4D/AOMA44DhwOHA4OAfAH+AccDgwOAAcAB/AB+AAcAAwMDA4cB/gD8A/+D/4A4ADgAOAA4ADgAOAA4ADgAOAA4ADgAOAOBw4HDgcOBw4HDgcOBw4HDgcOBwYGB54D/AH4DAcOBw4GBgYHDgcMAwwDnAOYAZgB+AHwAPAA8AwcHAwcHA4eGA4+OAY2OAY2MAc3MAdzcANjcANjYANjYAHh4AHB4AHBwA4GBw4DHAOYAfgA8ADgAPAB8AG4A5wHDAYODgcOBw4OBw4DHAOYAbgB8ADwAGAAYABgAGAAYABgD/wP/AAcADgAMABwAOAAwAHAA4AHAAYAD/wP/A8PDAwMDAwMDAwMDAwMDAwPDwwGBgYHAwMDA4GBgYDAwMDAbw8DAwMDAwMDAwMDAwMDAw8PA4OGxsxsb/gP+AwMBgPgB/AOMAA4APgH+A44DDgMOA/4B7gOAA4ADgAO8A/4DxgOHA4cDgwOHA4cDxgP+A7wA+AH8A44DhAMAAwADAAOGA44B/AD4AAcABwAHAPcB/wOPA4cDBwMHAwcDhwOPAf8A9wD4AfwDjgMGA/4D/gMAA4ADhgH+APgAePjgw/v4wMDAwMDAwMDA9wH/A48DhwMHAwcDBwOHA48B/wD3AAcBhgH+APgDgAOAA4ADvAP+A84DhgOGA4YDhgOGA4YDhgOGA4OBAAODg4ODg4ODg4ODgcHAgAHBwcHBwcHBwcHBwcHDgwOAA4ADgAOOA5wDuAOwA/AD8AO4A7gDnAOOA44Dg4ODg4ODg4ODg4ODg4O44/3zjjuOO447jjuOO447jjuOO447vAP+A84DhgOGA4YDhgOGA4YDhgOGAPgB/AOOA4YDBwMHAwcDhgOOAfwA+AO8A/4DxgOHA4cDgwOHA4cDxgP+A7wDgAOAA4ADgAD3Af8DjwOHAwcDBwMHA4cDjwH/APcABwAHAAcABwOz88ODg4ODg4ODgPgB/AOMA4AD4AH8ADwADgOOA/wA+ADAw/PwwMDAwMDAwPBzhgOGA4YDhgOGA4YDhgOGA44B/gD2AwcDBgOOAY4BjAHcANgA2ADYAHAAcAMMMxwznnOecZ5hkmGz4PPA88DhwOHDjgGMAdwA2ADwAHAA+ADYAdwDjAMOAwcDBgOOAY4BjAHcANgA2ADYAHAAcABwAGAB4APAA/wD/AAcADgAMABwAOAAwAHAA/4D/gA4eGDg4ODgw4PAwODg4ODgeDuDg4ODg4ODg4ODg4ODg4ODg4ODg4ODgwPAwMDAwMDgcHDgwMDAwMPDAAMA8wH/AZ4DAAB3AO4BzAGYA7gBnADMAGYAcwDh8xMbMfDjA4MDuAHcAM4AZgB3AOYAzAGcA7gAcAAwABgAAAA8ADwAfABuAG4A5gDnAMcBwwH/gf+DgYOBwwHADAAMABgAAAA8ADwAfABuAG4A5gDnAMcBwwH/gf+DgYOBwwHAOAB8AGYAAAA8ADwAfABuAG4A5gDnAMcBwwH/gf+DgYOBwwHAdgB+AAAAAAA8ADwAfABuAG4A5gDnAMcBwwH/gf+DgYOBwwHAZgBmAAAAAAA8ADwAfABuAG4A5gDnAMcBwwH/gf+DgYOBwwHAPABkAGQAPAAAADwAPAB8AG4AbgDmAOcAxwHDAf+B/4OBg4HDAcAf/gAf/gAbgAA7gAAzgABzgABj/gDj/gDjgAH/gAH/gAGDgAOD/gMD/gA+AP8B44HBw4DDgAMAAwADgAOAwYHB44D/AD4ACAAcAAYAHABgAGAAMAAAA/4D/gOAA4ADgAOAA/4D/gOAA4ADgAOAA/4D/gAYABgAMAAAA/4D/gOAA4ADgAOAA/4D/gOAA4ADgAOAA/4D/gBwAHgAzAAAA/4D/gOAA4ADgAOAA/4D/gOAA4ADgAOAA/4D/gDMAMwAAAAAA/4D/gOAA4ADgAOAA/4D/gOAA4ADgAOAA/4D/gMBgIABwcHBwcHBwcHBwcHBwcDBgYADg4ODg4ODg4ODg4ODg4DhsxgA4ODg4ODg4ODg4ODg4OGbuRAA4ODg4ODg4ODg4ODg4OD/AP+AwcDA4MDgwGP8Y/xgwGDA4MDgwcD/gP8AMgB+AAAAAAOAw8DD4MPgw/DDuMOYw5zDjMOOw4bDg8ODw4HAMAAYABgAAAA+AP8B44GBw4DDgOMA4wDjgOOAwYHB44D/AD4ADgAMAAgAAAA+AP8B44GBw4DDgOMA4wDjgOOAwYHB44D/AD4AHAA2AGcAAAA+AP8B44GBw4DDgOMA4wDjgOOAwYHB44D/AD4AMgB+AAAAAAA+AP8B44GBw4DDgOMA4wDjgOOAwYHB44D/AD4AZgB3ACIAAAA+AP8B44GBw4DDgOMA4wDjgOOAwYHB44D/AD4BBAOOAdwA+ABwAPgB3AOOAwYAPsD/geOBg8OGw4zjDOMY47DjoMHhweOB/wG+ADAAMAAYAAADgcOBw4HDgcOBw4HDgcOBw4HDgcGBgeeA/wB+AAwADAAYAAADgcOBw4HDgcOBw4HDgcOBw4HDgcGBgeeA/wB+ABgAPABmAAADgcOBw4HDgcOBw4HDgcOBw4HDgcGBgeeA/wB+AGYAZgAAAAADgcOBw4HDgcOBw4HDgcOBw4HDgcGBgeeA/wB+AAwAHAAYAAADgcODgcOAxwDmAG4AfAA8ABgAGAAYABgAGAAYA4ADgAOAA/wD/gOHA4MDgwOHA/4D/AOAA4ADgAD4Af4BzgOGA4YDjgO8A74DhwODA4MDhwO/A7wAwABgAGAAAAD4AfwDjAAOAD4B/gOOAw4DDgP+Ae4AGAAwACAAAAD4AfwDjAAOAD4B/gOOAw4DDgP+Ae4AcADYAZwAAAD4AfwDjAAOAD4B/gOOAw4DDgP+Ae4A6AH4AAAAAAD4AfwDjAAOAD4B/gOOAw4DDgP+Ae4BmAHcAIgAAAD4AfwDjAAOAD4B/gOOAw4DDgP+Ae4AcACYAJgAcAAAAPgB/AOMAA4APgH+A44DDgMOA/4B7gD54f/zjjgOGH/9//+MAw4DDhv/+fHg+AH8A44DhAMAAwADAAOGA44B/AD4ACAAOAAIADgAwABgACAAAAD4AfwDjgMGA/4D/gMAA4ADhgH+APgAGAAwADAAAAD4AfwDjgMGA/4D/gMAA4ADhgH+APgAcADYAcwAAAD4AfwDjgMGA/4D/gMAA4ADhgH+APgAzAHcAIgAAAD4AfwDjgMGA/4D/gMAA4ADhgH+APgDAYGAAcHBwcHBwcHBwcHAwYGAA4ODg4ODg4ODg4OA4bMYAODg4ODg4ODg4ODjO7kQAODg4ODg4ODg4ODghAD8AHAA2AAMAP4B/gOOAwYDBgMGAwYDjgH8APgA7AD4AAAAAAO8A/4DzgOGA4YDhgOGA4YDhgOGA4YA4ABgADAAAAD4AfwDjgOGAwcDBwMHA4YDjgH8APgAGAAwADAAAAD4AfwDjgOGAwcDBwMHA4YDjgH8APgAcADYAcwAAAD4AfwDjgOGAwcDBwMHA4YDjgH8APgA7AC4AAAAAAD4AfwDjgOGAwcDBwMHA4YDjgH8APgAzAHMAIgAAAD4AfwDjgOGAwcDBwMHA4YDjgH8APgAYABwAGAAAAAAA/4D/gAAAGAAcABgAPsB/gOOA44DFwM3A2cDxgOOAfwC+ADgAGAAMAAAA4YDhgOGA4YDhgOGA4YDhgOOAf4A9gAYABgAMAAAA4YDhgOGA4YDhgOGA4YDhgOOAf4A9gBwAPgBzAAAA4YDhgOGA4YDhgOGA4YDhgOOAf4A9gDMAMwAiAAAA4YDhgOGA4YDhgOGA4YDhgOOAf4A9gAYADAAMAAAAwcDBgOOAY4BjAHcANgA2ADYAHAAcABwAGAB4APAA4ADgAOAA7wD/gPGA4cDhwODA4cDhwPGA/4DvAOAA4ADgAOAAMwB3ACIAAADBwMGA44BjgGMAdwA2ADYANgAcABwAHAAYAHgA8AAzADMAAAAAAP+A/4DgAOAA4ADgAP+A/4DgAOAA4ADgAP+A/4APAA8AHwAbgBuAOYA5wDHAcMB/4H/g4GDgcMBw/4D/gOAA4ADgAOAA/wD/wOHA4MDgwOHA/8D/AP8A/4DhwODA4MDhwP8A/8DgwODg4ODhwP/A/4D/gP+A4ADgAOAA4ADgAOAA4ADgAOAA4ADgAOAAH/gf+Bw4HDgcOBg4GDgYOBg4ODg4OHA4//z//MAMwAzADP+A/4DgAOAA4ADgAP+A/4DgAOAA4ADgAP+A/4DgwcBww4BwxwA4xwAYzgAczAAP/AAf/AAYzgA4xgAwxwBww4Dgw4DgwcAeAH+AYYDhwAHAA4APAA+AAcAAwOHA4cB/gD8A4HDg8ODw4bDjsOMw5zDmcO5w/HD4cPhw8HDgcBmADwAAAAAA4HDg8ODw4bDjsOMw5zDmcO5w/HD4cPhw8HDgcODg4ODhwOOA4wDnAP4A/gDnAOOA44DhwODg4GAf8B/wGHA4cDhwOHA4cDhwMHAwcDBwcHDgcMBw8B74Hvg++Db8Nux27HbuZubm5sbnxuPG44bhhuBw4HDgcOBw4HDgcP/w//DgcOBw4HDgcOBw4HAPgD/AeOBgcOAw4DjAOMA44DjgMGBweOA/wA+A//D/8OBw4HDgcOBw4HDgcOBw4HDgcOBw4HDgcP8A/4DhwODA4MDgwOHA/4D/AOAA4ADgAOAA4AAPgD/AeOBgcOAw4ADAAMAA4ADgMGBweOA/wA+A/+D/4A4ADgAOAA4ADgAOAA4ADgAOAA4ADgAOAODg4OBgwHHAMYA7gBuAGwAfAA4ADgAMAHwAeAADAA+AP/B7eGMY4xzDHMMcwxzjHHM4P/Af4AMAAwDgYHDgMcA5gB+ADwAOAA8AHwAbgDnAcMBg4OBw4GDgYOBg4GDgYOBg4GDgYOBg4GDgYOBg//j/+AA4ADgAOOBg4GDgYOBg4GDgYHDgf+A/YABgAGAAYABgAGDhw+HD4cPhw+HD4cPhw+HD4cPhw+HD4cP/////4cMA4cMA4cMA4cMA4cMA4cMA4cMA4cMA4cMA4cMA4cMA4cMA///A///AAAHAAAHAAAHA/AD8AAwADAAMAA/gD/gMOAwcDBwMHAw4D/gP4OAO4A7gDuAO4A7/Dv/O4c7g7uDu4O7hzv/O/w7gAOAA4ADgAOAA/wD/wOHA4ODg4ODg4cD/wP8AHwA/wHHg4GDAcABwD/AP8ABwwHDgYHHgP8AfAOB8AOH+AOPHAOODgOcBgOcBwP4BwP4BwOcBwOcBgOMDgOPHAOH/AOB8AD/Af8DgwODAwMDgwODAf8A/wDjAcMBwwODAwMA+AH8A4wADgA+Af4DjgMOAw4D/gHuAH4B/gGAAwADeAP+A44DBwMHAwcDhgOOAfwA+AP4A/wDjgOMA/wD/AOOA4YDhgP+A/wD+/uDg4ODg4ODg4B/AH8AYwBjAOMA4wDDAMMAwwP/w//DgMOAw4DA+AH8A44DBgP+A/4DAAOAA4YB/gD4A4xxjGHM4O3Af4B/gO3AzMHM44xzjHDz+xwceHgcHx/584YDjgOOA54DvgO2A+YD5gPGA4YDhgDMAHgAAAAAA4YDjgOOA54DvgO2A+YD5gPGA4YDhgOOA44DnAOYA7gD8APwA7gDnAOOA44A/wD/AOMA4wDDAMMAwwDDAMMDwwODA8HjwePjY+Nj82O3Y7ZjtmOcY5xjnGOGA4YDhgOGA/4D/gOGA4YDhgOGA4YA+AH8A44DhgMHAwcDBwOGA44B/AD4A/4D/gOGA4YDhgOGA4YDhgOGA4YDhgO8A/4DxgOHA4cDgwOHA4cDxgP+A7wDgAOAA4ADgAD4AfwDjgOEAwADAAMAA4YDjgH8APgD/gP+AHAAcABwAHAAcABwAHAAcABwAwcDBgOOAY4BjAHcANgA2ADYAHAAcABwAGAB4APAABgAGAAYAH8B/4GZw5jDGMMY4xjDmMHZwf+AfwAYABgAGAOOAYwB3ADYAPAAcAD4ANgB3AOMAw4DhgOGA4YDhgOGA4YDhgOGA4YD/4P/gAOAA4ADg4YDhgOGA4YDhgOGAf4A/gAGAAYABgOMc4xzjHOMc4xzjHOMc4xzjHP/8//zjHOMc4xzjHOMc4xzjHOMc4xz//v/+AAYABgAG+AD4ABgAGAAfwB/gGHAYcBhwH+AfwOA44DjgOOA4/jj/uOO44bjjuP+4/jjgAOAA4ADgAP4A/4DjgOGA44D/gP4APgB/AOOAw4AfgB+AAYDDgOMAfwA+AOHw4/jnHOYM/gz+DOYM5gznHOP44fA/gP+A44DDgMOA/4B/gHOAY4DjgMOAMwB3ACIAAAA+AH8A44DBgP+A/4DAAOAA4YB/gD4A/8D/wP//4P//4GBgwMDAwODAwMDAgGZmzMzMzO7MzMzImMMM447DDODngODvwPDsQPDsYPjsQOzvwOzngObgAObvwOPvwOPgAOHgAODgAODgAA==" }, big: { ascent: 33, descent: 9, lineHeight: 42, glyphs: { " ": [8, 0, 0, 0, 0, 0], ",": [11, 2, 29, 6, 10, 0], "-": [16, 2, 21, 12, 4, 10], ".": [11, 3, 27, 6, 6, 18], "0": [23, 2, 8, 19, 25, 24], "1": [15, 2, 8, 10, 25, 99], "2": [21, 2, 8, 18, 25, 149], "3": [22, 2, 8, 18, 25, 224], "4": [23, 2, 8, 19, 25, 299], "5": [22, 2, 8, 18, 25, 374], "6": [22, 2, 8, 19, 25, 449], "7": [20, 1, 8, 18, 25, 524], "8": [22, 2, 8, 19, 25, 599], "9": [22, 2, 7, 19, 25, 674], ":": [11, 3, 15, 6, 18, 749], h: [21, 2, 8, 17, 25, 767], i: [9, 2, 6, 5, 26, 842], k: [20, 2, 8, 17, 25, 868], m: [31, 2, 14, 27, 19, 943], n: [21, 2, 14, 17, 19, 1019], "и": [21, 2, 14, 17, 19, 1076], "к": [20, 2, 14, 17, 19, 1133], "м": [28, 2, 14, 23, 19, 1190], "н": [21, 2, 14, 17, 19, 1247], "с": [20, 1, 14, 18, 19, 1304], "ч": [20, 2, 14, 16, 19, 1361], "–": [17, 0, 21, 17, 4, 1399] }, bits: "fHx8eHh4cPDw8P/w//D/8P/wMPj4/PhwA/gAD/4AH/8AP/+Afx+Afg/A/AfA+Afg+APg+APg+APg+APg+APg+APg+APg+APg+APg+Afg/AfAfg/Afx/AP/+AH/8AD/4AA/gAD8AfwH/A/8D/wPfAx8CHwAfAB8AHwAfAB8AHwAfAB8AHwAfAB8AHwAfAB8AHwAfAB8AH8AAf/AA//gB//wD+P4D4D4D4D4D4D4AAD4AAD4AAHwAAPwAAfgAA/AAB+AAD8AAH4AAPwAAfgAA/AAB+AAD//8D//8D//8D//8AD8AAf/AA//wB//4B+H4D8D4D4D4AAB4AAD4AAH4AD/wAD/AAD/gAD/wAAH4AAD8AAB8AAB8D4B8D4D8D+H8B//4A//wAf/gAH+AAAPwAAfwAA/wAA/wAB/wAD/wAD7wAHzwAHzwAPjwAfDwAfDwA+DwB8DwB8DwD4DwD//+D//+D//+D//+AAHwAAHwAAHwAAHwAAHwA//4A//4A//4A//4B8AAB8AAB8AAB8AAB88AB7/gB//wB//4B+H4AID8AAB8AAB8AAB8AAB8D4B8D8D8B+H4B//4A//wAf/AAD8AAD+AAP/gAf/wA//4A/n4B+D8B8B8D4AAD4AAD4/AD7/gD//4D//4D+D8D8B8D4B8D4A+D4A+D4B8B8B8B+H8A//4Af/wAP/gAD+AD//8D//8D//8D//8AAD4AAD4AAHwAAHwAAPgAAPgAAfAAAfAAA+AAA+AAB8AAB8AAD4AAD4AAHwAAHwAAPgAAPgAAfAAAfAAA+AAAD8AAf/gA//wB//4B+H4B8D8D4B8B4B8B8D4B+H4A//wAP/AAf/gA//wB+H4D8B8D4B8D4B+D4B+D4B8D8D8B//4A//4Af/gAH+AAH8AAf/AA//gB//wD+H4D4D4D4B8D4B8DwB8D4B8D4D8D8H+B//+B/+8Af98APx8AAB8AAB8D4D4D8H4B+PwB//wA//gAf/AAH8ABw+Pz4+DAAAAAAAAAw+Pj8+HD4AAD4AAD4AAD4AAD4AAD4AAD4+AD5/gD7/wD//wD+P4D8H4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4Bw+Pj4cAAA+Pj4+Pj4+Pj4+Pj4+Pj4+Pj4+PgAAPgAAPgAAPgAAPgAAPgAAPgfgPg/APh+APh8APj4APn4APvwAP/gAP/AAP/gAP/wAP3wAPn4APj8APh+APh+APg/APgfgPgfgPjwPwD7/H+A+/z/wP///8D+P8/g/B8H4PgfA+D4HwPg+B8D4PgfA+D4HwPg+B8D4PgfA+D4HwPg+B8D4PgfA+D4HwPg+B8D4PgfA+D4+AD5/gD7/wD//wD+P4D8H4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4H4D4P4D4P4D4f4D4/4D4/4D574D774D7z4D/j4D/j4D/D4D+D4D+D4D8D4D4D4D4D4D4H4D4H4D4PwD4fgD4fgD4/AD5+AD58AD/8AD/4AD/8AD/8AD5+AD4/AD4fAD4fgD4PwD4H4D4H4D/AP7/Af7/gf7/gf7/g/7/w97/w977x97759775575557575757x74/x74/h74/h74fh74fB74PB74D4D4D4D4D4D4D4D4D4D4D4D4D4D//4D//4D//4D//4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4AD+AAP/gAf/wA//4B+H4B8D8B8BwD8AAD4AAD4AAD4AAD8AAB8BwB8D8B+H4A//4Af/wAP/gAD+AD4H/gf+B/4H/gf+B/4H/gf/B9//3//P/8H/wAfAB8AHwAfAB8AH///gP//gP//gP//gA==" } };
+
+  // src/background/glassdraw.ts
+  var G1_BMP_W = 576;
+  var G1_BMP_H = 135;
+  var G1_SAFE = { x: 50, y: 35, w: 526, h: 100 };
+
+  class Canvas {
+    w;
+    h;
+    px;
+    constructor(w, h) {
+      this.w = w;
+      this.h = h;
+      this.px = new Uint8Array(w * h);
+    }
+    set(x, y, v = 1) {
+      x = Math.round(x);
+      y = Math.round(y);
+      if (x < 0 || y < 0 || x >= this.w || y >= this.h)
+        return;
+      this.px[y * this.w + x] = v;
+    }
+    get(x, y) {
+      if (x < 0 || y < 0 || x >= this.w || y >= this.h)
+        return 0;
+      return this.px[y * this.w + x];
+    }
+    disc(cx, cy, r, v = 1) {
+      const ri = Math.ceil(r);
+      const r2 = r * r;
+      for (let dy = -ri;dy <= ri; dy++)
+        for (let dx = -ri;dx <= ri; dx++)
+          if (dx * dx + dy * dy <= r2)
+            this.set(cx + dx, cy + dy, v);
+    }
+    ring(cx, cy, r, t = 2, v = 1) {
+      const ro = r * r;
+      const ri = Math.max(0, r - t) ** 2;
+      const n = Math.ceil(r);
+      for (let dy = -n;dy <= n; dy++)
+        for (let dx = -n;dx <= n; dx++) {
+          const d = dx * dx + dy * dy;
+          if (d <= ro && d >= ri)
+            this.set(cx + dx, cy + dy, v);
+        }
+    }
+    line(x0, y0, x1, y1, t = 1, v = 1, dash) {
+      const len = Math.hypot(x1 - x0, y1 - y0);
+      const steps = Math.max(1, Math.ceil(len * 2));
+      const r = (t - 1) / 2;
+      const period = dash ? dash[0] + dash[1] : 0;
+      for (let i = 0;i <= steps; i++) {
+        const s = i / steps;
+        if (dash && s * len % period >= dash[0])
+          continue;
+        const x = x0 + (x1 - x0) * s;
+        const y = y0 + (y1 - y0) * s;
+        if (r <= 0)
+          this.set(x, y, v);
+        else
+          this.disc(x, y, r + 0.35, v);
+      }
+    }
+    polyline(pts, t = 1, v = 1, dash) {
+      for (let i = 1;i < pts.length; i++)
+        this.line(pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y, t, v, dash);
+    }
+    triangle(ax, ay, bx, by, cx, cy, v = 1) {
+      const minX = Math.floor(Math.min(ax, bx, cx));
+      const maxX = Math.ceil(Math.max(ax, bx, cx));
+      const minY = Math.floor(Math.min(ay, by, cy));
+      const maxY = Math.ceil(Math.max(ay, by, cy));
+      const area = (bx - ax) * (cy - ay) - (cx - ax) * (by - ay);
+      if (area === 0)
+        return;
+      for (let y = minY;y <= maxY; y++)
+        for (let x = minX;x <= maxX; x++) {
+          const px = x + 0.5;
+          const py = y + 0.5;
+          const w0 = ((bx - px) * (cy - py) - (cx - px) * (by - py)) / area;
+          const w1 = ((cx - px) * (ay - py) - (ax - px) * (cy - py)) / area;
+          if (w0 >= -0.01 && w1 >= -0.01 && 1 - w0 - w1 >= -0.01)
+            this.set(x, y, v);
+        }
+    }
+    frame(x, y, w, h, radius = 6, t = 2) {
+      const r = Math.min(radius, w / 2, h / 2);
+      for (let k = 0;k < t; k++) {
+        this.line(x + r, y + k, x + w - 1 - r, y + k);
+        this.line(x + r, y + h - 1 - k, x + w - 1 - r, y + h - 1 - k);
+        this.line(x + k, y + r, x + k, y + h - 1 - r);
+        this.line(x + w - 1 - k, y + r, x + w - 1 - k, y + h - 1 - r);
+      }
+      const corners = [
+        [x + r, y + r, -1, -1],
+        [x + w - 1 - r, y + r, 1, -1],
+        [x + r, y + h - 1 - r, -1, 1],
+        [x + w - 1 - r, y + h - 1 - r, 1, 1]
+      ];
+      for (const [cx, cy, sx, sy] of corners)
+        for (let dy = 0;dy <= r; dy++)
+          for (let dx = 0;dx <= r; dx++) {
+            const d = Math.hypot(dx, dy);
+            if (d <= r + 0.5 && d >= r - t + 0.5)
+              this.set(cx + sx * dx, cy + sy * dy);
+          }
+    }
+    fill(x, y, w, h, v = 1) {
+      for (let yy = Math.max(0, y);yy < Math.min(this.h, y + h); yy++)
+        for (let xx = Math.max(0, x);xx < Math.min(this.w, x + w); xx++)
+          this.px[yy * this.w + xx] = v;
+    }
+    blit(src, x, y) {
+      for (let yy = 0;yy < src.h; yy++)
+        for (let xx = 0;xx < src.w; xx++)
+          if (src.px[yy * src.w + xx])
+            this.set(x + xx, y + yy, 1);
+    }
+  }
+  var B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  function fromBase64(s) {
+    const lookup = new Int16Array(128).fill(-1);
+    for (let i = 0;i < B64.length; i++)
+      lookup[B64.charCodeAt(i)] = i;
+    const clean = s.replace(/=+$/, "");
+    const out = new Uint8Array(Math.floor(clean.length * 3 / 4));
+    let o = 0;
+    for (let i = 0;i < clean.length; i += 4) {
+      const a = lookup[clean.charCodeAt(i)];
+      const b = lookup[clean.charCodeAt(i + 1)];
+      const c = i + 2 < clean.length ? lookup[clean.charCodeAt(i + 2)] : 0;
+      const d = i + 3 < clean.length ? lookup[clean.charCodeAt(i + 3)] : 0;
+      const n = a << 18 | b << 12 | c << 6 | d;
+      if (o < out.length)
+        out[o++] = n >> 16 & 255;
+      if (o < out.length)
+        out[o++] = n >> 8 & 255;
+      if (o < out.length)
+        out[o++] = n & 255;
+    }
+    return out;
+  }
+  function toBase64(bytes) {
+    let out = "";
+    for (let i = 0;i < bytes.length; i += 3) {
+      const a = bytes[i];
+      const b = i + 1 < bytes.length ? bytes[i + 1] : 0;
+      const c = i + 2 < bytes.length ? bytes[i + 2] : 0;
+      const n = a << 16 | b << 8 | c;
+      out += B64[n >> 18 & 63] + B64[n >> 12 & 63];
+      out += i + 1 < bytes.length ? B64[n >> 6 & 63] : "=";
+      out += i + 2 < bytes.length ? B64[n & 63] : "=";
+    }
+    return out;
+  }
+  var bitsCache = {};
+  function fontBits(f) {
+    return bitsCache[f] ??= fromBase64(GLASS_FONTS[f].bits);
+  }
+  function glyphOf(f, ch) {
+    const g = GLASS_FONTS[f].glyphs[ch];
+    if (g)
+      return g;
+    const fallback = { "→": ">", "←": "<", "↑": "^" };
+    const base = ch.normalize("NFD")[0];
+    const alt = fallback[ch] ?? (base !== ch ? base : "?");
+    return GLASS_FONTS[f].glyphs[alt] ?? null;
+  }
+  function lineHeight(f) {
+    return GLASS_FONTS[f].lineHeight;
+  }
+  function measure(text, f) {
+    let w = 0;
+    for (const ch of text)
+      w += glyphOf(f, ch)?.[0] ?? 0;
+    return w;
+  }
+  function fit(text, f, maxW) {
+    if (measure(text, f) <= maxW)
+      return text;
+    const ell = "…";
+    const chars = [...text];
+    while (chars.length && measure(chars.join("").trimEnd() + ell, f) > maxW)
+      chars.pop();
+    return chars.length ? chars.join("").trimEnd() + ell : "";
+  }
+  function drawText(c, text, x, y, f, v = 1) {
+    const bits = fontBits(f);
+    let pen = x;
+    for (const ch of text) {
+      const g = glyphOf(f, ch);
+      if (!g)
+        continue;
+      const [advance, xoff, yoff, w, h, start] = g;
+      const rowBytes = w + 7 >> 3;
+      for (let yy = 0;yy < h; yy++)
+        for (let xx = 0;xx < w; xx++)
+          if (bits[start + yy * rowBytes + (xx >> 3)] & 128 >> (xx & 7))
+            c.set(pen + xoff + xx, y + yoff + yy, v);
+      pen += advance;
+    }
+    return pen - x;
+  }
+  function capTop(f) {
+    return (glyphOf(f, "H") ?? glyphOf(f, "0"))?.[2] ?? 0;
+  }
+  function encodeG1Bmp(c) {
+    const W = G1_BMP_W;
+    const H = G1_BMP_H;
+    const rowSize = Math.ceil(W / 32) * 4;
+    const pixelBytes = rowSize * H;
+    const header = 62;
+    const buf = new Uint8Array(header + pixelBytes);
+    const u16 = (o, v) => {
+      buf[o] = v & 255;
+      buf[o + 1] = v >> 8 & 255;
+    };
+    const u32 = (o, v) => {
+      u16(o, v & 65535);
+      u16(o + 2, v >>> 16 & 65535);
+    };
+    buf[0] = 66;
+    buf[1] = 77;
+    u32(2, buf.length);
+    u32(10, header);
+    u32(14, 40);
+    u32(18, W);
+    u32(22, H);
+    u16(26, 1);
+    u16(28, 1);
+    u32(30, 0);
+    u32(34, pixelBytes);
+    u32(38, 2835);
+    u32(42, 2835);
+    u32(46, 2);
+    u32(50, 2);
+    buf[58] = 255;
+    buf[59] = 255;
+    buf[60] = 255;
+    for (let y = 0;y < H; y++) {
+      const row = header + (H - 1 - y) * rowSize;
+      for (let x = 0;x < W; x++) {
+        const lit = x < c.w && y < c.h && c.px[y * c.w + x] === 1;
+        if (!lit)
+          buf[row + (x >> 3)] |= 128 >> (x & 7);
+      }
+    }
+    return toBase64(buf);
+  }
+  function g1Canvas() {
+    return new Canvas(G1_BMP_W, G1_BMP_H);
+  }
+  function testPattern(label = "EVA-IA · карта") {
+    const c = g1Canvas();
+    const s = G1_SAFE;
+    c.frame(s.x, s.y, s.w, s.h, 8, 2);
+    for (const [x, y] of [
+      [0, 0],
+      [G1_BMP_W - 12, 0],
+      [0, G1_BMP_H - 12],
+      [G1_BMP_W - 12, G1_BMP_H - 12]
+    ])
+      c.fill(x, y, 12, 12);
+    const w = measure(label, "text");
+    drawText(c, label, s.x + (s.w - w) / 2, s.y + (s.h - lineHeight("text")) / 2, "text");
+    return encodeG1Bmp(c);
+  }
+
+  // src/background/navmap.ts
+  var R_EARTH = 6371000;
+  var rad = (d) => d * Math.PI / 180;
+  function distanceM(a, b) {
+    const dLat = rad(b.lat - a.lat);
+    const dLng = rad(b.lng - a.lng);
+    const s = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+    return 2 * R_EARTH * Math.asin(Math.min(1, Math.sqrt(s)));
+  }
+  function bearing(a, b) {
+    const y = Math.sin(rad(b.lng - a.lng)) * Math.cos(rad(b.lat));
+    const x = Math.cos(rad(a.lat)) * Math.sin(rad(b.lat)) - Math.sin(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.cos(rad(b.lng - a.lng));
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+  }
+  function toLocal(p, o) {
+    return { x: rad(p.lng - o.lng) * R_EARTH * Math.cos(rad(o.lat)), y: rad(p.lat - o.lat) * R_EARTH };
+  }
+  function nearestOnRoute(route, me) {
+    if (route.length < 2)
+      return null;
+    let best = { index: 0, dist: Infinity, along: 0 };
+    let along = 0;
+    for (let i = 0;i < route.length - 1; i++) {
+      const a = toLocal(route[i], me);
+      const b = toLocal(route[i + 1], me);
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const len2 = dx * dx + dy * dy;
+      const t = len2 > 0 ? Math.max(0, Math.min(1, -(a.x * dx + a.y * dy) / len2)) : 0;
+      const d = Math.hypot(a.x + dx * t, a.y + dy * t);
+      const segLen = Math.sqrt(len2);
+      if (d < best.dist)
+        best = { index: i, dist: d, along: along + segLen * t };
+      along += segLen;
+    }
+    return best;
+  }
+  function pointAhead(route, me, ahead) {
+    const n = nearestOnRoute(route, me);
+    if (!n)
+      return null;
+    const target = n.along + ahead;
+    let along = 0;
+    for (let i = 0;i < route.length - 1; i++) {
+      const seg = distanceM(route[i], route[i + 1]);
+      if (along + seg >= target && seg > 0) {
+        const t = (target - along) / seg;
+        return { lat: route[i].lat + (route[i + 1].lat - route[i].lat) * t, lng: route[i].lng + (route[i + 1].lng - route[i].lng) * t };
+      }
+      along += seg;
+    }
+    return route[route.length - 1];
+  }
+  function travelHeading(route, me, prev) {
+    const n = nearestOnRoute(route, me);
+    if (n && n.dist < 40) {
+      const ahead = pointAhead(route, me, 35);
+      if (ahead && distanceM(me, ahead) > 3)
+        return bearing(me, ahead);
+    }
+    if (prev && distanceM(prev, me) > 8)
+      return bearing(prev, me);
+    return null;
+  }
+  var ROAD_CLASS = {
+    motorway: 0,
+    trunk: 0,
+    primary: 0,
+    secondary: 0,
+    motorway_link: 0,
+    trunk_link: 0,
+    primary_link: 0,
+    secondary_link: 0,
+    tertiary: 1,
+    tertiary_link: 1,
+    unclassified: 1,
+    residential: 1,
+    living_street: 1,
+    pedestrian: 1,
+    service: 1,
+    road: 1,
+    footway: 2,
+    path: 2,
+    cycleway: 2,
+    steps: 2,
+    track: 2,
+    bridleway: 2
+  };
+  var ROADS_RADIUS = { walking: 500, cycling: 800, driving: 1400 };
+  function overpassQuery(c, radius, mode) {
+    const kinds = Object.keys(ROAD_CLASS).filter((k) => mode !== "driving" || ROAD_CLASS[k] < 2 && k !== "service");
+    return `[out:json][timeout:20];way["highway"~"^(${kinds.join("|")})$"](around:${Math.round(radius)},${c.lat.toFixed(6)},${c.lng.toFixed(6)});out geom qt;`;
+  }
+  function parseOverpass(json) {
+    const els = json?.elements;
+    if (!Array.isArray(els))
+      return [];
+    const roads = [];
+    for (const e of els) {
+      if (e?.type !== "way" || !Array.isArray(e.geometry) || e.geometry.length < 2)
+        continue;
+      const c = ROAD_CLASS[e.tags?.highway ?? ""];
+      if (c === undefined)
+        continue;
+      roads.push({ c, p: e.geometry.filter((g) => Number.isFinite(g?.lat) && Number.isFinite(g?.lon)).map((g) => ({ lat: g.lat, lng: g.lon })) });
+    }
+    return roads;
+  }
+  var MAP_SCALE = { walking: 2, cycling: 3.5, driving: 7 };
+  var MAP_BOX = { x: G1_SAFE.x + G1_SAFE.w - 184, y: G1_SAFE.y, w: 182, h: G1_SAFE.h };
+  function clip(x0, y0, x1, y1, w, h) {
+    let t0 = 0;
+    let t1 = 1;
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const edges = [
+      [-dx, x0 + 2],
+      [dx, w + 2 - x0],
+      [-dy, y0 + 2],
+      [dy, h + 2 - y0]
+    ];
+    for (const [p, q] of edges) {
+      if (p === 0) {
+        if (q < 0)
+          return null;
+      } else {
+        const r = q / p;
+        if (p < 0) {
+          if (r > t1)
+            return null;
+          if (r > t0)
+            t0 = r;
+        } else {
+          if (r < t0)
+            return null;
+          if (r < t1)
+            t1 = r;
+        }
+      }
+    }
+    return [x0 + t0 * dx, y0 + t0 * dy, x0 + t1 * dx, y0 + t1 * dy];
+  }
+  function drawMap(s, w = MAP_BOX.w, h = MAP_BOX.h) {
+    const c = new Canvas(w, h);
+    const center = s.me ?? s.route[0] ?? s.dest;
+    if (!center)
+      return c;
+    const scale = MAP_SCALE[s.mode] ?? 2;
+    const hd = rad(s.heading ?? 0);
+    const cos = Math.cos(hd);
+    const sin = Math.sin(hd);
+    const cx = w / 2;
+    const cy = s.heading == null ? h / 2 : h * 0.68;
+    const project = (p) => {
+      const l = toLocal(p, center);
+      const x = l.x * cos - l.y * sin;
+      const y = l.x * sin + l.y * cos;
+      return { x: cx + x / scale, y: cy - y / scale };
+    };
+    const seg = (pts, t, dash, v = 1) => {
+      let prev = null;
+      for (const p of pts) {
+        const q = project(p);
+        if (prev) {
+          const cl = clip(prev.x, prev.y, q.x, q.y, w, h);
+          if (cl)
+            c.line(cl[0], cl[1], cl[2], cl[3], t, v, dash);
+        }
+        prev = q;
+      }
+    };
+    for (const r of s.roads)
+      seg(r.p, r.c === 0 ? 2 : 1, r.c === 2 ? [2, 3] : undefined);
+    let route = s.route;
+    if (s.me && route.length > 1) {
+      const n = nearestOnRoute(route, s.me);
+      if (n)
+        route = [s.me, ...route.slice(n.index + 1)];
+    }
+    seg(route, 9, undefined, 0);
+    seg(route, 4);
+    if (s.dest) {
+      const d = project(s.dest);
+      if (d.x >= -8 && d.x <= w + 8 && d.y >= -8 && d.y <= h + 8) {
+        c.disc(d.x, d.y, 7, 0);
+        c.ring(d.x, d.y, 6, 2);
+        c.disc(d.x, d.y, 2);
+      }
+    }
+    if (s.me) {
+      const tip = { x: cx, y: cy - 9 };
+      if (s.heading != null) {
+        c.triangle(tip.x, tip.y - 3, cx - 9, cy + 9, cx + 9, cy + 9, 0);
+        c.triangle(tip.x, tip.y, cx - 7, cy + 7, cx, cy + 3);
+        c.triangle(tip.x, tip.y, cx, cy + 3, cx + 7, cy + 7);
+      } else {
+        c.disc(cx, cy, 7, 0);
+        c.disc(cx, cy, 5);
+      }
+    }
+    return c;
+  }
+  var ARROWS = {
+    STRAIGHT: [[28, 54], [28, 14]],
+    TURN_RIGHT: [[16, 54], [16, 28], [38, 28]],
+    SLIGHT_RIGHT: [[18, 54], [18, 36], [36, 18]],
+    SHARP_RIGHT: [[16, 54], [16, 16], [36, 36]],
+    U_TURN: [[38, 54], [38, 24], [36, 16], [30, 11], [24, 11], [18, 16], [16, 24], [16, 34]]
+  };
+  var mirror = (pts) => pts.map(([x, y]) => [56 - x, y]);
+  function arrowPath(maneuver) {
+    switch (maneuver) {
+      case "TURN_RIGHT":
+      case "SLIGHT_RIGHT":
+      case "SHARP_RIGHT":
+      case "U_TURN":
+        return ARROWS[maneuver];
+      case "TURN_LEFT":
+        return mirror(ARROWS.TURN_RIGHT);
+      case "SLIGHT_LEFT":
+        return mirror(ARROWS.SLIGHT_RIGHT);
+      case "SHARP_LEFT":
+        return mirror(ARROWS.SHARP_RIGHT);
+      case "ARRIVE":
+        return null;
+      default:
+        return ARROWS.STRAIGHT;
+    }
+  }
+  function drawArrow(c, maneuver, x, y) {
+    if (maneuver === "ARRIVE") {
+      c.ring(x + 28, y + 28, 22, 4);
+      c.disc(x + 28, y + 28, 8);
+      return;
+    }
+    const pts = arrowPath(maneuver).map(([px, py]) => ({ x: x + px, y: y + py }));
+    c.polyline(pts, 8);
+    const a = pts[pts.length - 2];
+    const b = pts[pts.length - 1];
+    const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    const ux = (b.x - a.x) / len;
+    const uy = (b.y - a.y) / len;
+    const tip = { x: b.x + ux * 14, y: b.y + uy * 14 };
+    const base = { x: b.x - ux * 2, y: b.y - uy * 2 };
+    c.triangle(tip.x, tip.y, base.x - uy * 13, base.y + ux * 13, base.x + uy * 13, base.y - ux * 13);
+  }
+  function wrap(text, maxW, maxLines) {
+    const words = text.split(/\s+/).filter(Boolean);
+    const lines = [];
+    let cur = "";
+    for (const w of words) {
+      const next = cur ? `${cur} ${w}` : w;
+      if (measure(next, "text") <= maxW)
+        cur = next;
+      else {
+        if (cur)
+          lines.push(cur);
+        cur = w;
+      }
+    }
+    if (cur)
+      lines.push(cur);
+    if (lines.length > maxLines) {
+      const kept = lines.slice(0, maxLines);
+      kept[maxLines - 1] = fit(`${kept[maxLines - 1]} ${lines.slice(maxLines).join(" ")}`, "text", maxW);
+      return kept;
+    }
+    return lines.map((l) => fit(l, "text", maxW));
+  }
+  function renderHud(s) {
+    const c = g1Canvas();
+    const S = G1_SAFE;
+    const leftW = MAP_BOX.x - S.x - 10;
+    const textH = lineHeight("text");
+    const textCap = capTop("text");
+    if (s.message) {
+      const lines = wrap(s.message, leftW, 4);
+      let y = S.y + Math.max(0, (S.h - lines.length * 22) / 2) - textCap;
+      for (const l of lines) {
+        drawText(c, l, S.x + 2, y, "text");
+        y += 22;
+      }
+    } else {
+      drawArrow(c, s.maneuver, S.x + 2, S.y + 2);
+      const tx = S.x + 70;
+      const tw = leftW - 70;
+      drawText(c, fit(s.distance, "big", tw), tx, S.y + 2 - capTop("big"), "big");
+      let y = S.y + 34 - textCap;
+      if (s.verb) {
+        drawText(c, fit(s.verb, "text", tw), tx, y, "text");
+        y += 21;
+      }
+      if (s.road)
+        drawText(c, fit(s.road, "text", tw), tx, y, "text");
+      if (s.left)
+        drawText(c, fit(s.left, "text", leftW), S.x + 2, S.y + S.h - textH - 1, "text");
+    }
+    const map = drawMap(s, MAP_BOX.w - 6, MAP_BOX.h - 6);
+    c.blit(map, MAP_BOX.x + 3, MAP_BOX.y + 3);
+    c.frame(MAP_BOX.x, MAP_BOX.y, MAP_BOX.w, MAP_BOX.h, 10, 2);
+    return encodeG1Bmp(c);
+  }
+
   // src/background/navigator.ts
+  var MAP_FRAME_MS = { walking: 4000, cycling: 3000, driving: 3000 };
+  var MAP_FRAME_SOON_MS = 1500;
+  var ROADS_RELOAD_SHARE = 0.45;
+  var ROADS_RETRY_MS = 20000;
+  var ROADS_FAIL_RETRY_MS = 90000;
   var URGENT_METERS = { walking: 30, cycling: 60, driving: 200 };
   var MIN_REPAINT_MS = 1500;
   var ARRIVED_STOP_MS = 15000;
@@ -6316,7 +6894,25 @@ Stop: «стоп лекция»` : `Режим лекции
     message = "";
     last = null;
     busy = false;
+    route = [];
+    me = null;
+    heading = null;
+    roads = [];
+    roadsVersion = 0;
+    frame = "";
+    frameId = 0;
     trip = 0;
+    anchor = null;
+    pendingRoute = null;
+    hudMessage = "";
+    roadsCenter = null;
+    roadsMode = null;
+    roadsBusy = false;
+    roadsNextTry = 0;
+    roadsFailed = false;
+    frameAt = 0;
+    frameTimer = null;
+    unwatch = null;
     lastPaint = 0;
     paintTimer = null;
     pendingText = "";
@@ -6368,6 +6964,8 @@ Stop: «стоп лекция»` : `Режим лекции
       if (this.paintTimer != null)
         this.deps.clearTimer(this.paintTimer);
       this.paintTimer = null;
+      this.pendingRoute = null;
+      this.endMap();
       if (!this.active) {
         if (wasBusy) {
           this.message = "";
@@ -6408,9 +7006,12 @@ Stop: «стоп лекция»` : `Режим лекции
       const dest = shortPlace(this.dest.name);
       switch (u?.kind) {
         case "maneuver": {
+          const prevKey = this.last ? `${this.last.maneuverType}|${this.last.nextStepRoad ?? this.last.toRoad ?? ""}` : "";
           this.last = u;
+          this.hudMessage = "";
           const text = maneuverScreen(u, dest);
           const key = `${u.maneuverType}|${u.nextStepRoad ?? u.toRoad ?? ""}`;
+          this.hud(key !== prevKey);
           const urgent = u.distanceMeters >= 0 && u.distanceMeters <= URGENT_METERS[this.mode] && u.maneuverType !== "STRAIGHT" && u.maneuverType !== "CONTINUE";
           if (urgent && key !== this.urgentKey) {
             this.urgentKey = key;
@@ -6420,16 +7021,22 @@ Stop: «стоп лекция»` : `Режим лекции
           break;
         }
         case "off_route":
+          this.hudMessage = "Вы сошли с маршрута. Перестраиваю…";
+          this.hud(true);
           this.paint(`Вы сошли с маршрута
 Перестраиваю…
 ${dest}`, true);
           break;
         case "rerouting":
+          this.hudMessage = "Перестраиваю маршрут…";
+          this.hud(true);
           this.paint(`Перестраиваю маршрут…
 ${dest}`, false);
           break;
         case "arrived":
           this.deps.log("nav", `Прибытие: ${dest}`);
+          this.hudMessage = `Вы на месте: ${dest}`;
+          this.hud(true);
           this.paint(`Вы на месте
 ${dest}`, true);
           if (this.arrivedTimer == null) {
@@ -6467,6 +7074,7 @@ ${modeLabel(mode)}…`);
         return;
       this.busy = false;
       if (!res.ok) {
+        this.endMap();
         this.deps.save(null);
         if (!quiet)
           return this.fail(`Маршрут не построен: ${explainNavError(res.error)}`);
@@ -6481,6 +7089,7 @@ ${modeLabel(mode)}…`);
       this.urgentKey = "";
       this.message = "";
       this.deps.save({ dest: place, mode, startedAt: this.deps.now() });
+      this.startMap();
       if (quiet) {
         this.screen = `Маршрут до ${shortPlace(place.name)}
 ${modeLabel(mode)}`;
@@ -6491,6 +7100,186 @@ ${modeLabel(mode)}`;
       this.paint(`Маршрут до ${shortPlace(place.name)}
 ${modeLabel(mode)}
 Сейчас покажу первый поворот`, true);
+      this.deps.onChange();
+    }
+    onRoute(points) {
+      const pts = (Array.isArray(points) ? points : []).filter((p) => Number.isFinite(p?.lat) && Number.isFinite(p?.lng));
+      if (pts.length < 2)
+        return;
+      if (this.busy) {
+        this.pendingRoute = pts;
+        return;
+      }
+      if (!this.active)
+        return;
+      this.route = pts.map((p) => ({ lat: p.lat, lng: p.lng }));
+      this.maybeLoadRoads();
+      this.hud(true);
+      this.deps.onChange();
+    }
+    onPosition(p) {
+      if (!this.active || !Number.isFinite(p?.lat) || !Number.isFinite(p?.lng))
+        return;
+      const me = { lat: p.lat, lng: p.lng };
+      const h = travelHeading(this.route, me, this.anchor);
+      if (h != null)
+        this.heading = h;
+      if (!this.anchor || distanceM(this.anchor, me) > 8)
+        this.anchor = me;
+      this.me = me;
+      this.maybeLoadRoads();
+      this.hud(false);
+    }
+    mapChanged() {
+      if (!this.active)
+        return;
+      if (this.mapOn()) {
+        this.maybeLoadRoads();
+        this.hud(true);
+      } else {
+        this.cancelFrameTimer();
+        this.frame = "";
+        this.deps.onChange();
+      }
+    }
+    mapOn() {
+      try {
+        return Boolean(this.deps.mapOn?.());
+      } catch {
+        return false;
+      }
+    }
+    startMap() {
+      this.route = this.pendingRoute ?? [];
+      this.pendingRoute = null;
+      this.me = null;
+      this.anchor = null;
+      this.heading = null;
+      this.hudMessage = "";
+      this.frame = "";
+      this.frameAt = 0;
+      try {
+        this.unwatch?.();
+      } catch {}
+      try {
+        this.unwatch = this.deps.watch?.((p) => this.onPosition(p)) ?? null;
+      } catch (e) {
+        this.unwatch = null;
+        this.deps.log("info", `Геопозиция для карты: ${explainNavError(e?.message ?? e)}`);
+      }
+      this.maybeLoadRoads();
+      this.hud(true);
+    }
+    endMap() {
+      this.cancelFrameTimer();
+      try {
+        this.unwatch?.();
+      } catch {}
+      this.unwatch = null;
+      this.route = [];
+      this.me = null;
+      this.anchor = null;
+      this.heading = null;
+      this.hudMessage = "";
+      this.frame = "";
+    }
+    maybeLoadRoads() {
+      if (!this.deps.roads || !this.mapOn() || this.roadsBusy || !this.active)
+        return;
+      const center = this.me ?? this.route[0] ?? (this.dest ? { lat: this.dest.lat, lng: this.dest.lng } : null);
+      if (!center)
+        return;
+      const radius = ROADS_RADIUS[this.mode];
+      const near = this.roadsCenter && this.roadsMode === this.mode && distanceM(this.roadsCenter, center) < radius * ROADS_RELOAD_SHARE;
+      if (near)
+        return;
+      const now = this.deps.now();
+      if (now < this.roadsNextTry)
+        return;
+      this.roadsBusy = true;
+      this.roadsNextTry = now + ROADS_RETRY_MS;
+      const mode = this.mode;
+      this.deps.roads(center, radius, mode).then((roads) => {
+        this.roads = roads;
+        this.roadsCenter = center;
+        this.roadsMode = mode;
+        this.roadsVersion++;
+        if (this.roadsFailed || this.roadsVersion === 1)
+          this.deps.log("nav", `Карта: загружено улиц вокруг — ${roads.length}`);
+        this.roadsFailed = false;
+        this.hud(false);
+        this.deps.onChange();
+      }).catch((e) => {
+        this.roadsNextTry = this.deps.now() + ROADS_FAIL_RETRY_MS;
+        if (!this.roadsFailed)
+          this.deps.log("info", `Карта: улицы не загрузились (${String(e?.message ?? e).slice(0, 80)}) — показываю только маршрут`);
+        this.roadsFailed = true;
+      }).finally(() => {
+        this.roadsBusy = false;
+      });
+    }
+    hud(soon) {
+      if (!this.active || !this.mapOn())
+        return;
+      const wait = this.frameAt + (soon ? MAP_FRAME_SOON_MS : MAP_FRAME_MS[this.mode]) - this.deps.now();
+      if (wait <= 0) {
+        this.cancelFrameTimer();
+        this.renderFrame();
+        return;
+      }
+      if (soon)
+        this.cancelFrameTimer();
+      if (this.frameTimer == null) {
+        this.frameTimer = this.deps.setTimer(() => {
+          this.frameTimer = null;
+          this.renderFrame();
+        }, wait);
+      }
+    }
+    cancelFrameTimer() {
+      if (this.frameTimer != null)
+        this.deps.clearTimer(this.frameTimer);
+      this.frameTimer = null;
+    }
+    hudState() {
+      if (!this.dest)
+        return null;
+      const u = this.last;
+      const name = shortPlace(this.dest.name);
+      return {
+        maneuver: u?.maneuverType ?? null,
+        distance: u ? formatDistance(u.distanceMeters) : "",
+        verb: u ? turnPhrase(u.maneuverType).text : "",
+        road: (u?.nextStepRoad || u?.toRoad || "").trim(),
+        left: [this.left().replace(", ", " · "), name].filter(Boolean).join(" · "),
+        message: this.hudMessage || (u ? undefined : `Маршрут до ${name}, ${modeLabel(this.mode)}`),
+        me: this.me,
+        heading: this.heading,
+        route: this.route,
+        roads: this.roads,
+        dest: { lat: this.dest.lat, lng: this.dest.lng },
+        mode: this.mode
+      };
+    }
+    renderFrame() {
+      if (!this.active || !this.mapOn())
+        return;
+      const state = this.hudState();
+      if (!state)
+        return;
+      let frame;
+      try {
+        frame = renderHud(state);
+      } catch (e) {
+        this.deps.log("error", `Карта: не нарисовалась (${String(e?.message ?? e)})`);
+        return;
+      }
+      this.frameAt = this.deps.now();
+      if (frame === this.frame)
+        return;
+      this.frame = frame;
+      this.frameId++;
+      this.deps.screen(this.screen, "route");
       this.deps.onChange();
     }
     fail(msg) {
@@ -7309,6 +8098,7 @@ ${prevTips.map((t) => "— " + t).join(`
     talkEverySec: 10,
     talkGoal: "",
     navMode: "walking",
+    navMap: true,
     v: SETTINGS_VERSION
   };
   function migrateSettings(raw) {
@@ -7375,6 +8165,7 @@ ${prevTips.map((t) => "— " + t).join(`
       talkEverySec: clampInt(pick("talkEverySec"), 0, 60, DEFAULT_SETTINGS.talkEverySec),
       talkGoal: String(pick("talkGoal") ?? "").trim().slice(0, 300),
       navMode: ["walking", "driving", "cycling"].includes(pick("navMode")) ? pick("navMode") : "walking",
+      navMap: pick("navMap") !== false,
       v: SETTINGS_VERSION
     };
   }
@@ -7587,7 +8378,10 @@ ${prevTips.map((t) => "— " + t).join(`
         ended: () => {
           if (this.phase === "idle" && this.clearTimer_ == null)
             this.clearDisplay();
-        }
+        },
+        mapOn: () => this.navMapOn(),
+        roads: deps.nav?.roads ? (c, r, m) => deps.nav.roads(c, r, m) : undefined,
+        watch: deps.nav?.watch ? (cb) => deps.nav.watch(cb) : undefined
       });
     }
     async completeOnce(system, user) {
@@ -7620,7 +8414,36 @@ ${prevTips.map((t) => "— " + t).join(`
         this.deps.onChange?.();
       } catch {}
     }
+    navMapOn() {
+      return this.settings.navMap && Boolean(this.deps.showBitmap);
+    }
+    glassesBitmap = false;
+    lastBitmap = "";
+    showBitmap(b64) {
+      if (this.glassesBitmap && b64 === this.lastBitmap)
+        return;
+      try {
+        this.deps.showBitmap?.(b64);
+      } catch (e) {
+        this.addLog("error", `Дисплей (картинка): ${String(e?.message ?? e)}`);
+        return;
+      }
+      this.glassesBitmap = true;
+      this.lastBitmap = b64;
+      this.warnIfDashboard();
+      this.changed();
+    }
+    showRoute() {
+      if (this.navMapOn() && this.nav.frame)
+        this.showBitmap(this.nav.frame);
+      else if (this.nav.screen)
+        this.show(fitScreen(this.nav.screen));
+    }
     show(text) {
+      if (this.glassesBitmap) {
+        this.glassesBitmap = false;
+        this.changed();
+      }
       let r;
       try {
         r = this.deps.show(text);
@@ -7643,10 +8466,11 @@ ${prevTips.map((t) => "— " + t).join(`
       }
     }
     clearDisplay() {
-      if (this.nav.active && this.nav.screen) {
-        this.show(fitScreen(this.nav.screen));
+      if (this.nav.active && (this.nav.screen || this.navMapOn() && this.nav.frame)) {
+        this.showRoute();
         return;
       }
+      this.glassesBitmap = false;
       try {
         this.deps.clear();
       } catch {}
@@ -7665,9 +8489,15 @@ ${prevTips.map((t) => "— " + t).join(`
         merged.anthropicKey = this.settings.anthropicKey;
       if (patch.geminiKey === undefined || patch.geminiKey === null)
         merged.geminiKey = this.settings.geminiKey;
+      const mapWas = this.navMapOn();
       this.settings = merged;
       this.deps.store.saveSettings(merged);
       this.addLog("info", "Настройки сохранены");
+      if (mapWas !== this.navMapOn()) {
+        this.nav.mapChanged();
+        if (this.nav.active && this.phase === "idle" && this.clearTimer_ == null)
+          this.clearDisplay();
+      }
       return merged;
     }
     resetConversation(announce = true) {
@@ -8547,8 +9377,10 @@ ${goal}` : "Цель беседы убрана.", 3000);
           this.show(this.lecture.screen);
         if (!up && this.phase === "talk" && this.talk.screen)
           this.show(this.talk.screen);
-        if (!up && this.phase === "idle" && this.nav.active && this.nav.screen && this.clearTimer_ == null)
-          this.show(fitScreen(this.nav.screen));
+        if (!up && this.phase === "idle" && this.nav.active && this.clearTimer_ == null) {
+          this.lastBitmap = "";
+          this.showRoute();
+        }
         this.changed();
       }
       if (!up || !this.settings.headNod)
@@ -8745,10 +9577,29 @@ ${goal}` : "Цель беседы убрана.", 3000);
     navScreen(text, kind) {
       if (kind === "message")
         this.flash(text, this.nav.busy ? NAV_BUSY_MS : NAV_MSG_MS);
-      else if (this.phase === "idle" && this.clearTimer_ == null)
-        this.show(fitScreen(text));
-      else if (kind === "turn")
+      else if (this.phase === "idle" && this.clearTimer_ == null) {
+        if (this.navMapOn() && this.nav.frame)
+          this.showBitmap(this.nav.frame);
+        else
+          this.show(fitScreen(text));
+      } else if (kind === "turn")
         this.flash(text, NAV_TURN_MS);
+    }
+    testBitmap(b64) {
+      if (!this.deps.showBitmap)
+        return false;
+      this.cancelTimer("clearTimer_");
+      this.lastBitmap = "";
+      this.showBitmap(b64);
+      this.addLog("display", "Проверка картинки на очках");
+      this.clearTimer_ = this.setTimer(() => {
+        this.clearTimer_ = null;
+        if (this.phase === "idle")
+          this.clearDisplay();
+        else if (this.phase === "answering")
+          this.showPage(this.page);
+      }, 8000);
+      return true;
     }
     async locate() {
       try {
@@ -8837,6 +9688,7 @@ ${goal}` : "Цель беседы убрана.", 3000);
         pages: this.pages.length,
         currentScreen: this.phase === "translating" ? this.translationScreen : this.phase === "lecture" ? this.lecture.screen : this.phase === "talk" ? this.talk.screen : this.phase === "idle" && this.nav.active ? this.nav.screen : this.pages[this.page] ?? "",
         translating: this.phase === "translating",
+        glassesBitmap: this.glassesBitmap,
         lastTranscript: this.lastTranscript,
         lastQuestion: this.lastQuestion,
         lastAnswer: this.lastAnswer,
@@ -8853,7 +9705,11 @@ ${goal}` : "Цель беседы убрана.", 3000);
           mode: this.nav.mode,
           screen: this.nav.screen,
           message: this.nav.message,
-          left: this.nav.left()
+          left: this.nav.left(),
+          map: this.navMapOn(),
+          canMap: Boolean(this.deps.showBitmap),
+          frameId: this.nav.frameId,
+          streets: this.nav.roads.length
         },
         glassesConnected: this.glassesConnected,
         settings: {
@@ -8911,7 +9767,7 @@ ${goal}` : "Цель беседы убрана.", 3000);
   }
 
   // src/background/index.ts
-  var APP_VERSION = "1.13.1";
+  var APP_VERSION = "1.14.0";
   function newToken() {
     return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
       const r = Math.random() * 16 | 0;
@@ -8919,6 +9775,40 @@ ${goal}` : "Цель беседы убрана.", 3000);
     });
   }
   var asMode = (m) => m === "driving" || m === "cycling" ? m : "walking";
+  var OVERPASS = ["https://overpass-api.de/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"];
+  function withTimeout2(p, ms, what) {
+    return new Promise((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error(`${what}: timeout`)), ms);
+      p.then((v) => {
+        clearTimeout(t);
+        resolve(v);
+      }, (e) => {
+        clearTimeout(t);
+        reject(e);
+      });
+    });
+  }
+  async function loadRoads(center, radius, mode) {
+    const q = overpassQuery(center, radius, mode);
+    let last = null;
+    for (const base of OVERPASS) {
+      try {
+        const res = await withTimeout2(globalThis.fetch(base, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: "data=" + encodeURIComponent(q)
+        }), 25000, "Overpass");
+        if (!res?.ok) {
+          last = new Error(`Overpass HTTP ${res?.status}`);
+          continue;
+        }
+        return parseOverpass(JSON.parse(await res.text()));
+      } catch (e) {
+        last = e;
+      }
+    }
+    throw last ?? new Error("Overpass недоступен");
+  }
   function makeNavHost(session, log) {
     const nav = session.navigation;
     if (!nav || typeof nav.start !== "function")
@@ -8972,6 +9862,15 @@ ${goal}` : "Цель беседы убрана.", 3000);
       },
       stop() {
         nav.stop();
+      },
+      roads: loadRoads,
+      watch(onPosition) {
+        const off = session.location?.onUpdate?.((p) => onPosition({ lat: Number(p?.lat), lng: Number(p?.lng), accuracy: p?.accuracy }));
+        return () => {
+          try {
+            off?.();
+          } catch {}
+        };
       }
     };
   }
@@ -9013,6 +9912,9 @@ ${goal}` : "Цель беседы убрана.", 3000);
         session.display.render([])?.catch?.(() => {});
       },
       startTranslation: (target, handler) => session.translation.to(target, handler),
+      showBitmap: (data) => {
+        session.sendRequest({ type: "miniapp_display", view: "main", layout: { layoutType: "bitmap_view", data } })?.catch?.((e) => assistant.addLog("error", `Картинка на очках: ${String(e?.message ?? e)}`));
+      },
       onChange: pushState,
       nav: makeNavHost(session, (msg) => assistant.addLog("info", msg))
     });
@@ -9086,6 +9988,7 @@ ${goal}` : "Цель беседы убрана.", 3000);
     try {
       if (session.navigation) {
         session.navigation.onUpdate((u) => assistant.nav.onUpdate(u));
+        session.navigation.onRoute?.((r) => assistant.nav.onRoute(r?.points ?? []));
         const saved = store.loadNav();
         if (saved) {
           session.navigation.getState().then((st) => assistant.resumeNav(saved, Boolean(st?.active))).catch(() => assistant.resumeNav(saved, false));
@@ -9154,6 +10057,22 @@ ${goal}` : "Цель беседы убрана.", 3000);
       assistant.stopNav("ui");
       return snap();
     });
+    session.ui.handle("navFrame", () => ({ frame: assistant.nav.frame, frameId: assistant.nav.frameId }));
+    session.ui.handle("navMap", (p) => {
+      const n = assistant.nav;
+      const round = (q) => [Math.round(q.lat * 1e6) / 1e6, Math.round(q.lng * 1e6) / 1e6];
+      return {
+        active: n.active,
+        mode: n.mode,
+        me: n.me ? round(n.me) : null,
+        heading: n.heading,
+        dest: n.dest ? round(n.dest) : null,
+        route: n.route.map(round),
+        roadsVersion: n.roadsVersion,
+        roads: p?.have === n.roadsVersion ? null : n.roads.map((r) => ({ c: r.c, p: r.p.map(round) }))
+      };
+    });
+    session.ui.handle("navTestBitmap", () => ({ ok: assistant.testBitmap(testPattern()) }));
     session.ui.handle("getLecture", () => assistant.lecture.record);
     session.ui.handle("getTalk", () => assistant.talk.record);
     session.ui.handle("simulateSpeech", (p) => {

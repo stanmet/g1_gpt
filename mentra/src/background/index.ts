@@ -7,6 +7,8 @@ import {registerMiniapp} from "@mentra/miniapp/background"
 import {Assistant} from "./assistant"
 import {asProvider, keyFor, PROVIDERS} from "./llm"
 import type {NavHost, Place, TravelMode} from "./navigator"
+import {overpassQuery, parseOverpass, type Road} from "./navmap"
+import {testPattern} from "./glassdraw"
 import type {FetchLike} from "./openai"
 import {Store, type KV, type Settings} from "./store"
 
@@ -27,6 +29,52 @@ const asMode = (m: unknown): TravelMode => (m === "driving" || m === "cycling" ?
  * in miniapp.json — Mentra takes the permission list from the manifest it installed, so an app
  * updated without reinstalling may not have it yet.
  */
+/** Public Overpass servers (OpenStreetMap data); the second is tried when the first fails. */
+const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"]
+
+function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`${what}: timeout`)), ms)
+    p.then(
+      (v) => {
+        clearTimeout(t)
+        resolve(v)
+      },
+      (e) => {
+        clearTimeout(t)
+        reject(e)
+      },
+    )
+  })
+}
+
+/** Streets around a point from OpenStreetMap, for the glasses map. */
+async function loadRoads(center: {lat: number; lng: number}, radius: number, mode: TravelMode): Promise<Road[]> {
+  const q = overpassQuery(center, radius, mode)
+  let last: unknown = null
+  for (const base of OVERPASS) {
+    try {
+      const res: any = await withTimeout(
+        (globalThis as any).fetch(base, {
+          method: "POST",
+          headers: {"Content-Type": "application/x-www-form-urlencoded"},
+          body: "data=" + encodeURIComponent(q),
+        }),
+        25_000,
+        "Overpass",
+      )
+      if (!res?.ok) {
+        last = new Error(`Overpass HTTP ${res?.status}`)
+        continue
+      }
+      return parseOverpass(JSON.parse(await res.text()))
+    } catch (e) {
+      last = e
+    }
+  }
+  throw last ?? new Error("Overpass недоступен")
+}
+
 function makeNavHost(session: any, log: (msg: string) => void): NavHost | undefined {
   const nav = session.navigation
   if (!nav || typeof nav.start !== "function") return undefined
@@ -79,6 +127,17 @@ function makeNavHost(session: any, log: (msg: string) => void): NavHost | undefi
     stop() {
       nav.stop()
     },
+    roads: loadRoads,
+    watch(onPosition) {
+      const off = session.location?.onUpdate?.((p: any) => onPosition({lat: Number(p?.lat), lng: Number(p?.lng), accuracy: p?.accuracy}))
+      return () => {
+        try {
+          off?.()
+        } catch {
+          // ignore
+        }
+      }
+    },
   }
 }
 
@@ -125,6 +184,13 @@ registerMiniapp((session: any) => {
       session.display.render([])?.catch?.(() => {})
     },
     startTranslation: (target, handler) => session.translation.to(target, handler),
+    // A full-screen picture: the G1 cannot show pictures through render() (Mentra drops images on
+    // text-only glasses), but takes Mentra's older «bitmap_view» layout straight to its BMP command.
+    showBitmap: (data: string) => {
+      session
+        .sendRequest({type: "miniapp_display", view: "main", layout: {layoutType: "bitmap_view", data}})
+        ?.catch?.((e: unknown) => assistant.addLog("error", `Картинка на очках: ${String((e as Error)?.message ?? e)}`))
+    },
     onChange: pushState,
     nav: makeNavHost(session, (msg) => assistant.addLog("info", msg)),
   })
@@ -225,6 +291,8 @@ registerMiniapp((session: any) => {
   try {
     if (session.navigation) {
       session.navigation.onUpdate((u: any) => assistant.nav.onUpdate(u))
+      // the route line for the map (Mentra sends it when a trip starts and after a reroute)
+      session.navigation.onRoute?.((r: any) => assistant.nav.onRoute(r?.points ?? []))
       const saved = store.loadNav()
       if (saved) {
         session.navigation
@@ -296,6 +364,28 @@ registerMiniapp((session: any) => {
     assistant.stopNav("ui")
     return snap()
   })
+
+  // The map picture as it is on the glasses (the phone shows it as a mirror).
+  session.ui.handle("navFrame", () => ({frame: assistant.nav.frame, frameId: assistant.nav.frameId}))
+
+  // Map data for the phone: route, position, streets (streets only when changed since `have`).
+  session.ui.handle("navMap", (p: {have?: number}) => {
+    const n = assistant.nav
+    const round = (q: {lat: number; lng: number}) => [Math.round(q.lat * 1e6) / 1e6, Math.round(q.lng * 1e6) / 1e6]
+    return {
+      active: n.active,
+      mode: n.mode,
+      me: n.me ? round(n.me) : null,
+      heading: n.heading,
+      dest: n.dest ? round(n.dest) : null,
+      route: n.route.map(round),
+      roadsVersion: n.roadsVersion,
+      roads: p?.have === n.roadsVersion ? null : n.roads.map((r) => ({c: r.c, p: r.p.map(round)})),
+    }
+  })
+
+  // «Проверить картинку на очках»: a test frame with the visible area outlined.
+  session.ui.handle("navTestBitmap", () => ({ok: assistant.testBitmap(testPattern())}))
 
   // Full notes of the current or last lecture (the state snapshot carries only the latest ones).
   session.ui.handle("getLecture", () => assistant.lecture.record)

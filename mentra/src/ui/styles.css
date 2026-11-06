@@ -28,6 +28,11 @@
   --lens-bg: #060907;
   --lens-text: #74ffa6;
   --lens-dim: rgba(116, 255, 166, 0.42);
+  --map-bg: #e8e8eb;
+  --map-road: #ffffff;
+  --map-path: #c2c2c7;
+  --map-route: #111111;
+  --map-me: #0a84ff;
   --safe-top: 0px;
   --safe-bottom: 0px;
   --title-top: 52px;
@@ -56,6 +61,10 @@
     --switch-on: #f2f2f4;
     --bar: rgba(22, 22, 24, 0.9);
     --lens-bg: #050806;
+    --map-bg: #1d1d20;
+    --map-road: #3a3a3f;
+    --map-path: #303035;
+    --map-route: #f2f2f4;
   }
 }
 :root[data-theme="dark"] {
@@ -79,6 +88,10 @@
   --switch-on: #f2f2f4;
   --bar: rgba(22, 22, 24, 0.9);
   --lens-bg: #050806;
+  --map-bg: #1d1d20;
+  --map-road: #3a3a3f;
+  --map-path: #303035;
+  --map-route: #f2f2f4;
 }
 
 *,
@@ -663,6 +676,89 @@ p {
 
 .trip {
   padding: 22px 20px 18px;
+  overflow: hidden;
+}
+.trip-map {
+  position: relative;
+  height: 230px;
+  margin: -22px -20px 18px;
+  background: var(--map-bg);
+}
+.trip-map svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.trip-map .road {
+  fill: none;
+  stroke: var(--map-road);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.trip-map .road.c0 {
+  stroke-width: 6px;
+}
+.trip-map .road.c1 {
+  stroke-width: 3.5px;
+}
+.trip-map .road.c2 {
+  stroke: var(--map-path);
+  stroke-width: 1.5px;
+  stroke-dasharray: 3 4;
+}
+.trip-map .route {
+  fill: none;
+  stroke: var(--map-route);
+  stroke-width: 6px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.trip-map .me {
+  fill: var(--map-me);
+  stroke: #fff;
+  stroke-width: 3px;
+  vector-effect: non-scaling-stroke;
+}
+.trip-map .dest {
+  fill: var(--map-route);
+  stroke: var(--map-bg);
+  stroke-width: 3px;
+  vector-effect: non-scaling-stroke;
+}
+.map-credit {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--map-bg) 80%, transparent);
+  color: var(--text-2);
+  font-size: 11px;
+}
+.nav-opts {
+  margin-top: 16px;
+}
+.nav-opts .item {
+  min-height: 64px;
+}
+.nav-opts .row-sub {
+  white-space: normal;
+}
+.item-btn {
+  width: 100%;
+  text-align: left;
+}
+.item-btn:active {
+  background: var(--card-press);
+}
+.lens-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+  margin: 2px 0 6px;
 }
 .trip-turn {
   font-size: 28px;

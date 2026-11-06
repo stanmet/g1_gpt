@@ -9,6 +9,7 @@
  *
  * Independent of Mentra and of the assistant, so it can be tested with fakes.
  */
+import {distanceM, renderHud, ROADS_RADIUS, travelHeading, type HudState, type LatLng, type Road} from "./navmap"
 import type {TravelMode} from "./voice"
 
 export type {TravelMode}
@@ -49,6 +50,10 @@ export type NavScreenKind = "message" | "turn" | "route"
 export interface NavHost {
   /** Why navigation cannot work right now («нет разрешения…»), or "" when it can. */
   problem?(): string
+  /** Streets around a point for the map (OpenStreetMap via Overpass). */
+  roads?(center: LatLng, radius: number, mode: TravelMode): Promise<Road[]>
+  /** Live position during a trip; returns a function that stops it. */
+  watch?(onPosition: (p: {lat: number; lng: number; accuracy?: number}) => void): () => void
   locate(): Promise<{lat: number; lng: number} | null>
   suggest(query: string, near: {lat: number; lng: number} | null): Promise<PlaceSuggestion[]>
   details(placeId: string): Promise<Place | null>
@@ -82,7 +87,22 @@ export interface NavigatorDeps {
   save(trip: NavTrip | null): void
   /** The trip is over: the route screen should go away. */
   ended(): void
+  /** Setting «Карта на очках»: the route screen is a picture with a map (like the Even app). */
+  mapOn?(): boolean
+  /** Streets around a point, for the map (OpenStreetMap). */
+  roads?(center: LatLng, radius: number, mode: TravelMode): Promise<Road[]>
+  /** Live position during a trip; returns a function that stops it. */
+  watch?(onPosition: (p: {lat: number; lng: number; accuracy?: number}) => void): () => void
 }
+
+/** The map picture is redrawn at most this often (a G1 picture is ~10 KB over Bluetooth, ~1 s). */
+const MAP_FRAME_MS: Record<TravelMode, number> = {walking: 4000, cycling: 3000, driving: 3000}
+/** …or this soon when the next turn changes. */
+const MAP_FRAME_SOON_MS = 1500
+/** Streets are reloaded when you are this far (share of the loaded radius) from where they were loaded. */
+const ROADS_RELOAD_SHARE = 0.45
+const ROADS_RETRY_MS = 20_000
+const ROADS_FAIL_RETRY_MS = 90_000
 
 /** How close a turn must be to be shown over other content, by travel mode. */
 const URGENT_METERS: Record<TravelMode, number> = {walking: 30, cycling: 60, driving: 200}
@@ -236,8 +256,29 @@ export class Navigator {
   last: Extract<NavUpdate, {kind: "maneuver"}> | null = null
   /** A search or start is in progress. */
   busy = false
+  // the map
+  route: LatLng[] = []
+  me: LatLng | null = null
+  /** Direction of travel, degrees from north. */
+  heading: number | null = null
+  roads: Road[] = []
+  roadsVersion = 0
+  /** The navigation screen as a G1 picture (base64 BMP), "" until drawn. */
+  frame = ""
+  frameId = 0
 
   private trip = 0
+  private anchor: LatLng | null = null
+  private pendingRoute: LatLng[] | null = null
+  private hudMessage = ""
+  private roadsCenter: LatLng | null = null
+  private roadsMode: TravelMode | null = null
+  private roadsBusy = false
+  private roadsNextTry = 0
+  private roadsFailed = false
+  private frameAt = 0
+  private frameTimer: unknown = null
+  private unwatch: (() => void) | null = null
   private lastPaint = 0
   private paintTimer: unknown = null
   private pendingText = ""
@@ -294,6 +335,8 @@ export class Navigator {
     this.arrivedTimer = null
     if (this.paintTimer != null) this.deps.clearTimer(this.paintTimer)
     this.paintTimer = null
+    this.pendingRoute = null
+    this.endMap()
     if (!this.active) {
       if (wasBusy) {
         this.message = ""
@@ -338,9 +381,12 @@ export class Navigator {
     const dest = shortPlace(this.dest.name)
     switch (u?.kind) {
       case "maneuver": {
+        const prevKey = this.last ? `${this.last.maneuverType}|${this.last.nextStepRoad ?? this.last.toRoad ?? ""}` : ""
         this.last = u
+        this.hudMessage = ""
         const text = maneuverScreen(u, dest)
         const key = `${u.maneuverType}|${u.nextStepRoad ?? u.toRoad ?? ""}`
+        this.hud(key !== prevKey)
         const urgent = u.distanceMeters >= 0 && u.distanceMeters <= URGENT_METERS[this.mode] && u.maneuverType !== "STRAIGHT" && u.maneuverType !== "CONTINUE"
         if (urgent && key !== this.urgentKey) {
           this.urgentKey = key
@@ -349,13 +395,19 @@ export class Navigator {
         break
       }
       case "off_route":
+        this.hudMessage = "Вы сошли с маршрута. Перестраиваю…"
+        this.hud(true)
         this.paint(`Вы сошли с маршрута\nПерестраиваю…\n${dest}`, true)
         break
       case "rerouting":
+        this.hudMessage = "Перестраиваю маршрут…"
+        this.hud(true)
         this.paint(`Перестраиваю маршрут…\n${dest}`, false)
         break
       case "arrived":
         this.deps.log("nav", `Прибытие: ${dest}`)
+        this.hudMessage = `Вы на месте: ${dest}`
+        this.hud(true)
         this.paint(`Вы на месте\n${dest}`, true)
         if (this.arrivedTimer == null) {
           this.arrivedTimer = this.deps.setTimer(() => {
@@ -396,6 +448,7 @@ export class Navigator {
     if (trip !== this.trip) return
     this.busy = false
     if (!res.ok) {
+      this.endMap()
       this.deps.save(null)
       if (!quiet) return this.fail(`Маршрут не построен: ${explainNavError(res.error)}`)
       this.deps.log("info", `Прежний маршрут не продолжен: ${explainNavError(res.error)}`)
@@ -409,6 +462,7 @@ export class Navigator {
     this.urgentKey = ""
     this.message = ""
     this.deps.save({dest: place, mode, startedAt: this.deps.now()})
+    this.startMap()
     if (quiet) {
       this.screen = `Маршрут до ${shortPlace(place.name)}\n${modeLabel(mode)}`
       this.deps.onChange()
@@ -416,6 +470,195 @@ export class Navigator {
     }
     this.deps.log("nav", `Маршрут до ${place.name} (${modeLabel(mode)})${place.address ? ", " + place.address : ""}`)
     this.paint(`Маршрут до ${shortPlace(place.name)}\n${modeLabel(mode)}\nСейчас покажу первый поворот`, true)
+    this.deps.onChange()
+  }
+
+  // ── the map ──
+
+  /** Mentra's route polyline (on start and after every reroute). */
+  onRoute(points: LatLng[]): void {
+    const pts = (Array.isArray(points) ? points : []).filter((p) => Number.isFinite(p?.lat) && Number.isFinite(p?.lng))
+    if (pts.length < 2) return
+    if (this.busy) {
+      this.pendingRoute = pts // the trip is starting: Mentra sends the route just before it confirms
+      return
+    }
+    if (!this.active) return
+    this.route = pts.map((p) => ({lat: p.lat, lng: p.lng}))
+    this.maybeLoadRoads()
+    this.hud(true)
+    this.deps.onChange()
+  }
+
+  /** A position fix during the trip. */
+  onPosition(p: {lat: number; lng: number; accuracy?: number}): void {
+    if (!this.active || !Number.isFinite(p?.lat) || !Number.isFinite(p?.lng)) return
+    const me = {lat: p.lat, lng: p.lng}
+    const h = travelHeading(this.route, me, this.anchor)
+    if (h != null) this.heading = h
+    if (!this.anchor || distanceM(this.anchor, me) > 8) this.anchor = me
+    this.me = me
+    this.maybeLoadRoads()
+    this.hud(false)
+  }
+
+  /** The setting «Карта на очках» changed. */
+  mapChanged(): void {
+    if (!this.active) return
+    if (this.mapOn()) {
+      this.maybeLoadRoads()
+      this.hud(true)
+    } else {
+      this.cancelFrameTimer()
+      this.frame = ""
+      this.deps.onChange()
+    }
+  }
+
+  private mapOn(): boolean {
+    try {
+      return Boolean(this.deps.mapOn?.())
+    } catch {
+      return false
+    }
+  }
+
+  private startMap(): void {
+    this.route = this.pendingRoute ?? []
+    this.pendingRoute = null
+    this.me = null
+    this.anchor = null
+    this.heading = null
+    this.hudMessage = ""
+    this.frame = ""
+    this.frameAt = 0
+    try {
+      this.unwatch?.()
+    } catch {
+      // ignore
+    }
+    try {
+      this.unwatch = this.deps.watch?.((p) => this.onPosition(p)) ?? null
+    } catch (e) {
+      this.unwatch = null
+      this.deps.log("info", `Геопозиция для карты: ${explainNavError((e as Error)?.message ?? e)}`)
+    }
+    this.maybeLoadRoads()
+    this.hud(true)
+  }
+
+  private endMap(): void {
+    this.cancelFrameTimer()
+    try {
+      this.unwatch?.()
+    } catch {
+      // ignore
+    }
+    this.unwatch = null
+    this.route = []
+    this.me = null
+    this.anchor = null
+    this.heading = null
+    this.hudMessage = ""
+    this.frame = ""
+  }
+
+  /** Streets around where you are, loaded again when you move away from them. */
+  private maybeLoadRoads(): void {
+    if (!this.deps.roads || !this.mapOn() || this.roadsBusy || !this.active) return
+    const center = this.me ?? this.route[0] ?? (this.dest ? {lat: this.dest.lat, lng: this.dest.lng} : null)
+    if (!center) return
+    const radius = ROADS_RADIUS[this.mode]
+    const near = this.roadsCenter && this.roadsMode === this.mode && distanceM(this.roadsCenter, center) < radius * ROADS_RELOAD_SHARE
+    if (near) return
+    const now = this.deps.now()
+    if (now < this.roadsNextTry) return
+    this.roadsBusy = true
+    this.roadsNextTry = now + ROADS_RETRY_MS
+    const mode = this.mode
+    this.deps
+      .roads(center, radius, mode)
+      .then((roads) => {
+        this.roads = roads
+        this.roadsCenter = center
+        this.roadsMode = mode
+        this.roadsVersion++
+        if (this.roadsFailed || this.roadsVersion === 1) this.deps.log("nav", `Карта: загружено улиц вокруг — ${roads.length}`)
+        this.roadsFailed = false
+        this.hud(false)
+        this.deps.onChange()
+      })
+      .catch((e) => {
+        this.roadsNextTry = this.deps.now() + ROADS_FAIL_RETRY_MS
+        if (!this.roadsFailed) this.deps.log("info", `Карта: улицы не загрузились (${String((e as Error)?.message ?? e).slice(0, 80)}) — показываю только маршрут`)
+        this.roadsFailed = true
+      })
+      .finally(() => {
+        this.roadsBusy = false
+      })
+  }
+
+  /** Redraw the map picture soon; `soon` = the next turn changed. */
+  private hud(soon: boolean): void {
+    if (!this.active || !this.mapOn()) return
+    const wait = this.frameAt + (soon ? MAP_FRAME_SOON_MS : MAP_FRAME_MS[this.mode]) - this.deps.now()
+    if (wait <= 0) {
+      this.cancelFrameTimer()
+      this.renderFrame()
+      return
+    }
+    if (soon) this.cancelFrameTimer()
+    if (this.frameTimer == null) {
+      this.frameTimer = this.deps.setTimer(() => {
+        this.frameTimer = null
+        this.renderFrame()
+      }, wait)
+    }
+  }
+
+  private cancelFrameTimer(): void {
+    if (this.frameTimer != null) this.deps.clearTimer(this.frameTimer)
+    this.frameTimer = null
+  }
+
+  /** What the picture shows now. */
+  hudState(): HudState | null {
+    if (!this.dest) return null
+    const u = this.last
+    const name = shortPlace(this.dest.name)
+    return {
+      maneuver: u?.maneuverType ?? null,
+      distance: u ? formatDistance(u.distanceMeters) : "",
+      verb: u ? turnPhrase(u.maneuverType).text : "",
+      road: (u?.nextStepRoad || u?.toRoad || "").trim(),
+      left: [this.left().replace(", ", " · "), name].filter(Boolean).join(" · "),
+      message: this.hudMessage || (u ? undefined : `Маршрут до ${name}, ${modeLabel(this.mode)}`),
+      me: this.me,
+      heading: this.heading,
+      route: this.route,
+      roads: this.roads,
+      dest: {lat: this.dest.lat, lng: this.dest.lng},
+      mode: this.mode,
+    }
+  }
+
+  private renderFrame(): void {
+    if (!this.active || !this.mapOn()) return
+    const state = this.hudState()
+    if (!state) return
+    let frame: string
+    try {
+      frame = renderHud(state)
+    } catch (e) {
+      this.deps.log("error", `Карта: не нарисовалась (${String((e as Error)?.message ?? e)})`)
+      return
+    }
+    this.frameAt = this.deps.now()
+    if (frame === this.frame) return
+    this.frame = frame
+    this.frameId++
+    // the assistant puts the picture on the glasses when nothing else is shown there
+    this.deps.screen(this.screen, "route")
     this.deps.onChange()
   }
 

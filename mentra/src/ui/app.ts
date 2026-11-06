@@ -105,6 +105,10 @@ function previewBridge(): Bridge {
       screen: "",
       message: "",
       left: "",
+      map: true,
+      canMap: true,
+      frameId: 0,
+      streets: 0,
     },
     historyCount: 4,
     history: [
@@ -184,7 +188,18 @@ function previewBridge(): Bridge {
           left: "850 м, 11 мин",
         }
       }
-      if (channel === "navStop") state.nav = {...state.nav, active: false, dest: null, screen: "", left: ""}
+      if (channel === "navGo") {
+        state.glassesBitmap = Boolean((window as any).__previewFrame)
+        state.nav.frameId = 1
+        state.nav.streets = 42
+      }
+      if (channel === "navStop") {
+        state.nav = {...state.nav, active: false, dest: null, screen: "", left: "", frameId: 0}
+        state.glassesBitmap = false
+      }
+      if (channel === "navFrame") return {frame: (window as any).__previewFrame ?? "", frameId: 1}
+      if (channel === "navTestBitmap") return {ok: true}
+      if (channel === "navMap") return previewMap(payload?.have)
       return state
     },
     on() {
@@ -354,6 +369,11 @@ function renderGlasses(s: any, st: any) {
   } else {
     text = s.currentScreen || "—"
   }
+  // the glasses show the navigation map picture: mirror it
+  const picture = Boolean(s.glassesBitmap && s.nav?.frameId)
+  $("lensImg").hidden = !picture
+  lensText.hidden = picture
+  if (picture) void mirrorFrame(s.nav.frameId)
   if (text !== lastLens) {
     lensText.textContent = text
     lensText.classList.remove("fresh")
@@ -397,6 +417,26 @@ function renderGlasses(s: any, st: any) {
   if (document.activeElement !== quick) quick.value = p
 }
 
+/** Sample map for the preview (a street grid around Trinity College). */
+function previewMap(have?: number) {
+  const o = [53.343, -6.26]
+  const m = (dx: number, dy: number) => [o[0] + dy / 111320, o[1] + dx / (111320 * Math.cos((o[0] * Math.PI) / 180))]
+  const roads: {c: number; p: number[][]}[] = []
+  for (let i = -6; i <= 6; i++) roads.push({c: i % 3 === 0 ? 0 : 1, p: [m(i * 70, -500), m(i * 70 + 30, 500)]})
+  for (let j = -6; j <= 6; j++) roads.push({c: j === 1 ? 0 : 1, p: [m(-500, j * 80), m(500, j * 80 - 20)]})
+  roads.push({c: 2, p: [m(-200, -200), m(-50, -60), m(60, 150)]})
+  return {
+    active: true,
+    mode: "walking",
+    me: m(0, 0),
+    heading: 2,
+    dest: m(150, 260),
+    route: [m(0, -20), m(3, 77), m(140, 73), m(150, 260)],
+    roadsVersion: 1,
+    roads: have === 1 ? null : roads,
+  }
+}
+
 // ───────────────────────── navigator ─────────────────────────
 
 const NAV_MODE_LABEL: Record<string, string> = {walking: "пешком", driving: "на машине", cycling: "на велосипеде"}
@@ -422,12 +462,24 @@ function renderNavigator(s: any, st: any) {
     const lines = String(nav.screen ?? "").split("\n")
     const isTurn = /^[←→↑↓•]/.test(lines[0] ?? "")
     // «120 м» stays on one line
-    const nb = (t: string) => t.replace(/(\d) (?=(?:м|км|мин|ч)\b)/gu, "$1\u00a0")
+    const nb = (t: string) => t.replace(/(\d) (?=(?:м|км|мин|ч)(?:$|[\s,.·]))/gu, "$1\u00a0")
     $("navTurn").textContent = isTurn ? nb(lines[0]) : ""
     $("navRoad").textContent = isTurn && /^на /.test(lines[1] ?? "") ? lines[1] : ""
     $("navDest").textContent = dest
     $("navLeft").textContent = nb([nav.left, NAV_MODE_LABEL[nav.mode] ?? ""].filter(Boolean).join(" · ") || nav.dest?.address || "")
   }
+  const sw = $<HTMLInputElement>("navMapSwitch")
+  if (!pending.navMap) sw.checked = st.navMap !== false
+  sw.disabled = nav.canMap === false
+  $("navMapSub").textContent =
+    nav.canMap === false
+      ? "Эта версия Mentra не показывает картинки"
+      : nav.active && sw.checked
+        ? nav.streets
+          ? `Стрелка, расстояние и карта · улиц на карте: ${nav.streets}`
+          : "Стрелка, расстояние и маршрут · улицы загружаются"
+        : "Стрелка, расстояние и карта, как в приложении Even"
+  if (nav.active) void refreshMap()
   $("navProblem").textContent = nav.problem ? `${capitalize(nav.problem)}.` : ""
   $("navProblem").hidden = !nav.problem
   // what the navigator said last (searching, not found…) — only while it is current
@@ -436,6 +488,130 @@ function renderNavigator(s: any, st: any) {
 }
 
 let navSearching = false
+
+// ── the glasses picture, mirrored on the phone ──
+
+let mirroredId = -1
+let mirrorBusy = false
+
+/** Draws Mentra's G1 bitmap (1-bit BMP, black = lit) in the lens colours, visible area only. */
+function drawG1Frame(b64: string, canvas: HTMLCanvasElement) {
+  const raw = atob(b64)
+  const W = 576
+  const H = 135
+  const rowSize = 72
+  const off = 62
+  const SX = 50
+  const SY = 35
+  const w = canvas.width
+  const h = canvas.height
+  const ctx = canvas.getContext("2d")
+  if (!ctx || raw.length < off + rowSize * H) return
+  const lit = getComputedStyle($("lens")).getPropertyValue("--lens-text").trim() || "#74ffa6"
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(lit)
+  const [r, g, b] = m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [116, 255, 166]
+  const img = ctx.createImageData(w, h)
+  for (let y = 0; y < h; y++) {
+    const row = off + (H - 1 - (y + SY)) * rowSize
+    for (let x = 0; x < w; x++) {
+      const bx = x + SX
+      if (bx >= W) continue
+      const bit = (raw.charCodeAt(row + (bx >> 3)) >> (7 - (bx & 7))) & 1
+      if (bit === 0) {
+        const i = (y * w + x) * 4
+        img.data[i] = r
+        img.data[i + 1] = g
+        img.data[i + 2] = b
+        img.data[i + 3] = 255
+      }
+    }
+  }
+  ctx.clearRect(0, 0, w, h)
+  ctx.putImageData(img, 0, 0)
+}
+
+async function mirrorFrame(id: number) {
+  if (id === mirroredId || mirrorBusy) return
+  mirrorBusy = true
+  try {
+    const r: any = await bridge.request("navFrame", {}, {timeout: 8000})
+    if (r?.frame) {
+      drawG1Frame(r.frame, $<HTMLCanvasElement>("lensImg"))
+      mirroredId = r.frameId ?? id
+    }
+  } catch {
+    // next state push tries again
+  } finally {
+    mirrorBusy = false
+  }
+}
+
+// ── the map on the phone ──
+
+let mapRoads: {c: number; p: number[][]}[] = []
+let mapRoadsVersion = -1
+let mapBusy = false
+let mapAt = 0
+const MAP_SPAN: Record<string, number> = {walking: 520, cycling: 900, driving: 1800}
+
+async function refreshMap(force = false) {
+  if ($("page-nav").hidden || mapBusy) return
+  if (!force && Date.now() - mapAt < 2500) return
+  mapBusy = true
+  try {
+    const r: any = await bridge.request("navMap", {have: mapRoadsVersion}, {timeout: 8000})
+    mapAt = Date.now()
+    if (!r?.active) return
+    if (r.roads) {
+      mapRoads = r.roads
+      mapRoadsVersion = r.roadsVersion
+    }
+    drawPhoneMap(r)
+  } catch {
+    // try again on the next update
+  } finally {
+    mapBusy = false
+  }
+}
+
+/** North-up map around you: streets, the route, you and the destination. */
+function drawPhoneMap(r: any) {
+  const svg = $("navMapSvg") as unknown as SVGSVGElement
+  const box = $("navMapBox")
+  const W = box.clientWidth || 360
+  const H = box.clientHeight || 230
+  const center: number[] | null = r.me ?? r.route?.[0] ?? r.dest
+  if (!center) return
+  const span = MAP_SPAN[r.mode] ?? 520
+  const kx = 111320 * Math.cos((center[0] * Math.PI) / 180)
+  const ky = 111320
+  const scale = W / span // px per meter
+  const pt = (p: number[]) => `${(((p[1] - center[1]) * kx) * scale + W / 2).toFixed(1)},${(H / 2 - (p[0] - center[0]) * ky * scale).toFixed(1)}`
+  const path = (pts: number[][]) => (pts.length > 1 ? "M" + pts.map(pt).join("L") : "")
+  const parts: string[] = []
+  for (const c of [2, 1, 0]) {
+    const d = mapRoads
+      .filter((x) => x.c === c)
+      .map((x) => path(x.p))
+      .join("")
+    if (d) parts.push(`<path class="road c${c}" d="${d}"/>`)
+  }
+  if (r.route?.length > 1) parts.push(`<path class="route" d="${path(r.route)}"/>`)
+  if (r.dest) {
+    const [x, y] = pt(r.dest).split(",").map(Number)
+    parts.push(`<circle class="dest" cx="${x}" cy="${y}" r="7"/>`)
+  }
+  if (r.me) {
+    const [x, y] = pt(r.me).split(",").map(Number)
+    if (typeof r.heading === "number") {
+      parts.push(
+        `<path class="me" transform="translate(${x} ${y}) rotate(${r.heading.toFixed(0)})" d="M0,-12 L9,9 L0,4 L-9,9 Z"/>`,
+      )
+    } else parts.push(`<circle class="me" cx="${x}" cy="${y}" r="8"/>`)
+  }
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`)
+  svg.innerHTML = parts.join("")
+}
 
 function renderNavResults() {
   const box = $("navResults")
@@ -1077,6 +1253,17 @@ function wire() {
       }),
     )
   $("navStop").addEventListener("click", () => call("navStop"))
+  $<HTMLInputElement>("navMapSwitch").addEventListener("change", (e) => {
+    queueSave({navMap: (e.target as HTMLInputElement).checked}, 0)
+  })
+  $("navTestBtn").addEventListener("click", async () => {
+    const r: any = await bridge.request("navTestBitmap", {}, {timeout: 8000}).catch(() => null)
+    toast(
+      r?.ok
+        ? "На очках рамка и надпись «EVA-IA · карта» на 8 секунд. Если их нет — выключите «Карту на очках»."
+        : "Эта версия Mentra не показывает картинки на очках",
+    )
+  })
 
   wireSettings()
 }

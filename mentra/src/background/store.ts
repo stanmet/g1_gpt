@@ -51,6 +51,8 @@ export interface Settings {
   talkGoal: string
   /** Navigator: how to travel when the command does not say («пешком», «на машине»). */
   navMode: NavMode
+  /** Navigator: the route on the glasses as a picture with a map (like the Even app), not text. */
+  navMap: boolean
   /** Settings schema version, for one-time migrations of stored settings. */
   v: number
 }
@@ -89,6 +91,7 @@ export const DEFAULT_SETTINGS: Settings = {
   talkEverySec: 10,
   talkGoal: "",
   navMode: "walking",
+  navMap: true,
   v: SETTINGS_VERSION,
 }
 
@@ -182,6 +185,7 @@ export function normalizeSettings(raw: Partial<Settings> | null | undefined, bas
     talkEverySec: clampInt(pick("talkEverySec"), 0, 60, DEFAULT_SETTINGS.talkEverySec),
     talkGoal: String(pick("talkGoal") ?? "").trim().slice(0, 300),
     navMode: (["walking", "driving", "cycling"] as NavMode[]).includes(pick("navMode")) ? pick("navMode") : "walking",
+    navMap: pick("navMap") !== false,
     v: SETTINGS_VERSION,
   }
 }
