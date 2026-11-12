@@ -6893,8 +6893,7 @@ Stop: «стоп лекция»` : `Режим лекции
     for (let y = 0;y < H; y++) {
       const row = header + (H - 1 - y) * rowSize;
       for (let x = 0;x < W; x++) {
-        const lit = x < c.w && y < c.h && c.px[y * c.w + x] === 1;
-        if (!lit)
+        if (x < c.w && y < c.h && c.px[y * c.w + x] === 1)
           buf[row + (x >> 3)] |= 128 >> (x & 7);
       }
     }
@@ -7019,7 +7018,7 @@ Stop: «стоп лекция»` : `Режим лекции
     return [x0 + t0 * dx, y0 + t0 * dy, x0 + t1 * dx, y0 + t1 * dy];
   }
   var PATTERN = {
-    water: (x, y) => (x + y) % 4 === 0,
+    water: (x, y) => x % 4 === 0 && y % 4 === 0,
     park: (x, y) => x % 6 === 0 && y % 6 === 3
   };
   function fillRings(c, rings, pattern) {
@@ -7235,7 +7234,8 @@ Stop: «стоп лекция»` : `Режим лекции
   function renderHud(s) {
     const c = g1Canvas();
     const S = G1_SAFE;
-    const leftW = MAP_BOX.x - S.x - 10;
+    const withMap = s.showMap !== false;
+    const leftW = withMap ? MAP_BOX.x - S.x - 10 : S.w - 4;
     const textH = lineHeight("text");
     const textCap = capTop("text");
     if (s.message) {
@@ -7260,9 +7260,8 @@ Stop: «стоп лекция»` : `Режим лекции
       if (s.left)
         drawText(c, fit(s.left, "text", leftW), S.x + 2, S.y + S.h - textH - 1, "text");
     }
-    const map = drawMap(s, MAP_BOX.w - 6, MAP_BOX.h - 6);
-    c.blit(map, MAP_BOX.x + 3, MAP_BOX.y + 3);
-    c.frame(MAP_BOX.x, MAP_BOX.y, MAP_BOX.w, MAP_BOX.h, 10, 2);
+    if (withMap)
+      c.blit(drawMap(s, MAP_BOX.w - 6, MAP_BOX.h - 6), MAP_BOX.x + 3, MAP_BOX.y + 3);
     return encodeG1Bmp(c);
   }
 
@@ -7659,6 +7658,13 @@ ${modeLabel(mode)}
         return false;
       }
     }
+    miniMap() {
+      try {
+        return this.deps.miniMap?.() !== false;
+      } catch {
+        return true;
+      }
+    }
     startMap() {
       this.route = this.pendingRoute ?? [];
       this.pendingRoute = null;
@@ -7702,7 +7708,7 @@ ${modeLabel(mode)}
       this.frame = "";
     }
     maybeLoadRoads() {
-      if (!this.deps.roads || !this.mapOn() || this.roadsBusy || !this.active)
+      if (!this.deps.roads || !this.mapOn() || !this.miniMap() || this.roadsBusy || !this.active)
         return;
       const center = this.me ?? this.route[0] ?? (this.dest ? { lat: this.dest.lat, lng: this.dest.lng } : null);
       if (!center)
@@ -7776,7 +7782,8 @@ ${modeLabel(mode)}
         route: this.route,
         features: this.roads,
         dest: { lat: this.dest.lat, lng: this.dest.lng },
-        mode: this.mode
+        mode: this.mode,
+        showMap: this.miniMap()
       };
     }
     renderFrame() {
@@ -8617,6 +8624,7 @@ ${prevTips.map((t) => "— " + t).join(`
     talkGoal: "",
     navMode: "walking",
     navMap: true,
+    navMiniMap: true,
     v: SETTINGS_VERSION
   };
   function migrateSettings(raw) {
@@ -8685,6 +8693,7 @@ ${prevTips.map((t) => "— " + t).join(`
       talkGoal: String(pick("talkGoal") ?? "").trim().slice(0, 300),
       navMode: ["walking", "driving", "cycling"].includes(pick("navMode")) ? pick("navMode") : "walking",
       navMap: pick("navMap") !== false,
+      navMiniMap: pick("navMiniMap") !== false,
       v: SETTINGS_VERSION
     };
   }
@@ -8906,6 +8915,7 @@ ${prevTips.map((t) => "— " + t).join(`
             this.clearDisplay();
         },
         mapOn: () => this.navMapOn(),
+        miniMap: () => this.settings.navMiniMap,
         roads: deps.nav?.roads ? (c, r, m) => deps.nav.roads(c, r, m) : undefined,
         prefetch: deps.nav?.prefetch ? (route) => deps.nav.prefetch(route) : undefined,
         watch: deps.nav?.watch ? (cb) => deps.nav.watch(cb) : undefined
@@ -9016,11 +9026,11 @@ ${prevTips.map((t) => "— " + t).join(`
         merged.anthropicKey = this.settings.anthropicKey;
       if (patch.geminiKey === undefined || patch.geminiKey === null)
         merged.geminiKey = this.settings.geminiKey;
-      const mapWas = this.navMapOn();
+      const mapWas = `${this.navMapOn()}|${this.settings.navMiniMap}`;
       this.settings = merged;
       this.deps.store.saveSettings(merged);
       this.addLog("info", "Настройки сохранены");
-      if (mapWas !== this.navMapOn()) {
+      if (mapWas !== `${this.navMapOn()}|${this.settings.navMiniMap}`) {
         this.nav.mapChanged();
         if (this.nav.active && this.phase === "idle" && this.clearTimer_ == null)
           this.clearDisplay();
@@ -10686,7 +10696,7 @@ ${goal}` : "Цель беседы убрана.", 3000);
   }
 
   // src/background/index.ts
-  var APP_VERSION = "1.15.0";
+  var APP_VERSION = "1.15.1";
   function newToken() {
     return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
       const r = Math.random() * 16 | 0;

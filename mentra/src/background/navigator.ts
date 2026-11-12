@@ -90,8 +90,10 @@ export interface NavigatorDeps {
   save(trip: NavTrip | null): void
   /** The trip is over: the route screen should go away. */
   ended(): void
-  /** Setting «Карта на очках»: the route screen is a picture with a map (like the Even app). */
+  /** Setting «Навигация картинкой»: the route screen is a picture (arrow, distance, mini-map) like the Even app. */
   mapOn?(): boolean
+  /** Setting «Мини-карта»: the small map next to the arrow (off: arrow, distance, street only). */
+  miniMap?(): boolean
   /** What is around a point for the map: roads, water, parks, buildings (map tiles). */
   roads?(center: LatLng, radius: number, mode: TravelMode): Promise<MapFeature[]>
   /** The route is known: save the map along it on the phone. */
@@ -508,7 +510,7 @@ export class Navigator {
     this.hud(false)
   }
 
-  /** The setting «Карта на очках» changed. */
+  /** The settings «Навигация картинкой» or «Мини-карта» changed. */
   mapChanged(): void {
     if (!this.active) return
     if (this.mapOn()) {
@@ -526,6 +528,14 @@ export class Navigator {
       return Boolean(this.deps.mapOn?.())
     } catch {
       return false
+    }
+  }
+
+  private miniMap(): boolean {
+    try {
+      return this.deps.miniMap?.() !== false
+    } catch {
+      return true
     }
   }
 
@@ -582,7 +592,7 @@ export class Navigator {
 
   /** Streets around where you are, loaded again when you move away from them. */
   private maybeLoadRoads(): void {
-    if (!this.deps.roads || !this.mapOn() || this.roadsBusy || !this.active) return
+    if (!this.deps.roads || !this.mapOn() || !this.miniMap() || this.roadsBusy || !this.active) return
     const center = this.me ?? this.route[0] ?? (this.dest ? {lat: this.dest.lat, lng: this.dest.lng} : null)
     if (!center) return
     const radius = MAP_RADIUS[this.mode]
@@ -656,6 +666,7 @@ export class Navigator {
       features: this.roads,
       dest: {lat: this.dest.lat, lng: this.dest.lng},
       mode: this.mode,
+      showMap: this.miniMap(),
     }
   }
 

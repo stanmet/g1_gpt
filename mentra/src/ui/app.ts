@@ -487,11 +487,13 @@ function renderNavigator(s: any, st: any) {
   if (!pending.navMap) sw.checked = st.navMap !== false
   sw.disabled = nav.canMap === false
   $("navMapSub").textContent =
-    nav.canMap === false
-      ? "Эта версия Mentra не показывает картинки"
-      : nav.active && sw.checked && !nav.streets
-        ? "Стрелка, расстояние и маршрут · карта загружается"
-        : "Стрелка, расстояние и карта, как в приложении Even"
+    nav.canMap === false ? "Эта версия Mentra не показывает картинки" : "Зелёная стрелка, расстояние и улица поверх прозрачного фона"
+  const mini = $<HTMLInputElement>("navMiniMapSwitch")
+  if (!pending.navMiniMap) mini.checked = st.navMiniMap !== false
+  mini.disabled = nav.canMap === false || !sw.checked
+  $("navMiniMapRow").classList.toggle("off", mini.disabled)
+  $("navMiniMapSub").textContent =
+    nav.active && sw.checked && mini.checked && !nav.streets ? "Улицы и маршрут справа от стрелки · загружается" : "Улицы и маршрут справа от стрелки"
   void refreshMap()
   renderOffline(s)
   $("navProblem").textContent = nav.problem ? `${capitalize(nav.problem)}.` : ""
@@ -508,7 +510,7 @@ let navSearching = false
 let mirroredId = -1
 let mirrorBusy = false
 
-/** Draws Mentra's G1 bitmap (1-bit BMP, black = lit) in the lens colours, visible area only. */
+/** Draws the G1 bitmap (1-bit BMP, bit 1 = lit) in the lens colours, visible area only. */
 function drawG1Frame(b64: string, canvas: HTMLCanvasElement) {
   const raw = atob(b64)
   const W = 576
@@ -531,7 +533,7 @@ function drawG1Frame(b64: string, canvas: HTMLCanvasElement) {
       const bx = x + SX
       if (bx >= W) continue
       const bit = (raw.charCodeAt(row + (bx >> 3)) >> (7 - (bx & 7))) & 1
-      if (bit === 0) {
+      if (bit === 1) {
         const i = (y * w + x) * 4
         img.data[i] = r
         img.data[i + 1] = g
@@ -1378,6 +1380,9 @@ function wire() {
       void call("mapDelete", {all: true})
     }),
   )
+  $<HTMLInputElement>("navMiniMapSwitch").addEventListener("change", (e) => {
+    queueSave({navMiniMap: (e.target as HTMLInputElement).checked}, 0)
+  })
   $<HTMLInputElement>("navMapSwitch").addEventListener("change", (e) => {
     queueSave({navMap: (e.target as HTMLInputElement).checked}, 0)
   })

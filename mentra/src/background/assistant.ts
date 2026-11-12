@@ -268,6 +268,7 @@ export class Assistant {
         if (this.phase === "idle" && this.clearTimer_ == null) this.clearDisplay()
       },
       mapOn: () => this.navMapOn(),
+      miniMap: () => this.settings.navMiniMap,
       roads: deps.nav?.roads ? (c, r, m) => deps.nav!.roads!(c, r, m) : undefined,
       prefetch: deps.nav?.prefetch ? (route) => deps.nav!.prefetch!(route) : undefined,
       watch: deps.nav?.watch ? (cb) => deps.nav!.watch!(cb) : undefined,
@@ -401,11 +402,11 @@ export class Assistant {
     if (patch.apiKey === undefined || patch.apiKey === null) merged.apiKey = this.settings.apiKey
     if (patch.anthropicKey === undefined || patch.anthropicKey === null) merged.anthropicKey = this.settings.anthropicKey
     if (patch.geminiKey === undefined || patch.geminiKey === null) merged.geminiKey = this.settings.geminiKey
-    const mapWas = this.navMapOn()
+    const mapWas = `${this.navMapOn()}|${this.settings.navMiniMap}`
     this.settings = merged
     this.deps.store.saveSettings(merged)
     this.addLog("info", "Настройки сохранены")
-    if (mapWas !== this.navMapOn()) {
+    if (mapWas !== `${this.navMapOn()}|${this.settings.navMiniMap}`) {
       this.nav.mapChanged()
       if (this.nav.active && this.phase === "idle" && this.clearTimer_ == null) this.clearDisplay()
     }

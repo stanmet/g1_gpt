@@ -54,6 +54,8 @@ export interface Settings {
   navMode: NavMode
   /** Navigator: the route on the glasses as a picture with a map (like the Even app), not text. */
   navMap: boolean
+  /** Navigator picture: the small map next to the arrow. */
+  navMiniMap: boolean
   /** Settings schema version, for one-time migrations of stored settings. */
   v: number
 }
@@ -93,6 +95,7 @@ export const DEFAULT_SETTINGS: Settings = {
   talkGoal: "",
   navMode: "walking",
   navMap: true,
+  navMiniMap: true,
   v: SETTINGS_VERSION,
 }
 
@@ -188,6 +191,7 @@ export function normalizeSettings(raw: Partial<Settings> | null | undefined, bas
     talkGoal: String(pick("talkGoal") ?? "").trim().slice(0, 300),
     navMode: (["walking", "driving", "cycling"] as NavMode[]).includes(pick("navMode")) ? pick("navMode") : "walking",
     navMap: pick("navMap") !== false,
+    navMiniMap: pick("navMiniMap") !== false,
     v: SETTINGS_VERSION,
   }
 }

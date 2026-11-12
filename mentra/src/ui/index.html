@@ -60,7 +60,7 @@
       </div>
 
       <figure class="lens" id="lens" data-mode="assistant">
-        <canvas class="lens-img" id="lensImg" width="526" height="100" hidden aria-label="Карта на очках"></canvas>
+        <canvas class="lens-img" id="lensImg" width="526" height="100" hidden aria-label="Экран очков"></canvas>
         <p class="lens-text" id="lensText"></p>
         <figcaption class="lens-foot">
           <span id="lensState">Готов</span>
@@ -479,8 +479,12 @@
 
       <div class="card list nav-opts">
         <label class="item">
-          <span class="row-label">Карта на очках<span class="row-sub" id="navMapSub">Стрелка, расстояние и карта, как в приложении Even</span></span>
+          <span class="row-label">Навигация картинкой<span class="row-sub" id="navMapSub">Зелёная стрелка, расстояние и улица поверх прозрачного фона</span></span>
           <input class="switch" type="checkbox" id="navMapSwitch" />
+        </label>
+        <label class="item" id="navMiniMapRow">
+          <span class="row-label">Мини-карта<span class="row-sub" id="navMiniMapSub">Улицы и маршрут справа от стрелки</span></span>
+          <input class="switch" type="checkbox" id="navMiniMapSwitch" />
         </label>
         <button class="item item-btn" id="navTestBtn" type="button"><span class="item-label">Проверить картинку на очках</span></button>
       </div>

@@ -45,6 +45,8 @@ export interface HudState {
   features: MapFeature[]
   dest: LatLng | null
   mode: MapMode
+  /** The small map next to the arrow (off: arrow, distance and street only). */
+  showMap?: boolean
 }
 
 // ───────────────────────── geometry ─────────────────────────
@@ -158,9 +160,12 @@ function clip(x0: number, y0: number, x1: number, y1: number, w: number, h: numb
   return [x0 + t0 * dx, y0 + t0 * dy, x0 + t1 * dx, y0 + t1 * dy]
 }
 
-/** 1-bit patterns: water hatched, parks dotted. */
+/**
+ * 1-bit textures for areas: only sparse dots, never a fill — every lit pixel hides the real world
+ * behind the glasses. Water: outline and dots every 4 px; parks: dots every 6 px.
+ */
 const PATTERN: Record<"water" | "park", (x: number, y: number) => boolean> = {
-  water: (x, y) => (x + y) % 4 === 0,
+  water: (x, y) => x % 4 === 0 && y % 4 === 0,
   park: (x, y) => x % 6 === 0 && y % 6 === 3,
 }
 
@@ -373,11 +378,15 @@ function wrap(text: string, maxW: number, maxLines: number): string[] {
   return lines.map((l) => fit(l, "text", maxW))
 }
 
-/** The whole navigation screen as a G1 bitmap (base64 BMP). */
+/**
+ * The whole navigation screen as a G1 bitmap (base64 BMP). Only the drawing lights up (green); the
+ * rest stays off, so the arrows float over the real world — no background, no frames.
+ */
 export function renderHud(s: HudState): string {
   const c = g1Canvas()
   const S = G1_SAFE
-  const leftW = MAP_BOX.x - S.x - 10
+  const withMap = s.showMap !== false
+  const leftW = withMap ? MAP_BOX.x - S.x - 10 : S.w - 4
   const textH = lineHeight("text")
   const textCap = capTop("text")
 
@@ -404,9 +413,7 @@ export function renderHud(s: HudState): string {
     if (s.left) drawText(c, fit(s.left, "text", leftW), S.x + 2, S.y + S.h - textH - 1, "text")
   }
 
-  // the map, framed
-  const map = drawMap(s, MAP_BOX.w - 6, MAP_BOX.h - 6)
-  c.blit(map, MAP_BOX.x + 3, MAP_BOX.y + 3)
-  c.frame(MAP_BOX.x, MAP_BOX.y, MAP_BOX.w, MAP_BOX.h, 10, 2)
+  // the small map, without a frame: its lines just end
+  if (withMap) c.blit(drawMap(s, MAP_BOX.w - 6, MAP_BOX.h - 6), MAP_BOX.x + 3, MAP_BOX.y + 3)
   return encodeG1Bmp(c)
 }

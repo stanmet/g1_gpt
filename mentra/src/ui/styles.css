@@ -757,6 +757,9 @@ p {
 .nav-opts .row-sub {
   white-space: normal;
 }
+.nav-opts .item.off {
+  opacity: 0.45;
+}
 .item-btn {
   width: 100%;
   text-align: left;

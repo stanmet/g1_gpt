@@ -2,9 +2,10 @@
  * Drawing on the G1 as a picture: a 1-bit canvas, text in the generated Inter font, lines and
  * shapes, and the bitmap format Mentra sends to the G1 (a 576×135 one-bit BMP).
  *
- * Mentra's conventions (cloud SDK bitmap utils, G1 driver): white background, black drawing; the
- * phone inverts the bits before sending, so what is black here lights up on the glasses. Only the
- * area 526×100 at (50, 35) is reliably visible — the rest is padding.
+ * Bits: 1 = lit (green on the glasses), 0 = off (see-through). Mentra's cloud SDK documents the
+ * opposite (black drawing on white, the phone inverting it), but on a real G1 with Mentra 3.2.1 that
+ * gave a solid green screen with dark arrows (Nov 2026) — the bits arrive as drawn. Only the area
+ * 526×100 at (50, 35) is reliably visible — the rest is padding.
  */
 import {GLASS_FONTS} from "./glassfont.data"
 
@@ -226,8 +227,8 @@ export function capTop(f: FontName): number {
 // ───────────────────────── the G1 bitmap ─────────────────────────
 
 /**
- * The 576×135 one-bit BMP Mentra sends to the G1: bottom-up rows, palette black/white, background
- * white (bit 1) and the drawing black (bit 0) — the phone inverts the bits for the glasses.
+ * The 576×135 one-bit BMP Mentra sends to the G1: bottom-up rows, palette black/white. The drawing
+ * is bit 1 (lit, green) and everything else bit 0 (off, so the real world shows through).
  */
 export function encodeG1Bmp(c: Canvas): string {
   const W = G1_BMP_W
@@ -266,10 +267,9 @@ export function encodeG1Bmp(c: Canvas): string {
   for (let y = 0; y < H; y++) {
     const row = header + (H - 1 - y) * rowSize
     for (let x = 0; x < W; x++) {
-      const lit = x < c.w && y < c.h && c.px[y * c.w + x] === 1
-      if (!lit) buf[row + (x >> 3)] |= 0x80 >> (x & 7)
+      if (x < c.w && y < c.h && c.px[y * c.w + x] === 1) buf[row + (x >> 3)] |= 0x80 >> (x & 7)
     }
-    // padding bytes (none for 576) stay as background
+    // padding bytes (none for 576) stay off
   }
   return toBase64(buf)
 }

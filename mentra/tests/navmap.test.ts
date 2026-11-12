@@ -15,13 +15,13 @@ import {type MapFeature} from "../src/background/tiles"
 import {toWorld} from "../src/shared/mvt"
 
 const bmp = (b64: string) => Buffer.from(b64, "base64")
-/** Lit pixels of a G1 bitmap (bit 0 = drawn), top-down. */
+/** Lit pixels of a G1 bitmap (bit 1 = lit, green on the glasses), top-down. */
 function litPixels(b64: string): {x: number; y: number}[] {
   const b = bmp(b64)
   const out: {x: number; y: number}[] = []
   for (let y = 0; y < 135; y++) {
     const row = 62 + (134 - y) * 72
-    for (let x = 0; x < 576; x++) if (((b[row + (x >> 3)] >> (7 - (x & 7))) & 1) === 0) out.push({x, y})
+    for (let x = 0; x < 576; x++) if (((b[row + (x >> 3)] >> (7 - (x & 7))) & 1) === 1) out.push({x, y})
   }
   return out
 }
@@ -47,7 +47,7 @@ const O = {lat: 53.343, lng: -6.26}
 const at = (dx: number, dy: number): LatLng => ({lat: O.lat + dy / 111320, lng: O.lng + dx / (111320 * Math.cos((O.lat * Math.PI) / 180))})
 
 describe("G1 bitmap", () => {
-  test("Mentra's format: 576×135, 1 bit, bottom-up, drawing = black (the phone inverts it)", () => {
+  test("G1 format: 576×135, 1 bit, bottom-up; the drawing is bit 1, everything else 0 (see-through)", () => {
     const c = g1Canvas()
     c.set(0, 0)
     c.set(575, 134)
@@ -60,10 +60,12 @@ describe("G1 bitmap", () => {
     expect(b.readInt32LE(22)).toBe(135)
     expect(b.readUInt16LE(28)).toBe(1)
     expect([...b.subarray(54, 62)]).toEqual([0, 0, 0, 0, 255, 255, 255, 0]) // black, white
-    // top-left pixel is the first bit of the LAST row in the file; background bytes are 0xFF
-    expect(b[62 + 134 * 72] & 0x80).toBe(0)
-    expect(b[62 + 71] & 0x01).toBe(0)
-    expect(b[62 + 1]).toBe(0xff)
+    // top-left pixel is the first bit of the LAST row in the file; the background is all zero bits
+    expect(b[62 + 134 * 72] & 0x80).toBe(0x80)
+    expect(b[62 + 71] & 0x01).toBe(0x01)
+    expect(b[62 + 1]).toBe(0)
+    // an empty picture lights nothing
+    expect(bmp(encodeG1Bmp(g1Canvas())).subarray(62).every((v) => v === 0)).toBe(true)
     expect(litPixels(encodeG1Bmp(c))).toEqual([{x: 0, y: 0}, {x: 575, y: 134}])
   })
 
@@ -129,6 +131,20 @@ describe("the navigation picture", () => {
     const left = lit.filter((p) => p.x < MAP_BOX.x)
     expect(inMap.length).toBeGreaterThan(300)
     expect(left.length).toBeGreaterThan(800)
+  })
+
+  test("no green background: only the arrows, text and map lines light up", () => {
+    // a solid screen was the bug on the glasses (inverted bits); a navigation screen lights a few %
+    const lit = litPixels(renderHud(state)).length
+    expect(lit / (576 * 135)).toBeLessThan(0.12)
+    // nothing on the border of the full bitmap (no frame) and no frame around the map
+    expect(litPixels(renderHud(state)).some((p) => p.x === MAP_BOX.x + MAP_BOX.w - 1 && p.y === MAP_BOX.y + MAP_BOX.h / 2)).toBe(false)
+  })
+
+  test("without the mini-map: arrow, distance and street only, nothing on the right", () => {
+    const lit = litPixels(renderHud({...state, showMap: false}))
+    expect(lit.filter((p) => p.x >= MAP_BOX.x + 40).length).toBe(0)
+    expect(lit.length).toBeGreaterThan(800)
   })
 
   test("a different turn or a message makes a different picture; no streets is fine", () => {
