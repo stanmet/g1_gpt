@@ -6,6 +6,8 @@
 import {registerMiniapp} from "@mentra/miniapp/background"
 import {Assistant, type ContextHost} from "./assistant"
 import {geocodeUrl, openMeteoUrl} from "./context"
+import {BookError, detectFormat, parseBook, pdfToBook} from "./bookparse"
+import {Library, type BookBlob} from "./books"
 import {asProvider, keyFor, PROVIDERS} from "./llm"
 import type {NavHost, Place, TravelMode} from "./navigator"
 import {testPattern} from "./glassdraw"
@@ -187,7 +189,7 @@ registerMiniapp((session: any) => {
     return {x: 0, y: 0, w: d?.width ?? 576, h: d?.height ?? 200}
   }
 
-  const snap = () => ({...assistant.snapshot(), version: APP_VERSION, maps: mapsState()})
+  const snap = () => ({...assistant.snapshot(), version: APP_VERSION, maps: mapsState(), books: booksState()})
 
   /** GET a JSON document (map index, weather, geocoding). */
   const getJson = async (url: string, ms = 15_000) => {
@@ -221,6 +223,36 @@ registerMiniapp((session: any) => {
     download: tiles.download,
     areas: tiles.areas,
   })
+
+  // ── Books (mode «Книги») ───────────────────────────────────────
+  const library = new Library({
+    blob:
+      blob && typeof blob.importFile === "function"
+        ? ({
+            set: (k, data, o) => blob.set(k, data, o),
+            bytes: (k) => blob.bytes(k),
+            delete: (k) => blob.delete(k),
+          } as BookBlob)
+        : null,
+    loadList: () => store.loadBooks(),
+    saveList: (l) => store.saveBooks(l),
+    log: (kind, msg) => assistant.addLog(kind, msg),
+    now: () => Date.now(),
+    onChange: () => pushState(),
+  })
+  /** What is being added right now (shown on the phone). */
+  let importing: {id: string; name: string; stage: string; done?: number; total?: number} | null = null
+  /** PDFs waiting for their pages from the phone screen (pdf.js runs there). */
+  const pdfs = new Map<string, {bytes: Uint8Array; name: string; size: number; pages: string[]}>()
+  const booksState = () => ({
+    available: library.available,
+    mode: assistant.settings.booksMode,
+    list: library.list,
+    importing,
+  })
+  const MAX_BOOK_BYTES = 32 * 1024 * 1024
+  const bookError = (e: unknown) =>
+    e instanceof BookError ? e.message : `Не удалось прочитать книгу: ${String((e as Error)?.message ?? e)}`
 
   // ── Where you are, the weather, the calendar (questions and the guide) ──
   const locator = makeLocator(session)
@@ -259,6 +291,7 @@ registerMiniapp((session: any) => {
     onChange: pushState,
     nav: makeNavHost(session, (msg) => assistant.addLog("info", msg), tiles, locator),
     context: session.location ? context : undefined,
+    library: library.available ? library : undefined,
   })
 
   assistant.addLog("info", `Запущено, версия ${APP_VERSION}`)
@@ -505,6 +538,118 @@ registerMiniapp((session: any) => {
 
   // «Проверить картинку на очках»: a test frame with the visible area outlined.
   session.ui.handle("navTestBitmap", () => ({ok: assistant.testBitmap(testPattern())}))
+
+
+  // ── books ──
+  // Pick a file in iOS Files (Mentra keeps it in the app's storage), read it, keep its text.
+  session.ui.handle("bookImport", async () => {
+    if (!library.available) return {ok: false, error: "Эта версия Mentra не умеет добавлять файлы"}
+    if (importing) return {ok: false, error: "Книга уже добавляется"}
+    const id = `b${Date.now().toString(36)}`
+    const key = `books/src/${id}`
+    importing = {id, name: "", stage: "Выберите файл"}
+    pushState()
+    try {
+      const meta: any = await blob.importFile({key})
+      if (!meta) {
+        importing = null
+        return {ok: false, cancelled: true}
+      }
+      const name = String(meta.name ?? "")
+      const size = Number(meta.bytes) || 0
+      importing = {id, name, stage: "Читаю файл"}
+      pushState()
+      if (size > MAX_BOOK_BYTES) throw new BookError("Файл больше 32 МБ — такой не прочитать на телефоне")
+      const bytes: Uint8Array | null = await blob.bytes(key)
+      if (!bytes) throw new BookError("Файл не сохранился в Mentra — попробуйте ещё раз")
+      if (detectFormat(bytes, name) === "pdf") {
+        pdfs.set(id, {bytes, name, size: bytes.length, pages: []})
+        importing = {id, name, stage: "PDF: читаю страницы"}
+        pushState()
+        return {ok: true, id, pdf: true, name, size: bytes.length}
+      }
+      importing = {id, name, stage: "Разбираю книгу"}
+      pushState()
+      const book = await parseBook(bytes, name)
+      const added = await library.add(book, {id, name, size: bytes.length})
+      await blob.delete(key).catch(() => {})
+      importing = null
+      pushState()
+      warmBooks()
+      return {ok: true, id, title: added.title}
+    } catch (e) {
+      await blob.delete(key).catch(() => {})
+      importing = null
+      const error = bookError(e)
+      assistant.addLog("error", `Книга: ${error}`)
+      pushState()
+      return {ok: false, error}
+    }
+  })
+
+  // The PDF's bytes for pdf.js on the phone screen, a slice at a time (base64).
+  session.ui.handle("bookPdfBytes", (p: {id: string; offset: number; length: number}) => {
+    const f = pdfs.get(String(p?.id))
+    if (!f) return {ok: false}
+    const from = Math.max(0, Math.round(Number(p.offset) || 0))
+    const to = Math.min(f.bytes.length, from + Math.min(1_000_000, Math.max(1, Math.round(Number(p.length) || 0))))
+    return {ok: true, total: f.bytes.length, b64: toBase64(f.bytes.subarray(from, to))}
+  })
+
+  // Text of PDF pages read by pdf.js, in batches.
+  session.ui.handle("bookPdfPages", (p: {id: string; start: number; pages: string[]; total: number}) => {
+    const f = pdfs.get(String(p?.id))
+    if (!f || !Array.isArray(p.pages)) return {ok: false}
+    const start = Math.max(0, Math.round(Number(p.start) || 0))
+    p.pages.forEach((t, i) => (f.pages[start + i] = String(t ?? "")))
+    importing = {id: p.id, name: f.name, stage: "PDF: читаю страницы", done: start + p.pages.length, total: Number(p.total) || undefined}
+    pushState()
+    return {ok: true}
+  })
+
+  session.ui.handle("bookPdfDone", async (p: {id: string; title?: string; author?: string; outline?: {title: string; page: number}[]; error?: string}) => {
+    const id = String(p?.id)
+    const f = pdfs.get(id)
+    pdfs.delete(id)
+    await blob?.delete?.(`books/src/${id}`)?.catch?.(() => {})
+    try {
+      if (!f) throw new BookError("PDF не найден — добавьте его заново")
+      if (p.error) throw new BookError(`PDF не прочитался: ${p.error}`)
+      importing = {id, name: f.name, stage: "Разбираю книгу"}
+      pushState()
+      const book = pdfToBook(f.pages.map((x) => x ?? ""), {title: p.title, author: p.author, name: f.name}, Array.isArray(p.outline) ? p.outline : [])
+      const added = await library.add(book, {id, name: f.name, size: f.size})
+      importing = null
+      pushState()
+      warmBooks()
+      return {ok: true, title: added.title}
+    } catch (e) {
+      importing = null
+      const error = bookError(e)
+      assistant.addLog("error", `Книга: ${error}`)
+      pushState()
+      return {ok: false, error}
+    }
+  })
+
+  // in mode «Книги» the library is read ahead, so the first question does not wait
+  const warmBooks = () => {
+    if (assistant.settings.booksMode && library.available) setTimeout(() => void library.ready().catch(() => {}), 1500)
+  }
+  warmBooks()
+
+  session.ui.handle("bookDelete", async (p: {id: string}) => {
+    await library.remove(String(p?.id))
+    return snap()
+  })
+  session.ui.handle("bookToggle", (p: {id: string; on: boolean}) => {
+    library.setOn(String(p?.id), Boolean(p?.on))
+    return snap()
+  })
+  session.ui.handle("booksMode", (p: {on: boolean}) => {
+    assistant.setBooksMode(Boolean(p?.on), "ui")
+    return snap()
+  })
 
   // Full notes of the current or last lecture (the state snapshot carries only the latest ones).
   session.ui.handle("getLecture", () => assistant.lecture.record)

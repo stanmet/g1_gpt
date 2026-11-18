@@ -66,6 +66,8 @@ const ui = await Bun.build({
   outdir: join(dist, "ui"),
   target: "browser",
   minify: true,
+  // pdf.js (~1.4 MB) goes into its own chunk, loaded only when a PDF book is added
+  splitting: true,
   plugins: [vendorResolver],
 })
 if (!ui.success) {

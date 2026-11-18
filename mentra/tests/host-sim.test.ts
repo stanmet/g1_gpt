@@ -64,7 +64,32 @@ function fakeBlobHost() {
   const files = new Map<string, Buffer>()
   const urls: string[] = []
   const handles = new Map<string, {key: string; done: boolean}>()
+  const writing = new Map<string, Buffer[]>()
+  /** The file the next «pick a file» returns (iOS Files picker), or null = cancelled. */
+  const picker: {next: {name: string; bytes: Buffer} | null} = {next: null}
+  const meta = (key: string, b: Buffer, name = "") => ({key, name, bytes: b.length, mimeType: "application/octet-stream", uri: "file:///x", createdAt: 0, updatedAt: 0})
   const replies: Record<string, (p: any) => unknown> = {
+    miniapp_blob_import: (p) => {
+      const f = picker.next
+      picker.next = null
+      if (!f) return null
+      files.set(p.key, f.bytes)
+      return meta(p.key, f.bytes, f.name)
+    },
+    miniapp_blob_create: (p) => {
+      writing.set(p.key, [])
+      return {key: p.key}
+    },
+    miniapp_blob_write: (p) => {
+      writing.get(p.key)!.push(Buffer.from(p.base64, "base64"))
+      return {bytesWritten: 0}
+    },
+    miniapp_blob_commit: (p) => {
+      const b = Buffer.concat(writing.get(p.key) ?? [])
+      writing.delete(p.key)
+      files.set(p.key, b)
+      return meta(p.key, b)
+    },
     miniapp_blob_set_from_url: (p) => {
       urls.push(p.url)
       files.set(p.key, TILE)
@@ -84,7 +109,7 @@ function fakeBlobHost() {
     miniapp_blob_close_read: () => null,
     miniapp_blob_delete: (p) => void files.delete(p.key),
   }
-  return {files, urls, replies}
+  return {files, urls, replies, picker}
 }
 
 /** Open-Meteo's answer shape (forecast), trimmed. */
@@ -564,5 +589,61 @@ test("built bundle: weather, calendar and «Где я?» through the real SDK br
   const st = h.uiReplies().find((e) => e.payload.requestId === "st")!.payload.payload.result
   expect(st.context).toEqual({location: true, calendar: true})
   expect(st.guide).toMatchObject({active: false, available: true})
-  expect(st.version).toBe("1.16.0")
+  expect(st.version).toBe("1.17.0")
+}, 15000)
+
+test("built bundle: books — EPUB and PDF added through Mentra's file picker, answers only from them", async () => {
+  const BOOKS = new URL("./fixtures/books/", import.meta.url)
+  const h = makeHost(["Штольц, построили, 1874, инженер, чертежи", "Маяк построили в 1874 году по чертежам инженера Карла Штольца (гл. 1)."])
+  vm.runInContext(readFileSync(BUNDLE, "utf8"), h.ctx, {filename: "background/index.js"})
+  h.ctx.__mentraInitCallback("s")
+  await sleep(50)
+  h.ev("_ui", {type: "UI_OPEN"})
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "saveSettings", payload: {apiKey: "sk-test-abcdefghijklmnop", useLocation: false}, seq: 1, requestId: "k"})
+  await sleep(30)
+  const result = (id: string) => h.uiReplies().find((e) => e.payload.requestId === id)?.payload.payload.result
+
+  // EPUB: picked, read, split into pieces, kept as text; the picked file itself is removed
+  h.blobHost.picker.next = {name: "mayak.epub", bytes: readFileSync(new URL("mayak.epub", BOOKS))}
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "bookImport", payload: {}, seq: 2, requestId: "imp"})
+  await sleep(300)
+  expect(result("imp")).toMatchObject({ok: true, title: "Маяк на Северном мысе"})
+  const keys = [...h.blobHost.files.keys()]
+  expect(keys.filter((k) => k.startsWith("books/src/"))).toEqual([])
+  expect(keys.filter((k) => /^books\/b\w+\.json$/.test(k))).toHaveLength(1)
+
+  // PDF: the bytes go to the phone screen, its pages come back
+  const pdf = readFileSync(new URL("mayak.pdf", BOOKS))
+  h.blobHost.picker.next = {name: "mayak.pdf", bytes: pdf}
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "bookImport", payload: {}, seq: 3, requestId: "pdf"})
+  await sleep(100)
+  const r = result("pdf")
+  expect(r).toMatchObject({ok: true, pdf: true, name: "mayak.pdf", size: pdf.length})
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "bookPdfBytes", payload: {id: r.id, offset: 0, length: 524288}, seq: 4, requestId: "bytes"})
+  await sleep(50)
+  expect(Buffer.from(result("bytes").b64, "base64").equals(pdf)).toBe(true)
+  const page = (t: string) => `${t}\n\nСмотритель Ефим Громов служил на маяке сорок лет и каждую ночь записывал в журнал погоду и проходящие суда.`
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "bookPdfPages", payload: {id: r.id, start: 0, pages: ["Маяк на Северном мысе", page("Глава 1"), page("Глава 2"), page("Глава 3")], total: 4}, seq: 5, requestId: "pg"})
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "bookPdfDone", payload: {id: r.id, title: "Microsoft Word - mayak.docx", outline: [{title: "Глава 1", page: 2}, {title: "Глава 2", page: 3}]}, seq: 6, requestId: "done"})
+  await sleep(200)
+  expect(result("done")).toMatchObject({ok: true, title: "mayak"})
+
+  // the mode, then a question answered only from the books
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "booksMode", payload: {on: true}, seq: 7, requestId: "mode"})
+  await sleep(30)
+  const st = result("mode")
+  expect(st.books.mode).toBe(true)
+  expect(st.books.list.map((b: any) => [b.title, b.format, b.pages ?? 0])).toEqual([["mayak", "pdf", 4], ["Маяк на Северном мысе", "epub", 0]])
+  h.ev("transcription:ru-RU", {text: "Вопрос, кто построил маяк?", isFinal: true})
+  await sleep(2300)
+  expect(h.openaiCalls).toHaveLength(2)
+  expect(h.openaiCalls[0].body.instructions).toContain("поиск по тексту книг")
+  expect(h.openaiCalls[1].body.instructions).toContain("ТОЛЬКО эти отрывки")
+  expect(h.openaiCalls[1].body.input.at(-1).content).toContain("«Маяк на Северном мысе», Глава 1. Камни и чертежи:")
+  expect(h.renders().at(-1)).toContain("Карла Штольца")
+
+  // delete
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "bookDelete", payload: {id: r.id}, seq: 8, requestId: "del"})
+  await sleep(50)
+  expect(result("del").books.list).toHaveLength(1)
 }, 15000)

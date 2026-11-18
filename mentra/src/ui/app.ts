@@ -39,7 +39,7 @@ let modelOptionsFor: Provider | null = null
 let sheetProvider: Provider = "openai"
 const TABS = ["glasses", "chat", "settings"] as const
 type Tab = (typeof TABS)[number]
-const PAGES = ["ai", "keys", "about", "voice", "display", "context", "translate", "lecture", "talk", "log", "info", "notes", "commands", "nav"] as const
+const PAGES = ["ai", "keys", "about", "voice", "display", "context", "translate", "lecture", "talk", "log", "info", "notes", "commands", "nav", "books"] as const
 type Page = (typeof PAGES)[number]
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
@@ -67,6 +67,16 @@ function previewBridge(): Bridge {
     version: "preview",
     context: {location: true, calendar: false},
     guide: {active: false, available: true, notes: []},
+    books: {
+      available: true,
+      mode: false,
+      importing: null,
+      list: [
+        {id: "p1", title: "Мастер и Маргарита", author: "Михаил Булгаков", format: "fb2", lang: "ru", file: "master.fb2", size: 1_400_000, words: 133_000, chunks: 840, sections: 32, addedAt: now - 86400000, on: true},
+        {id: "p2", title: "Thinking, Fast and Slow", author: "Daniel Kahneman", format: "epub", lang: "en", file: "kahneman.epub", size: 2_900_000, words: 182_000, chunks: 1150, sections: 38, addedAt: now - 3600000, on: true},
+        {id: "p3", title: "Конспект по экономике", author: "", format: "pdf", lang: "ru", file: "econ.pdf", size: 6_100_000, words: 41_000, chunks: 260, sections: 9, pages: 120, addedAt: now - 600000, on: false},
+      ],
+    },
     settings: {
       model: "gpt-6.1-terra",
       effort: "auto",
@@ -221,6 +231,33 @@ function previewBridge(): Bridge {
         return b64 ? {ok: true, b64} : {ok: false}
       }
       if (channel === "mapLocate") return {ok: true, lat: 47.3779, lng: 8.5403}
+      // books: a PDF given by a test page (window.__previewPdf, base64) goes the real pdf.js way
+      if (channel === "booksMode") state.books = {...state.books, mode: Boolean(payload?.on)}
+      if (channel === "bookToggle") state.books.list = state.books.list.map((b: any) => (b.id === payload.id ? {...b, on: payload.on} : b))
+      if (channel === "bookDelete") state.books.list = state.books.list.filter((b: any) => b.id !== payload.id)
+      if (channel === "bookImport") {
+        const pdf = (window as any).__previewPdf as string | undefined
+        if (!pdf) return {ok: false, error: "В просмотре файлы не выбираются"}
+        ;(window as any).__previewPdfBytes = b64ToBytes(pdf)
+        return {ok: true, id: "pdf1", pdf: true, name: "mayak.pdf", size: (window as any).__previewPdfBytes.length}
+      }
+      if (channel === "bookPdfBytes") {
+        const all = (window as any).__previewPdfBytes as Uint8Array
+        const part = all.subarray(payload.offset, payload.offset + payload.length)
+        let bin = ""
+        for (const c of part) bin += String.fromCharCode(c)
+        return {ok: true, total: all.length, b64: btoa(bin)}
+      }
+      if (channel === "bookPdfPages") {
+        const got = ((window as any).__previewPdfPages ??= [])
+        payload.pages.forEach((t: string, i: number) => (got[payload.start + i] = t))
+        return {ok: true}
+      }
+      if (channel === "bookPdfDone") {
+        ;(window as any).__previewPdfDone = payload
+        state.books.list = [{id: "pdf1", title: "mayak", author: "", format: "pdf", lang: "ru", file: "mayak.pdf", size: 31850, words: 220, chunks: 4, sections: payload.outline?.length ?? 0, addedAt: Date.now(), on: true}, ...state.books.list]
+        return {ok: true, title: "mayak"}
+      }
       if (channel === "mapEstimate") return {2: 4, 5: 18, 15: 96}
       if (channel === "mapDownload") {
         state.maps = {...state.maps, download: {areaId: "a1", name: "", radiusKm: payload.radiusKm, done: 23, total: 64, failed: 0, bytes: 4_200_000}}
@@ -337,6 +374,7 @@ function render(s: any) {
   const st = s.settings ?? {}
   renderGlasses(s, st)
   renderNavigator(s, st)
+  renderBooks(s)
   renderChat(s)
   renderNotes(s)
   renderSettings(s, st)
@@ -569,6 +607,145 @@ async function mirrorFrame(id: number) {
     // next state push tries again
   } finally {
     mirrorBusy = false
+  }
+}
+
+
+// ── books ──
+
+const FORMAT_LABEL: Record<string, string> = {epub: "EPUB", fb2: "FB2", pdf: "PDF", docx: "DOCX", txt: "TXT"}
+/** Import running on this screen (the PDF part needs the screen open). */
+let bookLocal: {text: string; done?: number; total?: number} | null = null
+
+function fmtWords(n: number): string {
+  return n >= 10_000 ? `${Math.round(n / 1000)} тыс. слов` : `${n} ${plural(n, "слово", "слова", "слов")}`
+}
+
+function renderBooks(s: any) {
+  const b = s.books ?? {available: false, list: []}
+  const list: any[] = b.list ?? []
+  const on = list.filter((x) => x.on).length
+  $("booksRowSub").textContent = !b.available
+    ? "Недоступно в этой версии Mentra"
+    : list.length
+      ? `${list.length} ${plural(list.length, "книга", "книги", "книг")}${b.mode ? " · отвечаю по ним" : ""}`
+      : "Добавьте книги — ответы только по ним"
+  const sw = $<HTMLInputElement>("booksModeSwitch")
+  if (document.activeElement !== sw) sw.checked = Boolean(b.mode)
+  sw.disabled = !b.available
+  $("booksProblem").hidden = b.available !== false
+  $("booksProblem").textContent = "Эта версия Mentra не умеет хранить файлы приложений. Обновите Mentra."
+  $("booksTitle").textContent = list.length ? `Библиотека · в ответах ${on} из ${list.length}` : "Библиотека"
+
+  const box = $("bookList")
+  const sig = JSON.stringify(list.map((x) => [x.id, x.on, x.title]))
+  if (box.dataset.sig !== sig) {
+    box.dataset.sig = sig
+    box.textContent = ""
+    for (const x of list) {
+      const row = document.createElement("div")
+      row.className = "book" + (x.on ? "" : " off")
+      const label = document.createElement("span")
+      label.className = "row-label"
+      const title = document.createElement("span")
+      title.className = "book-title"
+      title.textContent = x.title
+      const sub = document.createElement("span")
+      sub.className = "row-sub"
+      sub.textContent = [
+        x.author,
+        FORMAT_LABEL[x.format] ?? x.format,
+        x.pages ? `${x.pages} стр.` : "",
+        x.sections ? `${x.sections} ${plural(x.sections, "глава", "главы", "глав")}` : "",
+        fmtWords(x.words ?? 0),
+      ]
+        .filter(Boolean)
+        .join(" · ")
+      label.append(title, sub)
+      const use = document.createElement("input")
+      use.type = "checkbox"
+      use.className = "switch"
+      use.checked = Boolean(x.on)
+      use.setAttribute("aria-label", `«${x.title}» в ответах`)
+      use.addEventListener("change", () => void call("bookToggle", {id: x.id, on: use.checked}))
+      const del = document.createElement("button")
+      del.type = "button"
+      del.className = "book-del"
+      del.textContent = "Удалить"
+      del.addEventListener("click", () => confirmTap(del, "Точно?", () => void call("bookDelete", {id: x.id})))
+      row.append(label, use, del)
+      box.appendChild(row)
+    }
+  }
+
+  // progress: this screen's own (PDF) or what the app reports
+  const p = bookLocal ?? (b.importing ? {text: [b.importing.name, b.importing.stage].filter(Boolean).join(" — "), done: b.importing.done, total: b.importing.total} : null)
+  $("bookProgress").hidden = !p
+  if (p) {
+    $("bookProgressText").textContent = p.text + (p.total ? ` · ${p.done ?? 0} из ${p.total}` : "")
+    ;($("bookProgressBar") as HTMLElement).style.width = p.total ? `${Math.round((100 * (p.done ?? 0)) / p.total)}%` : "12%"
+  }
+  $<HTMLButtonElement>("bookAdd").disabled = !b.available || Boolean(p)
+}
+
+function setBookProgress(p: typeof bookLocal) {
+  bookLocal = p
+  if (current) renderBooks(current)
+}
+
+/** «Добавить книгу»: Mentra opens the file picker; a PDF is then read here, on the screen. */
+async function addBook() {
+  setBookProgress({text: "Выберите файл"})
+  try {
+    const r: any = await bridge.request("bookImport", {}, {timeout: 20 * 60_000})
+    if (!r?.ok) {
+      if (!r?.cancelled) toast(r?.error ?? "Не получилось добавить книгу", 6000)
+      return
+    }
+    if (r.pdf) await addPdf(r.id, r.size, r.name)
+    else toast(`Добавлена: «${r.title}»`, 3000)
+  } catch (e: any) {
+    toast(`Не получилось: ${e?.message ?? e}`, 6000)
+  } finally {
+    setBookProgress(null)
+    void call("getState")
+  }
+}
+
+async function addPdf(id: string, size: number, name: string) {
+  const CHUNK = 512 * 1024
+  const bytes = new Uint8Array(size)
+  let off = 0
+  try {
+    while (off < size) {
+      setBookProgress({text: `${name} — загружаю`, done: Math.round(off / 1024), total: Math.round(size / 1024)})
+      const r: any = await bridge.request("bookPdfBytes", {id, offset: off, length: CHUNK}, {timeout: 60_000})
+      if (!r?.ok) throw new Error("PDF не передался с телефона")
+      const part = b64ToBytes(r.b64)
+      if (!part.length) break
+      bytes.set(part, off)
+      off += part.length
+    }
+    setBookProgress({text: `${name} — открываю PDF`})
+    const {readPdf} = await import("./pdf")
+    let batch: string[] = []
+    let batchStart = 0
+    const info = await readPdf(bytes, async (i, total, text) => {
+      batch.push(text)
+      setBookProgress({text: `${name} — читаю страницы`, done: i + 1, total})
+      if (batch.length >= 20 || i === total - 1) {
+        await bridge.request("bookPdfPages", {id, start: batchStart, pages: batch, total}, {timeout: 60_000})
+        batchStart = i + 1
+        batch = []
+      }
+    })
+    setBookProgress({text: `${name} — разбираю книгу`})
+    const done: any = await bridge.request("bookPdfDone", {id, title: info.title, author: info.author, outline: info.outline}, {timeout: 120_000})
+    if (done?.ok) toast(`Добавлена: «${done.title}»`, 3000)
+    else toast(done?.error ?? "PDF не прочитался", 6000)
+  } catch (e: any) {
+    await bridge.request("bookPdfDone", {id, error: String(e?.message ?? e)}, {timeout: 30_000}).catch(() => null)
+    toast(`PDF не прочитался: ${e?.message ?? e}`, 6000)
   }
 }
 
@@ -1426,6 +1603,11 @@ function wire() {
         ? "На очках рамка и надпись «EVA-IA · карта» на 8 секунд. Если их нет — выключите «Карту на очках»."
         : "Эта версия Mentra не показывает картинки на очках",
     )
+  })
+
+  $("bookAdd").addEventListener("click", () => void addBook())
+  $<HTMLInputElement>("booksModeSwitch").addEventListener("change", (e) => {
+    void call("booksMode", {on: (e.target as HTMLInputElement).checked})
   })
 
   wireSettings()

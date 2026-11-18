@@ -5147,7 +5147,7 @@
     "evening",
     "afternoon"
   ]);
-  var TIME_TAIL = /\s+(?:сегодня|завтра|послезавтра|сейчас|утром|днем|днём|вечером|ночью|на выходных|на неделе|на этой неделе|на следующей неделе|today|tomorrow|tonight|now|this week|next week|this weekend)\b.*$/iu;
+  var TIME_TAIL = /\s+(?:сегодня|завтра|послезавтра|сейчас|утром|днем|днём|вечером|ночью|на выходных|на неделе|на этой неделе|на следующей неделе|today|tomorrow|tonight|now|this week|next week|this weekend)(?=\s|$).*$/iu;
   function weatherPlace(q) {
     const t = String(q ?? "").replace(/[?？!.…,]+/gu, " ").replace(/\s+/g, " ").trim();
     const m = /(?:^|\s)(?:в|во|на|in|at|for)\s+((?:[A-ZА-ЯЁ][\p{L}'’-]*)(?:[\s-]+[A-ZА-ЯЁ][\p{L}'’-]*){0,2})/u.exec(t);
@@ -8272,6 +8272,477 @@ Stop: «стоп лекция»` : `Режим лекции
     }
   }
 
+  // src/background/books.ts
+  var STOP = new Set(("и в во не что он на я с со как а то все она так его но да ты к у же вы за бы по только ее мне было вот от меня еще нет о об из ему " + "теперь когда даже ну вдруг ли если уже или ни быть был него до вас нибудь опять уж вам ведь там потом себя ничего ей может они тут где " + "есть надо ней для мы тебя их чем была сам чтоб без будто чего раз тоже себе под будет ж тогда кто этот того потому этого какой совсем " + "ним здесь этом один почти мой тем чтобы нее сейчас были куда зачем всех никогда можно при наконец два об другой хоть после над больше " + "тот через эти нас про всего них какая много разве три эту моя впрочем хорошо свою этой перед иногда лучше чуть том нельзя такой им " + "более всегда конечно всю между это эта эти почему сколько какие какое каким который которая которое которые книге книги книга " + "the a an and or of to in on at by for with from as is are was were be been being it its this that these those he she they we you i " + "his her their our your my me him them what which who whom whose when where why how do does did not no but if then so than too very " + "can could would should will shall may might must there here about into over after before up down out just also only book").split(" "));
+  var VOWEL = /[аеиоуыэюя]/;
+  function stemRu(word) {
+    const w = word.replace(/ё/g, "е");
+    const m = /^(.*?[аеиоуыэюя])(.*)$/.exec(w);
+    if (!m)
+      return w;
+    const pre = m[1];
+    let rv = m[2];
+    const cut = (re) => {
+      const r = re.exec(rv);
+      if (!r)
+        return false;
+      rv = rv.slice(0, r.index) + (r[1] && /^[ая]$/.test(r[1]) && r.length > 2 ? r[1] : "");
+      return true;
+    };
+    if (!cut(/(ившись|ывшись|ивши|ывши|ив|ыв)$/) && !cut(/([ая])(вшись|вши|в)$/)) {
+      rv = rv.replace(/(ся|сь)$/, "");
+      if (cut(/(ими|ыми|его|ого|ему|ому|ее|ие|ые|ое|ей|ий|ый|ой|ем|им|ым|ом|их|ых|ую|юю|ая|яя|ою|ею)$/)) {
+        if (!cut(/(ивш|ывш|ующ)$/))
+          cut(/([ая])(ем|нн|вш|ющ|щ)$/);
+      } else if (!cut(/(уйте|ейте|ила|ыла|ена|ите|или|ыли|ило|ыло|ено|ует|уют|ены|ить|ыть|ишь|ей|уй|ил|ыл|им|ым|ен|ят|ит|ыт|ую|ю)$/) && !cut(/([ая])(ете|йте|ешь|нно|ла|на|ли|ем|ло|но|ет|ют|ны|ть|й|л|н)$/)) {
+        cut(/(иями|ями|ами|ией|иям|ием|иях|ев|ов|ие|ье|еи|ии|ей|ой|ий|ям|ем|ам|ом|ах|ях|ию|ью|ия|ья|а|е|и|й|о|у|ы|ь|ю|я)$/);
+      }
+    }
+    rv = rv.replace(/и$/, "");
+    const word2 = pre + rv;
+    const r1 = regionStart(word2, 0);
+    const r2 = regionStart(word2, r1);
+    const d = /(ость|ост)$/.exec(rv);
+    if (d && pre.length + d.index >= r2)
+      rv = rv.slice(0, d.index);
+    if (/нн$/.test(rv))
+      rv = rv.slice(0, -1);
+    else if (/(ейше|ейш)$/.test(rv)) {
+      rv = rv.replace(/(ейше|ейш)$/, "");
+      if (/нн$/.test(rv))
+        rv = rv.slice(0, -1);
+    } else
+      rv = rv.replace(/ь$/, "");
+    return pre + rv;
+  }
+  function regionStart(w, from) {
+    for (let i = from + 1;i < w.length; i++)
+      if (!VOWEL.test(w[i]) && VOWEL.test(w[i - 1]))
+        return i + 1;
+    return w.length;
+  }
+  var EN_SUFFIXES = ["ational", "ization", "fulness", "ousness", "iveness", "tional", "ements", "ement", "ments", "ment", "ness", "ings", "ing", "ions", "ion", "ies", "ied", "ed", "ly", "es", "s"];
+  function stemEn(word) {
+    let w = word.replace(/'s$/, "");
+    if (w.length <= 3)
+      return w;
+    for (const s of EN_SUFFIXES) {
+      if (w.endsWith(s) && w.length - s.length >= 3) {
+        if (s === "s" && /(ss|us|is)$/.test(w))
+          break;
+        w = w.slice(0, -s.length);
+        if (s === "ies" || s === "ied")
+          w += "i";
+        if (/(bb|dd|ff|gg|mm|nn|pp|rr|tt)$/.test(w))
+          w = w.slice(0, -1);
+        break;
+      }
+    }
+    return w;
+  }
+  function terms(text) {
+    const out = [];
+    for (const raw of String(text ?? "").toLowerCase().replace(/ё/g, "е").split(/[^\p{L}\p{N}]+/u)) {
+      if (raw.length < 2 || STOP.has(raw))
+        continue;
+      if (/^\d+$/.test(raw)) {
+        out.push(raw);
+        continue;
+      }
+      out.push(/[а-я]/.test(raw) ? stemRu(raw) : /[a-z]/.test(raw) ? stemEn(raw) : raw);
+    }
+    return out;
+  }
+  function wordCount2(s) {
+    return String(s ?? "").split(/\s+/).filter(Boolean).length;
+  }
+  var TARGET = 160;
+  var MAX = 260;
+  function makeChunks(book) {
+    const total = book.sections.reduce((a, s) => a + wordCount2(s.text), 0) || 1;
+    const chunks = [];
+    let seen = 0;
+    book.sections.forEach((sec, si) => {
+      let buf = [];
+      let n = 0;
+      let startAt = seen;
+      const push = () => {
+        if (!buf.length)
+          return;
+        chunks.push({ s: si, ...sec.page ? { pg: sec.page } : {}, at: Math.min(1, startAt / total), t: buf.join(`
+`) });
+        buf = [];
+        n = 0;
+        startAt = seen;
+      };
+      for (const para of sec.text.split(`
+`)) {
+        const words = wordCount2(para);
+        if (!words)
+          continue;
+        if (words > MAX) {
+          push();
+          let part = [];
+          let pn = 0;
+          for (const sent of para.split(/(?<=[.!?…])\s+/)) {
+            const sw = wordCount2(sent);
+            if (pn + sw > TARGET && part.length) {
+              buf = [part.join(" ")];
+              seen += pn;
+              push();
+              part = [];
+              pn = 0;
+            }
+            part.push(sent);
+            pn += sw;
+          }
+          if (part.length) {
+            buf = [part.join(" ")];
+            n = pn;
+            seen += pn;
+            if (n >= TARGET)
+              push();
+          }
+          continue;
+        }
+        if (n + words > MAX && n > 0)
+          push();
+        buf.push(para);
+        n += words;
+        seen += words;
+        if (n >= TARGET)
+          push();
+      }
+      push();
+    });
+    return { sections: book.sections.map((s) => s.title), chunks, words: total };
+  }
+
+  class BookIndex {
+    postings = new Map;
+    lengths = [];
+    docs = [];
+    avg = 1;
+    constructor(books) {
+      for (const book of books) {
+        book.chunks.forEach((c, i) => {
+          const id = this.docs.length;
+          this.docs.push({ book, i });
+          const tf = new Map;
+          const ts = terms(c.t);
+          for (const t of ts)
+            tf.set(t, (tf.get(t) ?? 0) + 1);
+          this.lengths.push(ts.length);
+          for (const [t, n] of tf) {
+            let p = this.postings.get(t);
+            if (!p)
+              this.postings.set(t, p = []);
+            p.push(id, n);
+          }
+        });
+      }
+      this.avg = this.lengths.reduce((a, b) => a + b, 0) / Math.max(1, this.lengths.length) || 1;
+    }
+    get size() {
+      return this.docs.length;
+    }
+    search(query, phrases = [], k = 12) {
+      const N = this.docs.length;
+      const scores = new Map;
+      const k1 = 1.2;
+      const b = 0.75;
+      const seen = new Set;
+      for (const { term, w } of query) {
+        if (seen.has(term))
+          continue;
+        seen.add(term);
+        const p = this.postings.get(term);
+        if (!p)
+          continue;
+        const df = p.length / 2;
+        const idf = Math.log(1 + (N - df + 0.5) / (df + 0.5));
+        for (let j = 0;j < p.length; j += 2) {
+          const d = p[j];
+          const tf = p[j + 1];
+          const s = idf * tf * (k1 + 1) / (tf + k1 * (1 - b + b * this.lengths[d] / this.avg));
+          scores.set(d, (scores.get(d) ?? 0) + w * s);
+        }
+      }
+      const lowPhrases = phrases.map((p) => p.toLowerCase().replace(/ё/g, "е")).filter((p) => p.split(/\s+/).length >= 2);
+      if (lowPhrases.length) {
+        for (const [d, s] of scores) {
+          const text = this.docs[d].book.chunks[this.docs[d].i].t.toLowerCase().replace(/ё/g, "е");
+          let bonus = 0;
+          for (const p of lowPhrases)
+            if (text.includes(p))
+              bonus += 2;
+          if (bonus)
+            scores.set(d, s + bonus);
+        }
+      }
+      return [...scores.entries()].sort((a, b2) => b2[1] - a[1]).slice(0, k).map(([d, score]) => ({ book: this.docs[d].book, i: this.docs[d].i, score }));
+    }
+  }
+  function sourceLabel(book, c) {
+    const t = book.meta.title.length > 60 ? book.meta.title.slice(0, 58) + "…" : book.meta.title;
+    const sec = book.sections[c.s] ?? "";
+    const parts = [`«${t}»`];
+    if (sec)
+      parts.push(/^(глава|chapter|часть|part|книга|book)(?=[\s.:\d]|$)/i.test(sec) ? sec : `гл. «${sec.length > 70 ? sec.slice(0, 68) + "…" : sec}»`);
+    if (c.pg)
+      parts.push(`стр. ${c.pg}`);
+    else if (!sec)
+      parts.push(`≈ ${Math.round(c.at * 100)}% книги`);
+    return parts.join(", ");
+  }
+  function pickExcerpts(hits, budget = 1800) {
+    if (!hits.length)
+      return [];
+    const top = hits[0].score;
+    const out = [];
+    const used = new Set;
+    const perSection = new Map;
+    let words = 0;
+    const add = (book, i) => {
+      const key = `${book.meta.id}:${i}`;
+      const c = book.chunks[i];
+      if (!c || used.has(key))
+        return false;
+      const sk = `${book.meta.id}:${c.s}`;
+      if ((perSection.get(sk) ?? 0) >= 3)
+        return false;
+      const n = wordCount2(c.t);
+      if (words + n > budget && out.length)
+        return false;
+      used.add(key);
+      perSection.set(sk, (perSection.get(sk) ?? 0) + 1);
+      words += n;
+      out.push({ label: sourceLabel(book, c), text: c.t, book, i });
+      return true;
+    };
+    hits.forEach((h, rank) => {
+      if (h.score < top * 0.25)
+        return;
+      if (add(h.book, h.i) && rank < 2) {
+        const next = h.book.chunks[h.i + 1];
+        if (next && next.s === h.book.chunks[h.i].s)
+          add(h.book, h.i + 1);
+      }
+    });
+    return out;
+  }
+  var LANG_NAME = { ru: "русский", en: "английский", de: "немецкий", fr: "французский", es: "испанский", it: "итальянский", uk: "украинский" };
+  function buildQueryPrompt(question, books, prev) {
+    const langs = [...new Set(books.map((b) => b.lang || "ru"))];
+    const system = [
+      "Ты готовишь поиск по тексту книг пользователя (поиск по словам, не по смыслу).",
+      `Языки книг: ${langs.map((l) => LANG_NAME[l] ?? l).join(", ")}. Выпиши 6–14 слов и коротких фраз, которые вероятно встречаются в нужном месте книги: имена, термины, ключевые слова вопроса и их синонимы, слова, которыми автор мог это описать.`,
+      langs.some((l) => l !== "ru") ? "Пиши на языках книг: если вопрос по-русски, а книга на английском — переведи слова на английский (можно дать оба варианта)." : "",
+      "Если вопрос продолжает предыдущий («а он», «что дальше»), подставь, о ком или о чём речь.",
+      "Одна строка, через запятую, без пояснений."
+    ].filter(Boolean).join(`
+`);
+    const list = books.map((b) => `«${b.title}»${b.author ? ` (${b.author})` : ""}`).join("; ");
+    return { system, user: `Книги: ${list}
+${prev ? `Предыдущий вопрос: «${prev}»
+` : ""}Вопрос: «${question}»` };
+  }
+  function parseQueryWords(reply) {
+    const items = String(reply ?? "").replace(/^[^:\n]{0,30}:\s*/, "").split(/[,;\n]/).map((s) => s.replace(/^[\s«"“'*•-]+|[\s»"”'*.]+$/g, "").trim()).filter((s) => s && s.length <= 60).slice(0, 24);
+    return { words: items, phrases: items.filter((s) => s.split(/\s+/).length >= 2) };
+  }
+  function bookSystem(words, en) {
+    return [
+      "Ты отвечаешь по личной библиотеке пользователя. Тебе дают отрывки из его книг, найденные по вопросу. Ответ показывается на крошечном дисплее умных очков.",
+      "Используй ТОЛЬКО эти отрывки. Не добавляй ничего из своих знаний, интернета или здравого смысла, даже если уверен.",
+      en ? "If the excerpts do not answer the question, reply exactly: «Not in the books.» and, in one sentence, what the books do say on the topic if anything." : "Если в отрывках нет ответа — ответь «В книгах этого нет.» и одним предложением, что в книгах есть по теме, если есть.",
+      "Цитаты — только дословно из отрывков, в кавычках. Если отрывки противоречат друг другу — скажи об этом.",
+      "В конце в скобках — источник: книга и глава или страница, как в метке отрывка.",
+      `Отвечай на языке вопроса, коротко: до ${words} слов, без Markdown, без вступлений.`
+    ].join(`
+`);
+  }
+  function bookUser(question, excerpts) {
+    const ex = excerpts.map((e, i) => `[${i + 1}] ${e.label}:
+${e.text}`).join(`
+
+`);
+    return `Отрывки из книг:
+
+${ex}
+
+Вопрос: ${question}`;
+  }
+  var BOOKS_ON = [
+    "книги",
+    "режим книг",
+    "режим книги",
+    "режим книга",
+    "включи книги",
+    "по книгам",
+    "отвечай по книгам",
+    "библиотека",
+    "режим библиотеки",
+    "включи библиотеку",
+    "мои книги",
+    "books",
+    "books mode",
+    "library mode"
+  ];
+  var BOOKS_OFF = [
+    "стоп книги",
+    "выключи книги",
+    "выйди из книг",
+    "хватит книг",
+    "обычный режим",
+    "отвечай как обычно",
+    "стоп библиотека",
+    "выключи библиотеку",
+    "книги стоп",
+    "books off",
+    "stop books"
+  ];
+  var norm = (s) => String(s ?? "").toLowerCase().replace(/ё/g, "е").replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+  var ON = new Set(BOOKS_ON.map(norm));
+  var OFF = new Set(BOOKS_OFF.map(norm));
+  function parseBooksCommand(text) {
+    let words = norm(text).split(" ").filter(Boolean);
+    const FILLERS = /^(пожалуйста|ну|так|давай|а|и|окей|ок|please|ok|okay)$/;
+    while (words.length > 1 && FILLERS.test(words[0]))
+      words = words.slice(1);
+    while (words.length > 1 && FILLERS.test(words[words.length - 1]))
+      words = words.slice(0, -1);
+    const s = words.join(" ");
+    if (OFF.has(s))
+      return "off";
+    if (ON.has(s))
+      return "on";
+    return null;
+  }
+  function booksPrefix(q) {
+    const m = /^\s*(?:по (?:моим )?книгам|по (?:моей )?книге|в (?:моих )?книгах|из (?:моих )?книг|in my books|from my books)\s*[,:—–-]?\s+(.{3,})$/iu.exec(String(q ?? ""));
+    return m ? m[1].trim() : null;
+  }
+  var dataKey = (id) => `books/${id}.json`;
+
+  class Library {
+    deps;
+    list;
+    data = new Map;
+    index = null;
+    indexKey = "";
+    loading = null;
+    constructor(deps) {
+      this.deps = deps;
+      this.list = deps.loadList();
+    }
+    get available() {
+      return Boolean(this.deps.blob);
+    }
+    get active() {
+      return this.list.filter((b) => b.on);
+    }
+    async add(book, file) {
+      if (!this.deps.blob)
+        throw new Error("хранилище файлов Mentra недоступно");
+      const { sections, chunks, words } = makeChunks(book);
+      if (!chunks.length)
+        throw new Error("в книге не нашлось текста");
+      const meta = {
+        id: file.id,
+        title: book.title.trim() || "Без названия",
+        author: book.author.trim(),
+        format: book.format,
+        lang: book.lang || "ru",
+        file: file.name,
+        size: file.size,
+        words,
+        chunks: chunks.length,
+        sections: new Set(sections.filter(Boolean)).size,
+        ...book.format === "pdf" ? { pages: book.sections.reduce((m, s) => Math.max(m, s.page ?? 0), 0) } : {},
+        addedAt: this.deps.now(),
+        on: true
+      };
+      const data = { v: 1, meta, sections, chunks };
+      await this.deps.blob.set(dataKey(meta.id), new TextEncoder().encode(JSON.stringify(data)), { mimeType: "application/json", name: `${meta.title}.json` });
+      this.data.set(meta.id, data);
+      this.list = [meta, ...this.list.filter((b) => b.id !== meta.id)];
+      this.deps.saveList(this.list);
+      this.index = null;
+      this.deps.log("info", `Книга добавлена: «${meta.title}»${meta.author ? `, ${meta.author}` : ""} — ${words} слов, глав ${meta.sections}`);
+      this.deps.onChange();
+      return meta;
+    }
+    async remove(id) {
+      const b = this.list.find((x) => x.id === id);
+      if (!b)
+        return;
+      try {
+        await this.deps.blob?.delete(dataKey(id));
+      } catch {}
+      this.data.delete(id);
+      this.list = this.list.filter((x) => x.id !== id);
+      this.deps.saveList(this.list);
+      this.index = null;
+      this.deps.log("info", `Книга удалена: «${b.title}»`);
+      this.deps.onChange();
+    }
+    setOn(id, on) {
+      const b = this.list.find((x) => x.id === id);
+      if (!b || b.on === on)
+        return;
+      b.on = on;
+      this.deps.saveList(this.list);
+      this.index = null;
+      this.deps.onChange();
+    }
+    async load(id) {
+      const have = this.data.get(id);
+      if (have)
+        return have;
+      const bytes = await this.deps.blob?.bytes(dataKey(id));
+      if (!bytes)
+        return null;
+      const d = JSON.parse(new TextDecoder("utf-8").decode(bytes));
+      if (!Array.isArray(d?.chunks))
+        return null;
+      const meta = this.list.find((b) => b.id === id);
+      if (meta)
+        d.meta = meta;
+      this.data.set(id, d);
+      return d;
+    }
+    async ready() {
+      const key = this.active.map((b) => b.id).join(",");
+      if (this.index && this.indexKey === key)
+        return this.index;
+      if (this.loading)
+        return this.loading;
+      this.loading = (async () => {
+        const books = [];
+        for (const b of this.active) {
+          try {
+            const d = await this.load(b.id);
+            if (d)
+              books.push(d);
+            else
+              this.deps.log("error", `Книга «${b.title}» не найдена на телефоне — добавьте её заново`);
+          } catch (e) {
+            this.deps.log("error", `Книга «${b.title}» не читается: ${String(e?.message ?? e)}`);
+          }
+        }
+        this.index = books.length ? new BookIndex(books) : null;
+        this.indexKey = key;
+        return this.index;
+      })();
+      try {
+        return await this.loading;
+      } finally {
+        this.loading = null;
+      }
+    }
+  }
+
   // src/background/openai.ts
   var OPENAI_URL = "https://api.openai.com/v1/responses";
   function pad2(n) {
@@ -9533,6 +10004,7 @@ ${prevTips.map((t) => "— " + t).join(`
     guideAuto: false,
     translateReplies: true,
     talkSearch: true,
+    booksMode: false,
     v: SETTINGS_VERSION
   };
   function migrateSettings(raw) {
@@ -9558,6 +10030,7 @@ ${prevTips.map((t) => "— " + t).join(`
   var TALK_KEY = "g1gpt.talk.v1";
   var NAV_KEY = "g1gpt.nav.v1";
   var MAP_AREAS_KEY = "g1gpt.mapAreas.v1";
+  var BOOKS_KEY = "g1gpt.books.v1";
   function clampInt(v, min, max, dflt) {
     const n = typeof v === "number" ? v : parseInt(String(v), 10);
     if (!Number.isFinite(n))
@@ -9607,6 +10080,7 @@ ${prevTips.map((t) => "— " + t).join(`
       guideAuto: pick("guideAuto") === true,
       translateReplies: pick("translateReplies") !== false,
       talkSearch: pick("talkSearch") !== false,
+      booksMode: pick("booksMode") === true,
       v: SETTINGS_VERSION
     };
   }
@@ -9674,6 +10148,13 @@ ${prevTips.map((t) => "— " + t).join(`
     }
     saveMapAreas(a) {
       this.write(MAP_AREAS_KEY, a);
+    }
+    loadBooks() {
+      const a = this.read(BOOKS_KEY);
+      return Array.isArray(a) ? a.filter((b) => b && typeof b.id === "string" && typeof b.title === "string") : [];
+    }
+    saveBooks(list) {
+      this.write(BOOKS_KEY, list);
     }
     loadNav() {
       const t = this.read(NAV_KEY);
@@ -10121,6 +10602,9 @@ ${prevTips.map((t) => "— " + t).join(`
         this.switchProvider(switchTo, "voice");
         return;
       }
+      const books = parseBooksCommand(body);
+      if (books && (wake.matched || books === "off" || normalize(body).split(" ").length >= 2))
+        return this.setBooksMode(books === "on", "voice");
       const nav = this.navIntent(body);
       if (nav)
         return nav();
@@ -10259,7 +10743,8 @@ ${prevTips.map((t) => "— " + t).join(`
             return;
           }
         }
-        const nav = this.committed.length === 0 ? this.navIntent(clean) ?? this.guideIntent(clean) : null;
+        const booksCmd = this.committed.length === 0 ? parseBooksCommand(clean) : null;
+        const nav = booksCmd ? () => this.setBooksMode(booksCmd === "on", "voice") : this.committed.length === 0 ? this.navIntent(clean) ?? this.guideIntent(clean) : null;
         if (nav) {
           this.cancelTimer("silenceTimer");
           this.cancelTimer("wakeTimer");
@@ -10365,27 +10850,38 @@ ${prevTips.map((t) => "— " + t).join(`
         this.fail(explainLLMError(provider, 401, "no_key", ""), seq);
         return;
       }
-      this.show(fitScreen(`» ${q}
-…${providerOverride || provider !== "openai" ? label + " " : ""}думает`));
+      const bookQ = this.deps.library ? booksPrefix(q) ?? (this.settings.booksMode ? q : null) : null;
+      this.show(fitScreen(`» ${bookQ ?? q}
+…${bookQ ? "ищу в книгах" : `${providerOverride || provider !== "openai" ? label + " " : ""}думает`}`));
       try {
-        const ctx = await this.questionContext(q);
-        if (seq !== this.requestSeq)
-          return;
-        const settings = ctx.search && !this.settings.webSearch ? { ...this.settings, webSearch: true } : this.settings;
-        const res = await askLLM(this.deps.fetch, settings, provider, this.history, q, {
-          setTimer: (fn, ms) => this.setTimer(fn, ms),
-          now: this.now,
-          extra: ctx.extra,
-          timeoutMs: settings.webSearch ? 75000 : 60000
-        });
+        let res;
+        if (bookQ) {
+          const r = await this.answerFromBooks(bookQ, provider, seq);
+          if (!r)
+            return;
+          res = r;
+        } else {
+          const ctx = await this.questionContext(q);
+          if (seq !== this.requestSeq)
+            return;
+          const settings = ctx.search && !this.settings.webSearch ? { ...this.settings, webSearch: true } : this.settings;
+          res = await askLLM(this.deps.fetch, settings, provider, this.history, q, {
+            setTimer: (fn, ms) => this.setTimer(fn, ms),
+            now: this.now,
+            extra: ctx.extra,
+            timeoutMs: settings.webSearch ? 75000 : 60000
+          });
+        }
         if (seq !== this.requestSeq) {
           this.addLog("info", "Ответ на отменённый вопрос пропущен");
           return;
         }
         const usage = res.usage ? `, токены ${res.usage.input_tokens ?? "?"}→${res.usage.output_tokens ?? "?"}` : "";
-        this.addLog("openai", `${label}: ответ за ${(res.ms / 1000).toFixed(1)} с (${res.model}${usage})`);
+        if (res.model)
+          this.addLog("openai", `${label}: ответ за ${(res.ms / 1000).toFixed(1)} с (${res.model}${usage})`);
         const at = this.now();
-        this.history.push({ role: "user", content: q, at }, { role: "assistant", content: res.text, at, by: provider });
+        const src = bookQ ? { src: "books" } : {};
+        this.history.push({ role: "user", content: bookQ ?? q, at, ...src }, { role: "assistant", content: res.text, at, ...res.model ? { by: provider } : {}, ...src });
         this.lastProvider = provider;
         this.deps.store.saveHistory(this.history);
         this.lastAnswer = res.text;
@@ -11449,6 +11945,69 @@ ${text}`));
           this.flash(human, 5000);
       }
     }
+    setBooksMode(on, source) {
+      const lib = this.deps.library;
+      if (on && !lib) {
+        this.flash("Книги недоступны в этой версии Mentra.", 4000);
+        return;
+      }
+      if (this.settings.booksMode !== on)
+        this.updateSettings({ booksMode: on });
+      this.addLog("cmd", `Режим «Книги» ${on ? "включён" : "выключен"} (${source === "ui" ? "с телефона" : "голосом"})`);
+      if (on)
+        this.setTimer(() => void lib.ready().catch(() => {}), 300);
+      if (source !== "voice" && this.phase !== "idle")
+        return;
+      if (!on)
+        return this.flash(`Режим «Книги» выключен.
+Отвечаю как обычно.`, 2500);
+      const n = lib.active.length;
+      this.flash(n ? `Режим «Книги»: ${n} ${n === 1 ? "книга" : n < 5 ? "книги" : "книг"}.
+Отвечаю только по ним.
+Выключить: «стоп книги»` : lib.list.length ? `Режим «Книги»: все книги выключены.
+Включите нужные в приложении:
+Очки → Книги` : `Режим «Книги»: книг пока нет.
+Добавьте их в приложении:
+Очки → Книги`, 5000);
+    }
+    async answerFromBooks(q, provider, seq) {
+      const lib = this.deps.library;
+      const en = detectLang(q) === "en";
+      const local = (text) => ({ text, ms: 0, model: "" });
+      if (!lib.active.length)
+        return local(lib.list.length ? "Все книги выключены. Включите нужные в приложении: Очки → Книги." : "Книг пока нет. Добавьте их в приложении: Очки → Книги.");
+      const index = await lib.ready();
+      if (seq !== this.requestSeq)
+        return null;
+      if (!index)
+        return local("Книги не прочитались с телефона. Добавьте их заново: Очки → Книги.");
+      const prev = [...this.history].reverse().find((m) => m.src === "books" && m.role === "user")?.content ?? "";
+      let extra = { words: [], phrases: [] };
+      try {
+        const { system, user } = buildQueryPrompt(q, lib.active, prev);
+        extra = parseQueryWords(await this.completeOnce(system, user, { words: 30 }));
+      } catch (e) {
+        const err = e;
+        this.addLog("info", `Книги: ищу без подсказки нейросети (${explainLLMError(err?.provider ?? provider, Number(err?.status) || 0, String(err?.code ?? ""), String(err?.message ?? ""))})`);
+      }
+      if (seq !== this.requestSeq)
+        return null;
+      const query = [
+        ...terms(q).map((term) => ({ term, w: 1 })),
+        ...extra.words.flatMap((w) => terms(w)).map((term) => ({ term, w: 0.8 })),
+        ...terms(prev).map((term) => ({ term, w: 0.3 }))
+      ];
+      const excerpts = pickExcerpts(index.search(query, extra.phrases, 14));
+      this.addLog("info", `Книги: ${extra.words.length ? `ищу «${extra.words.slice(0, 8).join(", ")}» — ` : ""}отрывков ${excerpts.length}${excerpts.length ? `: ${[...new Set(excerpts.map((e) => e.label))].slice(0, 3).join("; ")}` : ""}`);
+      if (!excerpts.length)
+        return local(en ? "Not in the books." : "В книгах этого нет.");
+      const history = this.history.filter((m) => m.src === "books");
+      return askLLM(this.deps.fetch, { ...this.settings, webSearch: false }, provider, history, bookUser(q, excerpts), {
+        system: bookSystem(this.settings.answerWords, en),
+        setTimer: (fn, ms) => this.setTimer(fn, ms),
+        now: this.now
+      });
+    }
     snapshot() {
       const hint = (k) => k ? `${k.slice(0, k.startsWith("sk-ant-") ? 7 : 3)}…${k.slice(-4)}` : "";
       const provider = asProvider(this.settings.provider);
@@ -11541,7 +12100,551 @@ ${text}`));
     return parseGoal(raw.slice(start));
   }
   function looksLikeCommand(t) {
-    return Boolean(parseCommand(t) || parseTranslateCommand(t) || parseLectureCommand(t) || parseTalkCommand(t) || parsePhraseRequest(t) || parseSwitchCommand(t));
+    return Boolean(parseCommand(t) || parseTranslateCommand(t) || parseLectureCommand(t) || parseTalkCommand(t) || parsePhraseRequest(t) || parseSwitchCommand(t) || parseBooksCommand(t));
+  }
+
+  // src/background/bookparse.ts
+  class BookError extends Error {
+  }
+  var u16 = (b, o) => b[o] | b[o + 1] << 8;
+  var u32 = (b, o) => (b[o] | b[o + 1] << 8 | b[o + 2] << 16 | b[o + 3] << 24) >>> 0;
+  function unzip(bytes) {
+    let eocd = -1;
+    for (let i = bytes.length - 22;i >= Math.max(0, bytes.length - 65557); i--) {
+      if (u32(bytes, i) === 101010256) {
+        eocd = i;
+        break;
+      }
+    }
+    if (eocd < 0)
+      throw new BookError("Файл повреждён: это не zip-архив");
+    const count = u16(bytes, eocd + 10);
+    let p = u32(bytes, eocd + 16);
+    const out = new Map;
+    const utf8 = new TextDecoder("utf-8");
+    for (let i = 0;i < count && p + 46 <= bytes.length; i++) {
+      if (u32(bytes, p) !== 33639248)
+        break;
+      const method = u16(bytes, p + 10);
+      const csize = u32(bytes, p + 20);
+      const usize = u32(bytes, p + 24);
+      const nlen = u16(bytes, p + 28);
+      const xlen = u16(bytes, p + 30);
+      const clen = u16(bytes, p + 32);
+      const local = u32(bytes, p + 42);
+      const name = utf8.decode(bytes.subarray(p + 46, p + 46 + nlen));
+      p += 46 + nlen + xlen + clen;
+      if (name.endsWith("/"))
+        continue;
+      out.set(name, {
+        name,
+        read() {
+          if (u32(bytes, local) !== 67324752)
+            throw new BookError("Файл повреждён: zip-архив не читается");
+          const start = local + 30 + u16(bytes, local + 26) + u16(bytes, local + 28);
+          const data = bytes.subarray(start, start + csize);
+          if (method === 0)
+            return data;
+          if (method === 8)
+            return inflateRaw(data, usize || data.length * 4);
+          throw new BookError(`Сжатие ${method} в архиве не поддерживается`);
+        }
+      });
+    }
+    return out;
+  }
+  var CP1251 = "ЂЃ‚ѓ„…†‡€‰Љ‹ЊЌЋЏђ‘’“”•–—™љ›њќћџ ЎўЈ¤Ґ¦§Ё©Є«¬­®Ї°±Ііґµ¶·ё№є»јЅѕї" + "АБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдежзийклмнопрстуфхцчшщъыьэюя";
+  function decodeCp1251(b) {
+    let s = "";
+    const CH = 8192;
+    for (let i = 0;i < b.length; i += CH) {
+      const part = [];
+      for (let j = i;j < Math.min(b.length, i + CH); j++) {
+        const c = b[j];
+        part.push(c < 128 ? String.fromCharCode(c) : CP1251[c - 128]);
+      }
+      s += part.join("");
+    }
+    return s;
+  }
+  function decodeUtf16(b, le) {
+    const parts = [];
+    let chunk = [];
+    for (let i = 0;i + 1 < b.length; i += 2) {
+      chunk.push(le ? b[i] | b[i + 1] << 8 : b[i] << 8 | b[i + 1]);
+      if (chunk.length >= 8192) {
+        parts.push(String.fromCharCode(...chunk));
+        chunk = [];
+      }
+    }
+    if (chunk.length)
+      parts.push(String.fromCharCode(...chunk));
+    return parts.join("");
+  }
+  function looksUtf8(b) {
+    const n = Math.min(b.length, 200000);
+    let multi = 0;
+    for (let i = 0;i < n; ) {
+      const c = b[i];
+      const len = c < 128 ? 1 : c >= 194 && c < 224 ? 2 : c >= 224 && c < 240 ? 3 : c >= 240 && c < 245 ? 4 : 0;
+      if (!len)
+        return false;
+      for (let k = 1;k < len; k++) {
+        if (i + k >= n)
+          return true;
+        if ((b[i + k] & 192) !== 128)
+          return false;
+      }
+      if (len > 1)
+        multi++;
+      i += len;
+    }
+    return true;
+  }
+  function decodeText(b, declared = "") {
+    if (b[0] === 239 && b[1] === 187 && b[2] === 191)
+      return new TextDecoder("utf-8").decode(b.subarray(3));
+    if (b[0] === 255 && b[1] === 254)
+      return decodeUtf16(b.subarray(2), true);
+    if (b[0] === 254 && b[1] === 255)
+      return decodeUtf16(b.subarray(2), false);
+    const enc = declared.toLowerCase();
+    if (/1251|cp-?1251/.test(enc))
+      return decodeCp1251(b);
+    if (/utf-?16/.test(enc))
+      return decodeUtf16(b, true);
+    if (!enc || /utf-?8/.test(enc)) {
+      if (looksUtf8(b))
+        return new TextDecoder("utf-8").decode(b);
+      return decodeCp1251(b);
+    }
+    return looksUtf8(b) ? new TextDecoder("utf-8").decode(b) : decodeCp1251(b);
+  }
+  var ENTITIES = {
+    amp: "&",
+    lt: "<",
+    gt: ">",
+    quot: '"',
+    apos: "'",
+    nbsp: " ",
+    mdash: "—",
+    ndash: "–",
+    laquo: "«",
+    raquo: "»",
+    hellip: "…",
+    copy: "©",
+    reg: "®",
+    trade: "™",
+    bull: "•",
+    middot: "·",
+    lsquo: "‘",
+    rsquo: "’",
+    ldquo: "“",
+    rdquo: "”",
+    bdquo: "„",
+    shy: "",
+    thinsp: " ",
+    ensp: " ",
+    emsp: " ",
+    deg: "°",
+    times: "×",
+    minus: "−",
+    sect: "§",
+    para: "¶",
+    euro: "€",
+    pound: "£",
+    eacute: "é",
+    egrave: "è",
+    agrave: "à",
+    ccedil: "ç",
+    uuml: "ü",
+    ouml: "ö",
+    auml: "ä",
+    szlig: "ß",
+    iexcl: "¡",
+    iquest: "¿",
+    prime: "′",
+    Prime: "″"
+  };
+  function decodeEntities(s) {
+    return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) => {
+      if (e[0] === "#") {
+        const code = e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+        return Number.isFinite(code) && code > 0 && code < 1114112 ? String.fromCodePoint(code) : "";
+      }
+      return ENTITIES[e] ?? ENTITIES[e.toLowerCase()] ?? m;
+    });
+  }
+  var BLOCK_END = /<\/(?:p|div|h[1-6]|li|tr|blockquote|section|title|subtitle|v|stanza|poem|epigraph|cite|text-author|dd|dt|pre|table|ul|ol|figure|figcaption|article|aside|header|footer|td|th)\s*>|<br\s*\/?>|<(?:p|div|h[1-6]|li|tr|v|subtitle|empty-line)\b[^>]*\/>/gi;
+  function markupToText(xml) {
+    return decodeEntities(xml.replace(/<(script|style|head|binary)\b[\s\S]*?<\/\1\s*>/gi, " ").replace(/<!--[\s\S]*?-->/g, " ").replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").replace(BLOCK_END, `
+`).replace(/<[^>]+>/g, "")).split(`
+`).map((l) => l.replace(/[\s ]+/g, " ").trim()).filter(Boolean).join(`
+`);
+  }
+  function tagText(xml, tag) {
+    const m = new RegExp(`<(?:[\\w-]+:)?${tag}\\b[^>]*>([\\s\\S]*?)<\\/(?:[\\w-]+:)?${tag}\\s*>`, "i").exec(xml);
+    return m ? markupToText(m[1]).replace(/\n/g, " ").trim() : "";
+  }
+  function attr(tag, name) {
+    const m = new RegExp(`\\b${name}\\s*=\\s*("([^"]*)"|'([^']*)')`, "i").exec(tag);
+    return m ? decodeEntities(m[2] ?? m[3] ?? "") : "";
+  }
+  function guessLang(text) {
+    const sample = text.slice(0, 20000);
+    const cyr = (sample.match(/[а-яё]/gi) ?? []).length;
+    const lat = (sample.match(/[a-z]/gi) ?? []).length;
+    return cyr >= lat ? "ru" : "en";
+  }
+  var normLang = (l) => String(l ?? "").toLowerCase().split(/[-_]/)[0].trim();
+  function detectFormat(bytes, name = "") {
+    const n = name.toLowerCase();
+    if (bytes[0] === 37 && bytes[1] === 80 && bytes[2] === 68 && bytes[3] === 70)
+      return "pdf";
+    if (bytes[0] === 80 && bytes[1] === 75) {
+      if (n.endsWith(".epub"))
+        return "epub";
+      if (n.endsWith(".docx"))
+        return "docx";
+      if (n.endsWith(".fb2.zip") || n.endsWith(".fbz"))
+        return "fb2zip";
+      try {
+        const z = unzip(bytes);
+        if (z.has("META-INF/container.xml") || z.has("mimetype"))
+          return "epub";
+        if (z.has("word/document.xml"))
+          return "docx";
+        if ([...z.keys()].some((k) => k.toLowerCase().endsWith(".fb2")))
+          return "fb2zip";
+      } catch {
+        return null;
+      }
+      return null;
+    }
+    if (n.endsWith(".pdf"))
+      return "pdf";
+    const head = new TextDecoder("utf-8").decode(bytes.subarray(0, 600));
+    if (n.endsWith(".fb2") || /<FictionBook\b/i.test(head))
+      return "fb2";
+    if (n.endsWith(".epub") || n.endsWith(".docx"))
+      return null;
+    const sample = bytes.subarray(0, 4000);
+    let ctrl = 0;
+    for (const c of sample)
+      if (c < 9 || c > 13 && c < 32)
+        ctrl++;
+    return ctrl < sample.length * 0.02 ? "txt" : null;
+  }
+  var base = (p) => p.includes("/") ? p.slice(0, p.lastIndexOf("/") + 1) : "";
+  function joinPath(dir, rel) {
+    let r = rel.split("#")[0];
+    try {
+      r = decodeURIComponent(r);
+    } catch {}
+    const parts = (r.startsWith("/") ? r.slice(1) : dir + r).split("/");
+    const out = [];
+    for (const p of parts) {
+      if (p === "..")
+        out.pop();
+      else if (p && p !== ".")
+        out.push(p);
+    }
+    return out.join("/");
+  }
+  function readString(zip, path) {
+    const e = zip.get(path) ?? [...zip.values()].find((x) => x.name.toLowerCase() === path.toLowerCase());
+    if (!e)
+      return "";
+    const b = e.read();
+    const decl = /encoding\s*=\s*["']([\w-]+)/i.exec(new TextDecoder("utf-8").decode(b.subarray(0, 200)))?.[1] ?? "";
+    return decodeText(b, decl);
+  }
+  var yieldNow = () => new Promise((r) => setTimeout(r, 0));
+  async function parseEpub(bytes) {
+    const zip = unzip(bytes);
+    const container = readString(zip, "META-INF/container.xml");
+    const opfPath = /full-path\s*=\s*"([^"]+)"/i.exec(container)?.[1] ?? [...zip.keys()].find((k) => k.endsWith(".opf"));
+    if (!opfPath)
+      throw new BookError("В EPUB нет описания книги (OPF)");
+    const opf = readString(zip, opfPath);
+    const dir = base(opfPath);
+    const manifest = new Map;
+    for (const m of opf.matchAll(/<(?:[\w-]+:)?item\b[^>]*>/gi)) {
+      const id = attr(m[0], "id");
+      if (id)
+        manifest.set(id, { href: joinPath(dir, attr(m[0], "href")), type: attr(m[0], "media-type"), props: attr(m[0], "properties") });
+    }
+    const spine = [...opf.matchAll(/<(?:[\w-]+:)?itemref\b[^>]*>/gi)].map((m) => manifest.get(attr(m[0], "idref"))).filter((x) => x && /html|xml/i.test(x.type));
+    const toc = new Map;
+    const nav = [...manifest.values()].find((x) => /\bnav\b/.test(x.props));
+    if (nav) {
+      const html = readString(zip, nav.href);
+      for (const a of html.matchAll(/<a\b[^>]*href\s*=\s*("([^"]*)"|'([^']*)')[^>]*>([\s\S]*?)<\/a>/gi)) {
+        const file = joinPath(base(nav.href), a[2] ?? a[3] ?? "");
+        const title = markupToText(a[4]).replace(/\n/g, " ");
+        if (title && !toc.has(file))
+          toc.set(file, title);
+      }
+    }
+    const ncx = [...manifest.values()].find((x) => /ncx/i.test(x.type));
+    if (!toc.size && ncx) {
+      const xml = readString(zip, ncx.href);
+      for (const np of xml.matchAll(/<navLabel>\s*<text>([\s\S]*?)<\/text>\s*<\/navLabel>\s*<content\b[^>]*src\s*=\s*"([^"]*)"/gi)) {
+        const file = joinPath(base(ncx.href), np[2]);
+        const title = markupToText(np[1]).replace(/\n/g, " ");
+        if (title && !toc.has(file))
+          toc.set(file, title);
+      }
+    }
+    const sections = [];
+    for (const item of spine) {
+      const html = readString(zip, item.href);
+      const body = /<body\b[^>]*>([\s\S]*)<\/body>/i.exec(html)?.[1] ?? html;
+      const text = markupToText(body);
+      if (!text)
+        continue;
+      const heading = /<h[1-3]\b[^>]*>([\s\S]*?)<\/h[1-3]>/i.exec(body);
+      const title = toc.get(item.href) ?? (heading ? markupToText(heading[1]).replace(/\n/g, " ") : "");
+      sections.push({ title: title.slice(0, 160), text });
+      await yieldNow();
+    }
+    if (!sections.length)
+      throw new BookError("В EPUB не нашлось текста");
+    const lang = normLang(tagText(opf, "language")) || guessLang(sections.map((s) => s.text).join(" "));
+    return { title: tagText(opf, "title"), author: tagText(opf, "creator"), lang, format: "epub", sections };
+  }
+  function parseFb2(xml) {
+    const info = /<title-info\b[^>]*>([\s\S]*?)<\/title-info>/i.exec(xml)?.[1] ?? "";
+    const authorXml = /<author\b[^>]*>([\s\S]*?)<\/author>/i.exec(info)?.[1] ?? "";
+    const author = ["first-name", "middle-name", "last-name"].map((t) => tagText(authorXml, t)).filter(Boolean).join(" ") || tagText(authorXml, "nickname");
+    const title = tagText(info, "book-title");
+    const bodies = [...xml.matchAll(/<body\b([^>]*)>([\s\S]*?)<\/body>/gi)];
+    const main = bodies.filter((b) => !/name\s*=\s*["'](?:notes|comments|footnotes)["']/i.test(b[1]));
+    const content = (main.length ? main : bodies).map((b) => b[2]).join(`
+`);
+    const sections = [];
+    let current = { title: "", text: "" };
+    const re = /<title\b[^>]*>([\s\S]*?)<\/title>/gi;
+    let last = 0;
+    for (const m of content.matchAll(re)) {
+      const before = markupToText(content.slice(last, m.index));
+      const t = markupToText(m[1]).replace(/\n/g, ". ");
+      if (before) {
+        current.text = [current.text, before].filter(Boolean).join(`
+`);
+        sections.push(current);
+        current = { title: t, text: "" };
+      } else
+        current.title = current.title ? `${current.title}. ${t}` : t;
+      last = (m.index ?? 0) + m[0].length;
+    }
+    const tail = markupToText(content.slice(last));
+    if (tail)
+      current.text = [current.text, tail].filter(Boolean).join(`
+`);
+    if (current.text)
+      sections.push(current);
+    const kept = sections.filter((s) => s.text.trim());
+    if (!kept.length)
+      throw new BookError("В FB2 не нашлось текста");
+    for (const s of kept)
+      s.title = dropBookTitle(s.title, title);
+    const lang = normLang(tagText(info, "lang")) || guessLang(kept[0].text);
+    return { title, author, lang, format: "fb2", sections: kept.map((s) => ({ ...s, title: s.title.slice(0, 160) })) };
+  }
+  function parseDocx(bytes) {
+    const zip = unzip(bytes);
+    const doc = readString(zip, "word/document.xml");
+    if (!doc)
+      throw new BookError("В DOCX нет текста документа");
+    const headingIds = new Set;
+    for (const s of readString(zip, "word/styles.xml").matchAll(/<w:style\b[^>]*w:styleId="([^"]+)"[^>]*>([\s\S]*?)<\/w:style>/g)) {
+      const name = /<w:name w:val="([^"]+)"/.exec(s[2])?.[1] ?? "";
+      if (/^(heading|title|заголовок)(?=[\s\d]|$)/i.test(name))
+        headingIds.add(s[1]);
+    }
+    const isHeading = (id) => headingIds.has(id) || /^(heading|title|заголовок)\s*\d*$/i.test(id);
+    const sections = [];
+    let current = { title: "", text: "" };
+    for (const p of doc.matchAll(/<w:p\b[^>]*>([\s\S]*?)<\/w:p>/g)) {
+      const xml = p[1];
+      let raw = "";
+      for (const m of xml.matchAll(/<w:t(?:\s[^>\/]*)?>([\s\S]*?)<\/w:t>|<w:tab\/>|<w:br\b[^>]*\/>/g))
+        raw += m[1] ?? " ";
+      const text = decodeEntities(raw).replace(/[ \t ]+/g, " ").trim();
+      if (!text)
+        continue;
+      const style = /<w:pStyle w:val="([^"]+)"/.exec(xml)?.[1] ?? "";
+      if (isHeading(style) && text.length < 200) {
+        if (current.text)
+          sections.push(current);
+        current = { title: current.text ? text : [current.title, text].filter(Boolean).join(". "), text: "" };
+      } else
+        current.text = current.text ? `${current.text}
+${text}` : text;
+    }
+    if (current.text)
+      sections.push(current);
+    if (!sections.length)
+      throw new BookError("В DOCX не нашлось текста");
+    const core = readString(zip, "docProps/core.xml");
+    for (const s of sections)
+      s.title = dropBookTitle(s.title, tagText(core, "title"));
+    return {
+      title: tagText(core, "title"),
+      author: tagText(core, "creator"),
+      lang: guessLang(sections.map((s) => s.text).join(" ")),
+      format: "docx",
+      sections
+    };
+  }
+  function dropBookTitle(sectionTitle, bookTitle) {
+    const b = bookTitle.trim().toLowerCase();
+    if (!b)
+      return sectionTitle;
+    const parts = sectionTitle.split(". ").filter((p) => p.trim().toLowerCase() !== b);
+    return parts.join(". ");
+  }
+  var CHAPTER_LINE = /^(?:глава|часть|книга|раздел|пролог|эпилог|предисловие|послесловие|введение|заключение|chapter|part|book|prologue|epilogue|preface|introduction)(?=[\s.:\-–—\d]|$)[^\n]{0,80}$/i;
+  function parseTxt(text) {
+    const lines = text.replace(/\r\n?/g, `
+`).split(`
+`);
+    let title = "";
+    const first = lines.findIndex((l) => l.trim());
+    if (first >= 0 && lines[first].trim().length <= 80 && !lines[first + 1]?.trim() && !CHAPTER_LINE.test(lines[first].trim())) {
+      title = lines[first].trim();
+      lines.splice(0, first + 1);
+    }
+    const sections = [];
+    let current = { title: "", text: "" };
+    let paras = [];
+    let para = [];
+    const endPara = () => {
+      if (para.length)
+        paras.push(para.join(" ").replace(/\s+/g, " ").trim());
+      para = [];
+    };
+    const flush = () => {
+      endPara();
+      current.text = paras.filter(Boolean).join(`
+`);
+      if (current.text)
+        sections.push(current);
+      paras = [];
+    };
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (!line) {
+        endPara();
+        continue;
+      }
+      if (CHAPTER_LINE.test(line) && line.length <= 90) {
+        flush();
+        current = { title: line, text: "" };
+        continue;
+      }
+      if (/^\s{2,}|^\t/.test(raw))
+        endPara();
+      para.push(line);
+    }
+    flush();
+    if (!sections.length)
+      throw new BookError("В файле нет текста");
+    return { title, author: "", lang: guessLang(text), format: "txt", sections };
+  }
+  async function parseBook(bytes, name = "") {
+    const fmt = detectFormat(bytes, name);
+    let book;
+    switch (fmt) {
+      case "epub":
+        book = await parseEpub(bytes);
+        break;
+      case "docx":
+        book = parseDocx(bytes);
+        break;
+      case "fb2zip": {
+        const z = unzip(bytes);
+        const e = [...z.values()].find((x) => x.name.toLowerCase().endsWith(".fb2"));
+        if (!e)
+          throw new BookError("В архиве нет FB2");
+        const b = e.read();
+        book = parseFb2(decodeText(b, /encoding\s*=\s*["']([\w-]+)/i.exec(new TextDecoder("utf-8").decode(b.subarray(0, 200)))?.[1] ?? ""));
+        break;
+      }
+      case "fb2":
+        book = parseFb2(decodeText(bytes, /encoding\s*=\s*["']([\w-]+)/i.exec(new TextDecoder("utf-8").decode(bytes.subarray(0, 200)))?.[1] ?? ""));
+        break;
+      case "txt":
+        book = parseTxt(decodeText(bytes));
+        break;
+      case "pdf":
+        throw new BookError("PDF читается на экране телефона");
+      default:
+        throw new BookError("Этот формат не поддерживается: нужны EPUB, FB2, PDF, DOCX или TXT");
+    }
+    if (!book.title)
+      book.title = fileTitle(name);
+    return book;
+  }
+  function fileTitle(name) {
+    return String(name ?? "").replace(/^.*[\\/]/, "").replace(/(\.fb2)?\.(zip|epub|fb2|fbz|docx|txt|pdf)$/i, "").replace(/[_]+/g, " ").trim() || "Без названия";
+  }
+  function pdfPageText(page) {
+    const lines = String(page ?? "").split(`
+`).map((l) => l.replace(/\s+/g, " ").trim()).filter((l) => !/^[-–—\s]*\d{1,4}[-–—\s]*$/.test(l) || !l);
+    const paras = [];
+    let cur = "";
+    for (const line of lines) {
+      if (!line) {
+        if (cur)
+          paras.push(cur);
+        cur = "";
+        continue;
+      }
+      if (!cur) {
+        cur = line;
+        continue;
+      }
+      if (/[а-яёa-z]-$/i.test(cur) && /^[а-яёa-z]/.test(line))
+        cur = cur.slice(0, -1) + line;
+      else if (/[.!?…:»"”)]$/.test(cur) && /^[«"„“(—–\-A-ZА-ЯЁ0-9]/.test(line)) {
+        paras.push(cur);
+        cur = line;
+      } else
+        cur += " " + line;
+    }
+    if (cur)
+      paras.push(cur);
+    return paras.join(`
+`);
+  }
+  function pdfToBook(pages, info, outline = []) {
+    const marks = outline.filter((o) => o.title && Number.isFinite(o.page) && o.page >= 1).sort((a, b) => a.page - b.page);
+    const sections = [];
+    pages.forEach((raw, i) => {
+      const page = i + 1;
+      const text = pdfPageText(raw);
+      if (!text)
+        return;
+      let title = "";
+      for (const m of marks)
+        if (m.page <= page)
+          title = m.title.replace(/\s+/g, " ").trim().slice(0, 160);
+      sections.push({ title, text, page });
+    });
+    const words = sections.reduce((a, s) => a + s.text.split(/\s+/).length, 0);
+    if (words < 30)
+      throw new BookError("В этом PDF нет текста — похоже, это скан страниц. Нужен PDF с текстовым слоем.");
+    const own = String(info.title ?? "").trim();
+    const junk = !own || /\.(docx?|pdf|txt|rtf|indd|tex|odt)$|^microsoft word|^untitled|^без имени/i.test(own);
+    return {
+      title: junk ? fileTitle(info.name ?? "") : own,
+      author: String(info.author ?? "").trim(),
+      lang: guessLang(sections.map((s) => s.text).join(" ")),
+      format: "pdf",
+      sections
+    };
   }
 
   // src/background/tiles.ts
@@ -11967,7 +13070,7 @@ ${text}`));
   }
 
   // src/background/index.ts
-  var APP_VERSION = "1.16.0";
+  var APP_VERSION = "1.17.0";
   function newToken() {
     return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
       const r = Math.random() * 16 | 0;
@@ -12106,7 +13209,7 @@ ${text}`));
       const d = session.capabilities?.display;
       return { x: 0, y: 0, w: d?.width ?? 576, h: d?.height ?? 200 };
     };
-    const snap = () => ({ ...assistant.snapshot(), version: APP_VERSION, maps: mapsState() });
+    const snap = () => ({ ...assistant.snapshot(), version: APP_VERSION, maps: mapsState(), books: booksState() });
     const getJson = async (url, ms = 15000) => {
       const res = await withTimeout2(globalThis.fetch(url, { method: "GET", headers: { Accept: "application/json" } }), ms, "fetch");
       if (!res?.ok)
@@ -12134,6 +13237,28 @@ ${text}`));
       download: tiles.download,
       areas: tiles.areas
     });
+    const library = new Library({
+      blob: blob && typeof blob.importFile === "function" ? {
+        set: (k, data, o) => blob.set(k, data, o),
+        bytes: (k) => blob.bytes(k),
+        delete: (k) => blob.delete(k)
+      } : null,
+      loadList: () => store.loadBooks(),
+      saveList: (l) => store.saveBooks(l),
+      log: (kind, msg) => assistant.addLog(kind, msg),
+      now: () => Date.now(),
+      onChange: () => pushState()
+    });
+    let importing = null;
+    const pdfs = new Map;
+    const booksState = () => ({
+      available: library.available,
+      mode: assistant.settings.booksMode,
+      list: library.list,
+      importing
+    });
+    const MAX_BOOK_BYTES = 32 * 1024 * 1024;
+    const bookError = (e) => e instanceof BookError ? e.message : `Не удалось прочитать книгу: ${String(e?.message ?? e)}`;
     const locator = makeLocator(session);
     const context = {
       status: () => ({
@@ -12163,7 +13288,8 @@ ${text}`));
       },
       onChange: pushState,
       nav: makeNavHost(session, (msg) => assistant.addLog("info", msg), tiles, locator),
-      context: session.location ? context : undefined
+      context: session.location ? context : undefined,
+      library: library.available ? library : undefined
     });
     assistant.addLog("info", `Запущено, версия ${APP_VERSION}`);
     const storageOk = store.selfTest();
@@ -12374,6 +13500,115 @@ ${text}`));
       return snap();
     });
     session.ui.handle("navTestBitmap", () => ({ ok: assistant.testBitmap(testPattern()) }));
+    session.ui.handle("bookImport", async () => {
+      if (!library.available)
+        return { ok: false, error: "Эта версия Mentra не умеет добавлять файлы" };
+      if (importing)
+        return { ok: false, error: "Книга уже добавляется" };
+      const id = `b${Date.now().toString(36)}`;
+      const key = `books/src/${id}`;
+      importing = { id, name: "", stage: "Выберите файл" };
+      pushState();
+      try {
+        const meta = await blob.importFile({ key });
+        if (!meta) {
+          importing = null;
+          return { ok: false, cancelled: true };
+        }
+        const name = String(meta.name ?? "");
+        const size = Number(meta.bytes) || 0;
+        importing = { id, name, stage: "Читаю файл" };
+        pushState();
+        if (size > MAX_BOOK_BYTES)
+          throw new BookError("Файл больше 32 МБ — такой не прочитать на телефоне");
+        const bytes = await blob.bytes(key);
+        if (!bytes)
+          throw new BookError("Файл не сохранился в Mentra — попробуйте ещё раз");
+        if (detectFormat(bytes, name) === "pdf") {
+          pdfs.set(id, { bytes, name, size: bytes.length, pages: [] });
+          importing = { id, name, stage: "PDF: читаю страницы" };
+          pushState();
+          return { ok: true, id, pdf: true, name, size: bytes.length };
+        }
+        importing = { id, name, stage: "Разбираю книгу" };
+        pushState();
+        const book = await parseBook(bytes, name);
+        const added = await library.add(book, { id, name, size: bytes.length });
+        await blob.delete(key).catch(() => {});
+        importing = null;
+        pushState();
+        warmBooks();
+        return { ok: true, id, title: added.title };
+      } catch (e) {
+        await blob.delete(key).catch(() => {});
+        importing = null;
+        const error = bookError(e);
+        assistant.addLog("error", `Книга: ${error}`);
+        pushState();
+        return { ok: false, error };
+      }
+    });
+    session.ui.handle("bookPdfBytes", (p) => {
+      const f = pdfs.get(String(p?.id));
+      if (!f)
+        return { ok: false };
+      const from = Math.max(0, Math.round(Number(p.offset) || 0));
+      const to = Math.min(f.bytes.length, from + Math.min(1e6, Math.max(1, Math.round(Number(p.length) || 0))));
+      return { ok: true, total: f.bytes.length, b64: toBase64(f.bytes.subarray(from, to)) };
+    });
+    session.ui.handle("bookPdfPages", (p) => {
+      const f = pdfs.get(String(p?.id));
+      if (!f || !Array.isArray(p.pages))
+        return { ok: false };
+      const start = Math.max(0, Math.round(Number(p.start) || 0));
+      p.pages.forEach((t, i) => f.pages[start + i] = String(t ?? ""));
+      importing = { id: p.id, name: f.name, stage: "PDF: читаю страницы", done: start + p.pages.length, total: Number(p.total) || undefined };
+      pushState();
+      return { ok: true };
+    });
+    session.ui.handle("bookPdfDone", async (p) => {
+      const id = String(p?.id);
+      const f = pdfs.get(id);
+      pdfs.delete(id);
+      await blob?.delete?.(`books/src/${id}`)?.catch?.(() => {});
+      try {
+        if (!f)
+          throw new BookError("PDF не найден — добавьте его заново");
+        if (p.error)
+          throw new BookError(`PDF не прочитался: ${p.error}`);
+        importing = { id, name: f.name, stage: "Разбираю книгу" };
+        pushState();
+        const book = pdfToBook(f.pages.map((x) => x ?? ""), { title: p.title, author: p.author, name: f.name }, Array.isArray(p.outline) ? p.outline : []);
+        const added = await library.add(book, { id, name: f.name, size: f.size });
+        importing = null;
+        pushState();
+        warmBooks();
+        return { ok: true, title: added.title };
+      } catch (e) {
+        importing = null;
+        const error = bookError(e);
+        assistant.addLog("error", `Книга: ${error}`);
+        pushState();
+        return { ok: false, error };
+      }
+    });
+    const warmBooks = () => {
+      if (assistant.settings.booksMode && library.available)
+        setTimeout(() => void library.ready().catch(() => {}), 1500);
+    };
+    warmBooks();
+    session.ui.handle("bookDelete", async (p) => {
+      await library.remove(String(p?.id));
+      return snap();
+    });
+    session.ui.handle("bookToggle", (p) => {
+      library.setOn(String(p?.id), Boolean(p?.on));
+      return snap();
+    });
+    session.ui.handle("booksMode", (p) => {
+      assistant.setBooksMode(Boolean(p?.on), "ui");
+      return snap();
+    });
     session.ui.handle("getLecture", () => assistant.lecture.record);
     session.ui.handle("getTalk", () => assistant.talk.record);
     session.ui.handle("simulateSpeech", (p) => {

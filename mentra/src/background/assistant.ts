@@ -35,6 +35,17 @@ import {
 import type {LatLng} from "./navmap"
 import {buildReplyPrompt, isReplyRequest, parseReplies, REPLY_PAUSE_MS, replyScreen, type Heard, type Reply} from "./replies"
 import {wordCount} from "./lecture"
+import {
+  bookSystem,
+  booksPrefix,
+  bookUser,
+  buildQueryPrompt,
+  parseBooksCommand,
+  parseQueryWords,
+  pickExcerpts,
+  terms,
+  type Library,
+} from "./books"
 import {askLLM, asProvider, displayName, explainLLMError, keyFor, LLMError, PROVIDERS, type Provider} from "./llm"
 import {Lecture, type LectureRecord} from "./lecture"
 import {
@@ -117,6 +128,8 @@ export interface AssistantDeps {
   showBitmap?(base64: string): void
   /** Where you are, the map around you, the weather and the phone calendar. */
   context?: ContextHost
+  /** Books added on the phone (mode «Книги»). */
+  library?: Library
 }
 
 /** What the phone offers for questions about place, weather and plans (index.ts). */
@@ -644,6 +657,9 @@ export class Assistant {
       return
     }
 
+    // a bare «Книги» said in passing must not switch the mode: one word needs the activator
+    const books = parseBooksCommand(body)
+    if (books && (wake.matched || books === "off" || normalize(body).split(" ").length >= 2)) return this.setBooksMode(books === "on", "voice")
     const nav = this.navIntent(body)
     if (nav) return nav()
     const guide = this.guideIntent(body)
@@ -789,7 +805,12 @@ export class Assistant {
           return
         }
       }
-      const nav = this.committed.length === 0 ? this.navIntent(clean) ?? this.guideIntent(clean) : null
+      const booksCmd = this.committed.length === 0 ? parseBooksCommand(clean) : null
+      const nav = booksCmd
+        ? () => this.setBooksMode(booksCmd === "on", "voice")
+        : this.committed.length === 0
+          ? this.navIntent(clean) ?? this.guideIntent(clean)
+          : null
       if (nav) {
         this.cancelTimer("silenceTimer")
         this.cancelTimer("wakeTimer")
@@ -899,26 +920,36 @@ export class Assistant {
       this.fail(explainLLMError(provider, 401, "no_key", ""), seq)
       return
     }
-    this.show(fitScreen(`» ${q}\n…${providerOverride || provider !== "openai" ? label + " " : ""}думает`))
+    // mode «Книги», or one question «по книгам, …»
+    const bookQ = this.deps.library ? (booksPrefix(q) ?? (this.settings.booksMode ? q : null)) : null
+    this.show(fitScreen(`» ${bookQ ?? q}\n…${bookQ ? "ищу в книгах" : `${providerOverride || provider !== "openai" ? label + " " : ""}думает`}`))
 
     try {
-      const ctx = await this.questionContext(q)
-      if (seq !== this.requestSeq) return
-      const settings = ctx.search && !this.settings.webSearch ? {...this.settings, webSearch: true} : this.settings
-      const res = await askLLM(this.deps.fetch, settings, provider, this.history, q, {
-        setTimer: ((fn: () => void, ms: number) => this.setTimer(fn, ms)) as unknown as typeof setTimeout,
-        now: this.now,
-        extra: ctx.extra,
-        timeoutMs: settings.webSearch ? 75000 : 60000,
-      })
+      let res: {text: string; ms: number; model: string; usage?: {input_tokens?: number; output_tokens?: number}}
+      if (bookQ) {
+        const r = await this.answerFromBooks(bookQ, provider, seq)
+        if (!r) return
+        res = r
+      } else {
+        const ctx = await this.questionContext(q)
+        if (seq !== this.requestSeq) return
+        const settings = ctx.search && !this.settings.webSearch ? {...this.settings, webSearch: true} : this.settings
+        res = await askLLM(this.deps.fetch, settings, provider, this.history, q, {
+          setTimer: ((fn: () => void, ms: number) => this.setTimer(fn, ms)) as unknown as typeof setTimeout,
+          now: this.now,
+          extra: ctx.extra,
+          timeoutMs: settings.webSearch ? 75000 : 60000,
+        })
+      }
       if (seq !== this.requestSeq) {
         this.addLog("info", "Ответ на отменённый вопрос пропущен")
         return
       }
       const usage = res.usage ? `, токены ${res.usage.input_tokens ?? "?"}→${res.usage.output_tokens ?? "?"}` : ""
-      this.addLog("openai", `${label}: ответ за ${(res.ms / 1000).toFixed(1)} с (${res.model}${usage})`)
+      if (res.model) this.addLog("openai", `${label}: ответ за ${(res.ms / 1000).toFixed(1)} с (${res.model}${usage})`)
       const at = this.now()
-      this.history.push({role: "user", content: q, at}, {role: "assistant", content: res.text, at, by: provider})
+      const src = bookQ ? {src: "books" as const} : {}
+      this.history.push({role: "user", content: bookQ ?? q, at, ...src}, {role: "assistant", content: res.text, at, ...(res.model ? {by: provider} : {}), ...src})
       this.lastProvider = provider
       this.deps.store.saveHistory(this.history)
       this.lastAnswer = res.text
@@ -2003,6 +2034,75 @@ Notes are in the app.`
     }
   }
 
+  // ───────────────────────────── mode «Книги» ─────────────────────────────
+
+  /** «Книги» on: every question is answered only from the books; «Стоп книги» off. */
+  setBooksMode(on: boolean, source: "voice" | "ui"): void {
+    const lib = this.deps.library
+    if (on && !lib) {
+      this.flash("Книги недоступны в этой версии Mentra.", 4000)
+      return
+    }
+    if (this.settings.booksMode !== on) this.updateSettings({booksMode: on})
+    this.addLog("cmd", `Режим «Книги» ${on ? "включён" : "выключен"} (${source === "ui" ? "с телефона" : "голосом"})`)
+    // read the books now, so the first question does not wait for it (seconds for a big library)
+    if (on) this.setTimer(() => void lib!.ready().catch(() => {}), 300)
+    if (source !== "voice" && this.phase !== "idle") return
+    if (!on) return this.flash("Режим «Книги» выключен.\nОтвечаю как обычно.", 2500)
+    const n = lib!.active.length
+    this.flash(
+      n
+        ? `Режим «Книги»: ${n} ${n === 1 ? "книга" : n < 5 ? "книги" : "книг"}.\nОтвечаю только по ним.\nВыключить: «стоп книги»`
+        : lib!.list.length
+          ? "Режим «Книги»: все книги выключены.\nВключите нужные в приложении:\nОчки → Книги"
+          : "Режим «Книги»: книг пока нет.\nДобавьте их в приложении:\nОчки → Книги",
+      5000,
+    )
+  }
+
+  /**
+   * An answer only from the books: search words from the AI (in the books' languages), a search on
+   * the phone, then the AI answers from the excerpts found. Null when the question was cancelled.
+   */
+  private async answerFromBooks(
+    q: string,
+    provider: Provider,
+    seq: number,
+  ): Promise<{text: string; ms: number; model: string; usage?: {input_tokens?: number; output_tokens?: number}} | null> {
+    const lib = this.deps.library!
+    const en = detectLang(q) === "en"
+    const local = (text: string) => ({text, ms: 0, model: ""})
+    if (!lib.active.length)
+      return local(lib.list.length ? "Все книги выключены. Включите нужные в приложении: Очки → Книги." : "Книг пока нет. Добавьте их в приложении: Очки → Книги.")
+    const index = await lib.ready()
+    if (seq !== this.requestSeq) return null
+    if (!index) return local("Книги не прочитались с телефона. Добавьте их заново: Очки → Книги.")
+    const prev = [...this.history].reverse().find((m) => m.src === "books" && m.role === "user")?.content ?? ""
+    let extra: {words: string[]; phrases: string[]} = {words: [], phrases: []}
+    try {
+      const {system, user} = buildQueryPrompt(q, lib.active, prev)
+      extra = parseQueryWords(await this.completeOnce(system, user, {words: 30}))
+    } catch (e) {
+      const err = e as LLMError
+      this.addLog("info", `Книги: ищу без подсказки нейросети (${explainLLMError(err?.provider ?? provider, Number(err?.status) || 0, String(err?.code ?? ""), String(err?.message ?? ""))})`)
+    }
+    if (seq !== this.requestSeq) return null
+    const query = [
+      ...terms(q).map((term) => ({term, w: 1})),
+      ...extra.words.flatMap((w) => terms(w)).map((term) => ({term, w: 0.8})),
+      ...terms(prev).map((term) => ({term, w: 0.3})),
+    ]
+    const excerpts = pickExcerpts(index.search(query, extra.phrases, 14))
+    this.addLog("info", `Книги: ${extra.words.length ? `ищу «${extra.words.slice(0, 8).join(", ")}» — ` : ""}отрывков ${excerpts.length}${excerpts.length ? `: ${[...new Set(excerpts.map((e) => e.label))].slice(0, 3).join("; ")}` : ""}`)
+    if (!excerpts.length) return local(en ? "Not in the books." : "В книгах этого нет.")
+    const history = this.history.filter((m) => m.src === "books")
+    return askLLM(this.deps.fetch, {...this.settings, webSearch: false}, provider, history, bookUser(q, excerpts), {
+      system: bookSystem(this.settings.answerWords, en),
+      setTimer: ((fn: () => void, ms: number) => this.setTimer(fn, ms)) as unknown as typeof setTimeout,
+      now: this.now,
+    })
+  }
+
   // ───────────────────────────── state for the phone UI ─────────────────────────────
 
   snapshot() {
@@ -2123,6 +2223,7 @@ function looksLikeCommand(t: string): boolean {
       parseLectureCommand(t) ||
       parseTalkCommand(t) ||
       parsePhraseRequest(t) ||
-      parseSwitchCommand(t),
+      parseSwitchCommand(t) ||
+      parseBooksCommand(t),
   )
 }

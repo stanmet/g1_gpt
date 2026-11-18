@@ -3,6 +3,7 @@
 import type {LectureRecord} from "./lecture"
 import type {NavTrip} from "./navigator"
 import type {OfflineArea} from "./tiles"
+import type {BookMeta} from "./books"
 export type ListenMode = "wake" | "always" | "off"
 export type Effort = "auto" | "none" | "low" | "medium" | "high"
 export type SttLanguage = "ru-RU" | "auto"
@@ -66,6 +67,8 @@ export interface Settings {
   translateReplies: boolean
   /** Conversation mode: claims are checked with a web search. */
   talkSearch: boolean
+  /** Mode «Книги»: questions are answered only from the books added on the phone. */
+  booksMode: boolean
   /** Settings schema version, for one-time migrations of stored settings. */
   v: number
 }
@@ -111,6 +114,7 @@ export const DEFAULT_SETTINGS: Settings = {
   guideAuto: false,
   translateReplies: true,
   talkSearch: true,
+  booksMode: false,
   v: SETTINGS_VERSION,
 }
 
@@ -136,6 +140,8 @@ export interface Message {
   at: number
   /** Which AI wrote an assistant message ("openai" | "anthropic" | "gemini"). */
   by?: ProviderId
+  /** "books": asked and answered in mode «Книги» (only these go with the next book question). */
+  src?: "books"
 }
 
 export interface KV {
@@ -159,6 +165,7 @@ const LECTURE_KEY = "g1gpt.lecture.v1"
 const TALK_KEY = "g1gpt.talk.v1"
 const NAV_KEY = "g1gpt.nav.v1"
 const MAP_AREAS_KEY = "g1gpt.mapAreas.v1"
+const BOOKS_KEY = "g1gpt.books.v1"
 
 function clampInt(v: unknown, min: number, max: number, dflt: number): number {
   const n = typeof v === "number" ? v : parseInt(String(v), 10)
@@ -212,6 +219,7 @@ export function normalizeSettings(raw: Partial<Settings> | null | undefined, bas
     guideAuto: pick("guideAuto") === true,
     translateReplies: pick("translateReplies") !== false,
     talkSearch: pick("talkSearch") !== false,
+    booksMode: pick("booksMode") === true,
     v: SETTINGS_VERSION,
   }
 }
@@ -294,6 +302,16 @@ export class Store {
 
   saveMapAreas(a: OfflineArea[]): void {
     this.write(MAP_AREAS_KEY, a)
+  }
+
+  /** The books added on the phone (their texts are in Mentra's file storage). */
+  loadBooks(): BookMeta[] {
+    const a = this.read<BookMeta[]>(BOOKS_KEY)
+    return Array.isArray(a) ? a.filter((b) => b && typeof b.id === "string" && typeof b.title === "string") : []
+  }
+
+  saveBooks(list: BookMeta[]): void {
+    this.write(BOOKS_KEY, list)
   }
 
   /** The running navigator trip, if any. */

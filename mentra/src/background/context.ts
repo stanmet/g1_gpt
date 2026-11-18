@@ -27,7 +27,7 @@ const NOT_A_PLACE = new Set([
 ])
 
 const TIME_TAIL =
-  /\s+(?:сегодня|завтра|послезавтра|сейчас|утром|днем|днём|вечером|ночью|на выходных|на неделе|на этой неделе|на следующей неделе|today|tomorrow|tonight|now|this week|next week|this weekend)\b.*$/iu
+  /\s+(?:сегодня|завтра|послезавтра|сейчас|утром|днем|днём|вечером|ночью|на выходных|на неделе|на этой неделе|на следующей неделе|today|tomorrow|tonight|now|this week|next week|this weekend)(?=\s|$).*$/iu
 
 /**
  * The town named in a weather question, as said: «погода в Москве» → «Москве», «weather in London
