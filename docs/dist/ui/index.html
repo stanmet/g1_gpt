@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light dark" />
     <title>EVA-IA</title>
     
-  <link rel="stylesheet" crossorigin href="./chunk-gbgxbhjj.css"><script type="module" crossorigin src="./chunk-m3m5n908.js"></script></head>
+  <link rel="stylesheet" crossorigin href="./chunk-1wv863a5.css"><script type="module" crossorigin src="./chunk-a6n6fbne.js"></script></head>
   <body>
     <!-- Icons, referenced with <svg><use href="#i-…"/></svg> -->
     <svg width="0" height="0" style="position: absolute" aria-hidden="true">
@@ -166,6 +166,11 @@
         <button class="card row" data-page="display" type="button">
           <svg class="row-icon"><use href="#i-screen" /></svg>
           <span class="row-label">Экран очков</span>
+          <span class="go"><svg><use href="#i-arrow" /></svg></span>
+        </button>
+        <button class="card row" data-page="context" type="button">
+          <svg class="row-icon"><use href="#i-pin" /></svg>
+          <span class="row-label">Место, погода, календарь<span class="row-sub" data-sub="context"></span></span>
           <span class="go"><svg><use href="#i-arrow" /></svg></span>
         </button>
       </div>
@@ -342,6 +347,35 @@
         </div>
       </section>
 
+      <section class="page" id="page-context" hidden>
+        <header class="page-top"><button class="circle back" type="button" aria-label="Назад"><svg><use href="#i-back" /></svg></button><h1>Место, погода, календарь</h1></header>
+        <div class="card list">
+          <label class="item">
+            <span class="row-label">Учитывать, где я<span class="row-sub">Улица и координаты добавляются к каждому вопросу: «где тут поесть», «сколько идти до вокзала»</span></span>
+            <input name="useLocation" type="checkbox" class="switch" />
+          </label>
+          <label class="item">
+            <span class="row-label">Календарь телефона<span class="row-sub">Когда спрашиваете о планах: «что у меня завтра», «свободен ли я в пятницу»</span></span>
+            <input name="useCalendar" type="checkbox" class="switch" />
+          </label>
+          <label class="item">
+            <span class="row-label">Гид на прогулке<span class="row-sub">Проходите мимо собора, музея, памятника — на очках короткая справка</span></span>
+            <input name="guideAuto" type="checkbox" class="switch" />
+          </label>
+        </div>
+        <p class="notice" id="contextPerm" hidden></p>
+        <p class="help">Погода — от Open-Meteo, без ключа: спросите «Нужен ли зонт?» или «Какая погода в Москве?». Справки гида пишет выбранная нейросеть с поиском в интернете — не чаще раза в минуту, только у заметных мест.</p>
+        <h2 class="section">Голосом</h2>
+        <div class="card list cmds">
+          <div class="cmd"><p class="cmd-say">«Где я?»</p><p class="cmd-do">Улица, дом, район — по карте на телефоне, без нейросети</p></div>
+          <div class="cmd"><p class="cmd-say">«Что интересного рядом?»</p><p class="cmd-do">Достопримечательности в полукилометре: сколько идти и в какую сторону</p></div>
+          <div class="cmd"><p class="cmd-say">«Что это за здание?»</p><p class="cmd-do">Нейросеть смотрит, что на карте рядом и куда вы идёте, ищет в интернете</p></div>
+          <div class="cmd"><p class="cmd-say">«Включи гида» · «Стоп гид»</p><p class="cmd-do">Гид на прогулке</p></div>
+          <div class="cmd"><p class="cmd-say">«Вопрос, нужен ли зонт?»</p><p class="cmd-do">Погода здесь или в названном городе</p></div>
+          <div class="cmd"><p class="cmd-say">«Вопрос, что у меня завтра?»</p><p class="cmd-do">События из календаря телефона</p></div>
+        </div>
+      </section>
+
       <section class="page" id="page-translate" hidden>
         <header class="page-top"><button class="circle back" type="button" aria-label="Назад"><svg><use href="#i-back" /></svg></button><h1>Перевод</h1></header>
         <div class="card list">
@@ -353,8 +387,12 @@
               <option value="en-US">Английский</option>
             </select>
           </label>
+          <label class="item">
+            <span class="row-label">Варианты ответа<span class="row-sub">Когда собеседник договорил — две короткие фразы на его языке и что они значат</span></span>
+            <input name="translateReplies" type="checkbox" class="switch" />
+          </label>
         </div>
-        <p class="help">Этот же язык — у тезисов лекции.</p>
+        <p class="help">Этот же язык — у тезисов лекции. Варианты можно попросить и голосом: «Что ответить?». Каждый вариант — запрос к нейросети.</p>
       </section>
 
       <section class="page" id="page-lecture" hidden>
@@ -377,6 +415,10 @@
             <output class="item-value" data-out="talkEverySec" data-zero="выкл."></output>
             <span class="stepper" data-step="talkEverySec" data-min="0" data-max="60" data-by="5" data-unit="с"><button type="button" data-d="-1" aria-label="Чаще">−</button><button type="button" data-d="1" aria-label="Реже">+</button></span>
           </div>
+          <label class="item">
+            <span class="row-label">Проверять в интернете<span class="row-sub">Утверждения с цифрами, датами, «доказано» — поиском. Точнее, но ответ через 5–15 с и дороже</span></span>
+            <input name="talkSearch" type="checkbox" class="switch" />
+          </label>
         </div>
         <p class="help" id="talkCost"></p>
         <h2 class="section">Цель беседы</h2>
@@ -487,6 +529,10 @@
           <input class="switch" type="checkbox" id="navMiniMapSwitch" />
         </label>
         <button class="item item-btn" id="navTestBtn" type="button"><span class="item-label">Проверить картинку на очках</span></button>
+        <label class="item" id="navGuideRow">
+          <span class="row-label">Гид на прогулке<span class="row-sub">Справка о соборе, музее, памятнике, мимо которого идёте</span></span>
+          <input class="switch" type="checkbox" id="navGuideSwitch" />
+        </label>
       </div>
 
       <h2 class="section">Офлайн-карты</h2>
@@ -514,6 +560,8 @@
         <div class="cmd"><p class="cmd-say">«Как доехать до аэропорта?»</p><p class="cmd-do">На машине; «как дойти до …» — пешком</p></div>
         <div class="cmd"><p class="cmd-say">«Сколько осталось?»</p><p class="cmd-do">Расстояние и время до цели</p></div>
         <div class="cmd"><p class="cmd-say">«Стоп навигация»</p><p class="cmd-do">Завершить маршрут</p></div>
+        <div class="cmd"><p class="cmd-say">«Где я?» · «Что интересного рядом?»</p><p class="cmd-do">По карте на телефоне, работает и без интернета, если карта скачана</p></div>
+        <div class="cmd"><p class="cmd-say">«Что это за здание?»</p><p class="cmd-do">Справка о месте перед вами</p></div>
       </div>
       <p class="help">Когда на очках нет ответа, там стрелка, расстояние и карта: улицы, тропинки, вода и парки вокруг, маршрут и вы. Близкий поворот на несколько секунд показывается текстом поверх ответа, лекции или перевода.</p>
     </section>
@@ -534,7 +582,7 @@
       <div class="card list cmds">
         <div class="cmd"><p class="cmd-say">«Транслейт»</p><p class="cmd-do">Перевод речи вокруг. «Стоп перевод» — выключить</p></div>
         <div class="cmd"><p class="cmd-say">«Лекция»</p><p class="cmd-do">Тезисы и ответы на вопросы лектора. «Стоп лекция»</p></div>
-        <div class="cmd"><p class="cmd-say">«Беседа»</p><p class="cmd-do">Факты, цитаты и подсказки в разговоре. «Стоп беседа»</p></div>
+        <div class="cmd"><p class="cmd-say">«Беседа»</p><p class="cmd-do">Проверка фактов, цитаты и ответы на вопросы в разговоре. «Стоп беседа»</p></div>
         <div class="cmd"><p class="cmd-say">«Вопрос, цель — …»</p><p class="cmd-do">Куда вести беседу</p></div>
       </div>
       <h2 class="section">Навигатор</h2>
@@ -542,6 +590,19 @@
         <div class="cmd"><p class="cmd-say">«Проведи до …» · «Как дойти до …»</p><p class="cmd-do">Маршрут с поворотами на очках</p></div>
         <div class="cmd"><p class="cmd-say">«Сколько осталось?»</p><p class="cmd-do">Расстояние и время до цели</p></div>
         <div class="cmd"><p class="cmd-say">«Стоп навигация»</p><p class="cmd-do">Завершить маршрут</p></div>
+      </div>
+      <h2 class="section">Гид, погода, планы</h2>
+      <div class="card list cmds">
+        <div class="cmd"><p class="cmd-say">«Где я?»</p><p class="cmd-do">Улица, дом и район по карте</p></div>
+        <div class="cmd"><p class="cmd-say">«Что интересного рядом?»</p><p class="cmd-do">Достопримечательности, расстояние и сторона</p></div>
+        <div class="cmd"><p class="cmd-say">«Что это за здание?»</p><p class="cmd-do">Короткая справка о месте перед вами</p></div>
+        <div class="cmd"><p class="cmd-say">«Включи гида» · «Стоп гид»</p><p class="cmd-do">Справки о местах, мимо которых идёте</p></div>
+        <div class="cmd"><p class="cmd-say">«Вопрос, нужен ли зонт?»</p><p class="cmd-do">Погода здесь или «в Москве», «в Лондоне»</p></div>
+        <div class="cmd"><p class="cmd-say">«Вопрос, что у меня завтра?»</p><p class="cmd-do">Календарь телефона</p></div>
+      </div>
+      <h2 class="section">В переводе</h2>
+      <div class="card list cmds">
+        <div class="cmd"><p class="cmd-say">«Что ответить?»</p><p class="cmd-do">Две фразы на языке собеседника. Сами появляются после его реплики, если включено</p></div>
       </div>
     </section>
 

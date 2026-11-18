@@ -9,6 +9,7 @@
  */
 import {decodeTile, metersPerWorld, tileOf, tilesAround, toWorld, TILE_ZOOM, type TileFeature} from "../shared/mvt"
 import type {LatLng} from "./navmap"
+import {tileInfo, type TileInfo} from "./guide"
 
 /** What the host offers (`session.blob`). */
 export interface BlobApi {
@@ -178,6 +179,8 @@ export class TileStore {
   private templateAt = 0
   private inflight = new Map<string, Promise<boolean>>()
   private decoded = new Map<string, MapFeature[]>()
+  /** Sights, place names, streets and house numbers per tile (the guide). */
+  private infos = new Map<string, TileInfo>()
   private failedAt = new Map<string, number>()
   download: DownloadState | null = null
   private cancelled = false
@@ -309,6 +312,35 @@ export class TileStore {
     return out
   }
 
+  /**
+   * What the guide needs around a point: sights, place names, streets, house numbers. Tiles that
+   * are missing are downloaded when online; throws when none of them can be had.
+   */
+  async around(center: LatLng, radiusM: number): Promise<TileInfo[]> {
+    await this.ready()
+    const tiles = tilesAround(center.lat, center.lng, radiusM)
+    const out: TileInfo[] = []
+    for (const t of tiles) {
+      const k = key(TILE_ZOOM, t.x, t.y)
+      let info = this.infos.get(k)
+      if (!info) {
+        const bytes = await this.raw(TILE_ZOOM, t.x, t.y)
+        if (!bytes) continue
+        try {
+          info = tileInfo(bytes, TILE_ZOOM, t.x, t.y)
+        } catch (e) {
+          this.deps.log("error", `Карта: участок ${t.x}/${t.y} не прочитан (${String((e as Error)?.message ?? e)})`)
+          continue
+        }
+        this.infos.set(k, info)
+        if (this.infos.size > DECODED_MAX) this.infos.delete(this.infos.keys().next().value as string)
+      }
+      out.push(info)
+    }
+    if (!out.length) throw new Error("нет карты этого места (нет интернета и не скачана заранее)")
+    return out
+  }
+
   /** Saves the tiles along a route (a corridor of ~300 m), quietly, a few at a time. */
   async prefetchRoute(points: LatLng[]): Promise<number> {
     if (!this.deps.blob || points.length < 2) return 0
@@ -430,6 +462,7 @@ export class TileStore {
         await this.deps.blob.delete(k)
         this.index.delete(k)
         this.decoded.delete(k)
+        this.infos.delete(k)
       } catch {
         // stays
       }
@@ -453,6 +486,7 @@ export class TileStore {
       }
     }
     this.decoded.clear()
+    this.infos.clear()
     this.areas = []
     this.deps.saveAreas(this.areas)
     this.deps.log("nav", "Все карты удалены с телефона")

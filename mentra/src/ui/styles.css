@@ -754,8 +754,12 @@ p {
 .nav-opts .item {
   min-height: 64px;
 }
-.nav-opts .row-sub {
+.nav-opts .row-sub,
+.list .item > .row-label .row-sub {
   white-space: normal;
+}
+.list .item > .row-label {
+  padding: 2px 0;
 }
 .nav-opts .item.off {
   opacity: 0.45;

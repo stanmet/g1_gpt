@@ -5,7 +5,36 @@
  *   ▲                                                                           │
  *   └──────────── "скрой" / timeout / новый вопрос ◀───────────────────────────┘
  */
+import {
+  calendarWindow,
+  contextBlock,
+  formatEvents,
+  formatWeather,
+  needsCalendar,
+  needsWeather,
+  pickGeocode,
+  placeVariants,
+  weatherPlace,
+  type CalEvent,
+} from "./context"
 import {fitScreen, G1_LINES, paginate, sanitizeForG1, wrapLines} from "./g1text"
+import {
+  addressAt,
+  addressLine,
+  aroundText,
+  buildNotePrompt,
+  cleanNote,
+  isPlaceQuestion,
+  parseGuideCommand,
+  placeContext,
+  PLACE_RULES,
+  poisNear,
+  WalkGuide,
+  type TileInfo,
+} from "./guide"
+import type {LatLng} from "./navmap"
+import {buildReplyPrompt, isReplyRequest, parseReplies, REPLY_PAUSE_MS, replyScreen, type Heard, type Reply} from "./replies"
+import {wordCount} from "./lecture"
 import {askLLM, asProvider, displayName, explainLLMError, keyFor, LLMError, PROVIDERS, type Provider} from "./llm"
 import {Lecture, type LectureRecord} from "./lecture"
 import {
@@ -27,6 +56,7 @@ import {normalizeSettings, Store, type Message, type Settings} from "./store"
 import {
   detectLang,
   detectWake,
+  type Lang,
   isCommandPrefix,
   isMeaningful,
   normalize,
@@ -85,6 +115,43 @@ export interface AssistantDeps {
   nav?: NavHost
   /** A full-screen picture on the glasses (base64 G1 BMP) — the navigation map. */
   showBitmap?(base64: string): void
+  /** Where you are, the map around you, the weather and the phone calendar. */
+  context?: ContextHost
+}
+
+/** What the phone offers for questions about place, weather and plans (index.ts). */
+export interface ContextHost {
+  /** location = LOCATION declared, calendar = CALENDAR declared in the installed manifest. */
+  status(): {location: boolean; calendar: boolean}
+  /** A position no older than `maxAgeMs`, waiting up to `waitMs` for a fresh one; null when none. */
+  here(maxAgeMs: number, waitMs: number): Promise<(LatLng & {accuracy?: number}) | null>
+  /** Sights, streets and house numbers around a point (the map tiles on the phone). */
+  around(center: LatLng, radiusM: number): Promise<TileInfo[]>
+  /** Open-Meteo forecast (JSON). */
+  weather(lat: number, lng: number): Promise<any>
+  /** Open-Meteo geocoding (JSON). */
+  geocode(name: string, lang: Lang): Promise<any>
+  /** Phone calendar events between two moments. */
+  calendar(from: Date, to: Date): Promise<{events: CalEvent[]; truncated: boolean}>
+  /** Live position; returns a function that stops it. */
+  watch(onPosition: (p: {lat: number; lng: number; accuracy?: number}) => void): () => void
+}
+
+/** Resolves with null instead of waiting longer than `ms` or failing. */
+function within<T>(p: Promise<T>, ms: number): Promise<T | null> {
+  return new Promise((resolve) => {
+    const t = setTimeout(() => resolve(null), ms)
+    p.then(
+      (v) => {
+        clearTimeout(t)
+        resolve(v)
+      },
+      () => {
+        clearTimeout(t)
+        resolve(null)
+      },
+    )
+  })
 }
 
 /** How long a pause in speech ends a question. */
@@ -135,6 +202,9 @@ export const PHRASE_WAIT_MS = 8000
 
 /** After «Навигатор» without a destination, the next phrase is taken as the place. */
 export const NAV_WAIT_MS = 9000
+/** A note of «Гид на прогулке» stays on the glasses this long. */
+export const GUIDE_SHOW_MS = 25_000
+
 /** A coming turn shown over an answer, notes or translation for this long. */
 export const NAV_TURN_MS = 4500
 /** «Ищу…», «Маршрут до…» stay on screen at most this long if Mentra does not answer. */
@@ -201,6 +271,14 @@ export class Assistant {
   readonly lecture: Lecture
   /** Conversation mode: facts when someone asks, a prompt when the user trails off. */
   readonly talk: Talk
+  /** «Гид на прогулке»: notes about sights you walk past. */
+  readonly guide: WalkGuide
+  // translation mode: what to answer
+  private trHeard: Heard[] = []
+  private trReplyTimer: unknown = null
+  private trReplySeq = 0
+  /** The replies last shown in translation mode (for the phone). */
+  trReplies: Reply[] = []
 
   private readonly now: () => number
   private readonly setTimer: (fn: () => void, ms: number) => unknown
@@ -234,7 +312,8 @@ export class Assistant {
     )
     this.talk = new Talk(
       {
-        complete: (system, user) => this.completeOnce(system, user),
+        complete: (system, user, opts) => this.completeOnce(system, user, opts),
+        search: () => this.settings.talkSearch,
         explainError: (e) => {
           const err = e as LLMError
           return explainLLMError(err?.provider ?? asProvider(this.settings.provider), Number(err?.status) || 0, String(err?.code ?? ""), String(err?.message ?? ""))
@@ -273,29 +352,45 @@ export class Assistant {
       prefetch: deps.nav?.prefetch ? (route) => deps.nav!.prefetch!(route) : undefined,
       watch: deps.nav?.watch ? (cb) => deps.nav!.watch!(cb) : undefined,
     })
+    this.guide = new WalkGuide({
+      around: async (c, r) => {
+        const infos = (await this.deps.context?.around(c, r)) ?? []
+        return {hits: poisNear(infos, c, r), address: infos.length ? addressAt(infos, c) : null}
+      },
+      note: async (hit, address) => {
+        const {system, user} = buildNotePrompt(hit, address, this.settings.translateTo === "en-US" ? "en" : "ru")
+        return cleanNote(await this.completeOnce(system, user, {search: true, words: 40}))
+      },
+      show: (title, text) => this.showGuideNote(title, text),
+      log: (kind, msg) => this.addLog(kind, msg),
+      now: () => this.now(),
+      watch: (cb) => (this.deps.context ? this.deps.context.watch(cb) : () => {}),
+      onChange: () => this.changed(),
+    })
+    if (this.settings.guideAuto && deps.context) this.guide.start()
   }
 
   /**
-   * One request with its own system prompt and no conversation history (lecture mode).
-   * Quick by design: no web search, light reasoning.
+   * One request with its own system prompt and no conversation history (lecture, conversation,
+   * translation replies, the guide). Quick by design: light reasoning, web search only when asked.
    */
-  private async completeOnce(system: string, user: string): Promise<string> {
+  private async completeOnce(system: string, user: string, opts: {search?: boolean; words?: number} = {}): Promise<string> {
     const provider = asProvider(this.settings.provider)
     const quick: Settings = {
       ...this.settings,
-      webSearch: false,
+      webSearch: Boolean(opts.search),
       historyMessages: 0,
-      answerWords: 40,
+      answerWords: opts.words ?? 40,
       effort: this.settings.effort === "medium" || this.settings.effort === "high" ? "low" : this.settings.effort,
     }
     const res = await askLLM(this.deps.fetch, quick, provider, [], user, {
       system,
-      timeoutMs: 30000,
+      timeoutMs: opts.search ? 45000 : 30000,
       setTimer: ((fn: () => void, ms: number) => this.setTimer(fn, ms)) as unknown as typeof setTimeout,
       now: this.now,
     })
     const usage = res.usage ? `, токены ${res.usage.input_tokens ?? "?"}→${res.usage.output_tokens ?? "?"}` : ""
-    this.addLog("openai", `${PROVIDERS[provider].label}: ${(res.ms / 1000).toFixed(1)} с (${res.model}${usage})`)
+    this.addLog("openai", `${PROVIDERS[provider].label}${opts.search ? " с поиском" : ""}: ${(res.ms / 1000).toFixed(1)} с (${res.model}${usage})`)
     return res.text
   }
 
@@ -406,6 +501,8 @@ export class Assistant {
     this.settings = merged
     this.deps.store.saveSettings(merged)
     this.addLog("info", "Настройки сохранены")
+    if (merged.guideAuto && this.deps.context) this.guide.start()
+    else this.guide.stop()
     if (mapWas !== `${this.navMapOn()}|${this.settings.navMiniMap}`) {
       this.nav.mapChanged()
       if (this.nav.active && this.phase === "idle" && this.clearTimer_ == null) this.clearDisplay()
@@ -549,6 +646,8 @@ export class Assistant {
 
     const nav = this.navIntent(body)
     if (nav) return nav()
+    const guide = this.guideIntent(body)
+    if (guide) return guide()
 
     const cmd = parseCommand(body)
     if (cmd && (wake.matched || this.commandRelevant(cmd))) {
@@ -690,7 +789,7 @@ export class Assistant {
           return
         }
       }
-      const nav = this.committed.length === 0 ? this.navIntent(clean) : null
+      const nav = this.committed.length === 0 ? this.navIntent(clean) ?? this.guideIntent(clean) : null
       if (nav) {
         this.cancelTimer("silenceTimer")
         this.cancelTimer("wakeTimer")
@@ -803,9 +902,14 @@ export class Assistant {
     this.show(fitScreen(`» ${q}\n…${providerOverride || provider !== "openai" ? label + " " : ""}думает`))
 
     try {
-      const res = await askLLM(this.deps.fetch, this.settings, provider, this.history, q, {
+      const ctx = await this.questionContext(q)
+      if (seq !== this.requestSeq) return
+      const settings = ctx.search && !this.settings.webSearch ? {...this.settings, webSearch: true} : this.settings
+      const res = await askLLM(this.deps.fetch, settings, provider, this.history, q, {
         setTimer: ((fn: () => void, ms: number) => this.setTimer(fn, ms)) as unknown as typeof setTimeout,
         now: this.now,
+        extra: ctx.extra,
+        timeoutMs: settings.webSearch ? 75000 : 60000,
       })
       if (seq !== this.requestSeq) {
         this.addLog("info", "Ответ на отменённый вопрос пропущен")
@@ -854,7 +958,7 @@ export class Assistant {
 
   // ───────────────────────────── paging ─────────────────────────────
 
-  private showPage(i: number): void {
+  private showPage(i: number, clearMs?: number): void {
     if (!this.pages.length) return
     this.page = Math.max(0, Math.min(this.pages.length - 1, i))
     this.phase = "answering"
@@ -870,7 +974,8 @@ export class Assistant {
     }
     // The answer stays on the glasses until its last page has been shown;
     // only then does the "clear after N seconds" timer start.
-    if (this.settings.clearAfterSec > 0 && last) {
+    const clearAfter = clearMs ?? this.settings.clearAfterSec * 1000
+    if (clearAfter > 0 && last) {
       this.clearTimer_ = this.setTimer(() => {
         this.clearTimer_ = null
         if (this.phase === "answering") {
@@ -880,7 +985,7 @@ export class Assistant {
           this.addLog("display", "Ответ убран по таймеру (последняя страница прочитана)")
           this.changed()
         }
-      }, this.settings.clearAfterSec * 1000)
+      }, clearAfter)
     }
     this.autoHidden = false
     this.changed()
@@ -906,6 +1011,8 @@ export class Assistant {
     this.interim = ""
     this.trFinals = []
     this.trInterim = null
+    this.trHeard = []
+    this.trReplies = []
     this.translationScreen = ""
     this.phase = "translating"
     const target = this.settings.translateTo
@@ -981,7 +1088,7 @@ Notes are in the app.`
     const mine = wake.matched || detectLang(body) === "ru"
     if (mine && this.trySwitchMode(body)) return
     if (mine && this.tryPhrase(body)) return
-    const nav = mine ? this.navIntent(body, !wake.matched) : null
+    const nav = mine ? this.navIntent(body, !wake.matched) ?? this.guideIntent(body, !wake.matched) : null
     if (nav) return nav()
     const cmd = parseCommand(body)
     if (mine && (cmd === "hide" || cmd === "cancel" || parseTranslateCommand(body) === "stop")) return this.stopLecture("voice")
@@ -1122,7 +1229,7 @@ Notes are in the app.`
     const unambiguous = wake.matched || parseTranslateCommand(body) === "start" || normalize(body).split(" ").length >= 2
     if (unambiguous && this.trySwitchMode(body)) return
     if (this.tryPhrase(body)) return
-    const nav = this.navIntent(body, !wake.matched)
+    const nav = this.navIntent(body, !wake.matched) ?? this.guideIntent(body, !wake.matched)
     if (nav) return nav()
     // «Вопрос, цель: договориться о скидке» — what the hints should steer toward
     const goal = wake.matched ? goalIn(t) : null
@@ -1199,6 +1306,8 @@ Notes are in the app.`
       this.clearTimerFn(this.trIdleTimer)
       this.trIdleTimer = null
     }
+    this.cancelReplyTimer()
+    this.trReplySeq++
   }
 
   private onTranscriptWhileTranslating(t: string): void {
@@ -1210,8 +1319,13 @@ Notes are in the app.`
       return
     }
     if (tcmd === "start") return // already translating
+    // «Что ответить?» — replies to the last thing the other person said, right now
+    if ((wake.matched || detectLang(body) === "ru") && isReplyRequest(body)) {
+      void this.suggestReplies(true)
+      return
+    }
     if (this.trySwitchMode(body)) return
-    const nav = this.navIntent(body, !wake.matched)
+    const nav = this.navIntent(body, !wake.matched) ?? this.guideIntent(body, !wake.matched)
     if (nav) return nav()
     // "скрой"/"отмена" in Russian also stop; bare English "stop" may come from people around.
     const cmd = parseCommand(body)
@@ -1232,13 +1346,21 @@ Notes are in the app.`
     if (this.phase !== "translating") return
     const text = sanitizeForG1(String(ev?.text ?? "")).replace(/\n+/g, " ").trim()
     if (!text) return
-    if (isPassthrough(ev, this.settings.translateTo)) return
+    // the wearer speaks their own language: they are answering, no replies needed now
+    if (isPassthrough(ev, this.settings.translateTo)) return this.cancelReplyTimer()
     const id = ev.utteranceId ?? "_"
+    // the other person goes on: replies to an earlier phrase would cover the new subtitles
+    this.cancelReplyTimer()
+    this.trReplySeq++
     if (ev.isFinal) {
       this.trFinals.push(text)
       if (this.trFinals.length > TRANSLATE_KEEP) this.trFinals.splice(0, this.trFinals.length - TRANSLATE_KEEP)
       if (!this.trInterim || this.trInterim.id === id) this.trInterim = null
       this.addLog("translate", `${ev.sourceLanguage ? "[" + primaryLang(ev.sourceLanguage) + "] " : ""}${text}`)
+      this.trHeard.push({orig: String(ev.originalText ?? "").trim(), text, lang: String(ev.sourceLanguage ?? "")})
+      if (this.trHeard.length > 3) this.trHeard.splice(0, this.trHeard.length - 3)
+      this.trReplies = []
+      this.armReplies()
     } else {
       this.trInterim = {id, text}
     }
@@ -1615,6 +1737,272 @@ Notes are in the app.`
     return out.slice(0, 8)
   }
 
+  // ───────────────────────────── place, weather, calendar ─────────────────────────────
+
+  /** Direction of travel: the navigator's while a trip is on, else the walking guide's. */
+  travelHeading(): number | null {
+    if (this.nav.active && this.nav.heading != null) return this.nav.heading
+    return this.guide.heading
+  }
+
+  /**
+   * What the question is told besides itself: where you are (setting «Учитывать, где я»; always for
+   * «что это за здание»), the weather when it is about the weather, the calendar when it is about
+   * plans. Each piece has its own short time limit, so a slow GPS or network never holds the answer up.
+   */
+  async questionContext(q: string): Promise<{extra: string; search: boolean}> {
+    const host = this.deps.context
+    if (!host) return {extra: "", search: false}
+    const lang = detectLang(q)
+    const place = isPlaceQuestion(q)
+    const weather = needsWeather(q)
+    const town = weather ? weatherPlace(q) : null
+    const calendar = this.settings.useCalendar && needsCalendar(q)
+    const whereWanted = this.settings.useLocation || place
+    const fixWanted = whereWanted || (weather && !town)
+    if (!fixWanted && !weather && !calendar) return {extra: "", search: false}
+
+    const cal = calendar ? this.calendarContext(q) : Promise.resolve("")
+    // a place question needs a fresh fix; for anything else the town and street are enough
+    const fix = fixWanted ? await within(host.here(place ? 30_000 : 600_000, place ? 6000 : 1500), place ? 7000 : 2000) : null
+    if (fixWanted && !fix) this.addLog("info", "Геопозиция не получена — отвечаю без неё")
+    const [where, wx, events] = await Promise.all([
+      fix && whereWanted ? this.whereContext(fix, place) : Promise.resolve(""),
+      weather ? this.weatherContext(town, fix, lang) : Promise.resolve(""),
+      cal,
+    ])
+    const got = [where && (place ? "место и что рядом" : "место"), wx && "погода", events && "календарь"].filter(Boolean)
+    if (got.length) this.addLog("info", `К вопросу добавлено: ${got.join(", ")}`)
+    return {extra: [contextBlock([where, wx, events]), place ? PLACE_RULES : ""].filter(Boolean).join("\n\n"), search: place}
+  }
+
+  private async whereContext(fix: LatLng & {accuracy?: number}, place: boolean): Promise<string> {
+    const radius = place ? 220 : 120
+    // a map tile still downloading is not waited for long: it is there for the next question
+    const infos = (await within(this.deps.context!.around(fix, radius), place ? 5000 : 1500)) ?? []
+    const address = infos.length ? addressAt(infos, fix) : null
+    const hits = place ? poisNear(infos, fix, radius).slice(0, 8) : []
+    return placeContext(fix, address, hits, this.travelHeading())
+  }
+
+  private async weatherContext(town: string | null, fix: LatLng | null, lang: Lang): Promise<string> {
+    const host = this.deps.context!
+    let at: {lat: number; lng: number; label: string} | null = null
+    if (town) {
+      for (const v of placeVariants(town)) {
+        const g = pickGeocode(await within(host.geocode(v, lang), 4000), v)
+        if (g) {
+          at = {lat: g.lat, lng: g.lng, label: `${g.name}${g.country ? ", " + g.country : ""}`}
+          break
+        }
+      }
+      if (!at) {
+        this.addLog("info", `Погода: город «${town}» не найден`)
+        return `Погоду для «${town}» найти не удалось.`
+      }
+    } else if (fix) at = {lat: fix.lat, lng: fix.lng, label: "там, где пользователь"}
+    if (!at) return ""
+    const data = await within(host.weather(at.lat, at.lng), 6000)
+    if (!data?.current) {
+      this.addLog("info", "Погода: Open-Meteo не ответил")
+      return ""
+    }
+    return formatWeather(data, at.label)
+  }
+
+  private async calendarContext(q: string): Promise<string> {
+    const host = this.deps.context!
+    if (!host.status().calendar) {
+      this.addLog("info", "Календарь: нет разрешения CALENDAR — загрузите EVA-IA заново по ссылке, чтобы Mentra спросила доступ")
+      return "Календарь телефона недоступен: у приложения нет разрешения на календарь."
+    }
+    const w = calendarWindow(q, new Date(this.now()))
+    const r = await within(host.calendar(w.from, w.to), 6000)
+    if (!r) {
+      this.addLog("info", "Календарь: телефон не ответил (возможно, нет доступа к календарю в iOS)")
+      return "Календарь телефона не прочитан (нет доступа или телефон не ответил)."
+    }
+    this.addLog("info", `Календарь (${w.label}): событий ${r.events.length}`)
+    return formatEvents(r.events, w.label, r.truncated)
+  }
+
+  // ───────────────────────────── the guide ─────────────────────────────
+
+  /**
+   * «Где я?», «Что интересного рядом?», «Что это за здание?», «Включи гида». `strict`: in lecture,
+   * conversation and translation other people talk, so only with the activator.
+   */
+  private guideIntent(body: string, strict = false): (() => void) | null {
+    const c = parseGuideCommand(body)
+    if (!c || strict) return null
+    switch (c.kind) {
+      case "where":
+        return () => void this.whereAmI()
+      case "around":
+        return () => void this.whatsAround()
+      case "what":
+        // listening modes answer questions their own way; the place question goes to the assistant
+        return this.phase === "lecture" || this.phase === "talk" ? null : () => void this.ask(body, "voice")
+      case "auto":
+        return () => this.setGuide(c.on, "voice")
+    }
+  }
+
+  /** «Гид на прогулке» on or off, by voice or from the app. */
+  setGuide(on: boolean, source: "voice" | "ui"): void {
+    if (on && !this.deps.context) {
+      this.flash("Гид недоступен в этой версии Mentra.", 4000)
+      return
+    }
+    if (this.settings.guideAuto !== on) this.updateSettings({guideAuto: on})
+    if (source === "voice")
+      this.flash(on ? "Гид включён: расскажу о местах,\nмимо которых идёте.\nВыключить: «стоп гид»" : "Гид выключен.", 3500)
+  }
+
+  private async myPosition(): Promise<(LatLng & {accuracy?: number}) | null> {
+    const host = this.deps.context
+    if (!host) return null
+    return within(host.here(20_000, 8000), 9000)
+  }
+
+  /** «Где я?»: street, house, district and coordinates — from the map on the phone, no AI. */
+  async whereAmI(): Promise<void> {
+    const q = "Где я?"
+    this.addLog("cmd", "Гид: где я")
+    if (!this.inMode()) this.show("Определяю, где вы…")
+    const fix = await this.myPosition()
+    if (!fix) return this.guideFail("Не удалось определить, где вы.\nПроверьте геолокацию для Mentra.")
+    const infos = (await within(this.deps.context!.around(fix, 150), 7000)) ?? []
+    const where = addressLine(infos.length ? addressAt(infos, fix) : null)
+    const acc = Number.isFinite(fix.accuracy) && fix.accuracy! > 0 ? ` ±${Math.round(fix.accuracy!)} м` : ""
+    const answer = `${where || (infos.length ? "Адреса на карте рядом нет" : "Карты этого места нет на телефоне")}\n${fix.lat.toFixed(5)}, ${fix.lng.toFixed(5)}${acc}`
+    this.guideAnswer(q, answer)
+  }
+
+  /** «Что интересного рядом?»: sights within ~450 m with distance and direction — no AI. */
+  async whatsAround(): Promise<void> {
+    const q = "Что интересного рядом?"
+    this.addLog("cmd", "Гид: что рядом")
+    if (!this.inMode()) this.show("Смотрю, что рядом…")
+    const fix = await this.myPosition()
+    if (!fix) return this.guideFail("Не удалось определить, где вы.\nПроверьте геолокацию для Mentra.")
+    const infos = await within(this.deps.context!.around(fix, 450), 12000)
+    if (!infos?.length) return this.guideFail("Карты этого места нет:\nнет интернета и она не скачана.")
+    const hits = poisNear(infos, fix, 450)
+      .filter((h) => h.score >= 1.5)
+      .slice(0, 5)
+    this.guideAnswer(q, aroundText(hits, this.travelHeading()))
+  }
+
+  private inMode(): boolean {
+    return this.phase === "translating" || this.phase === "lecture" || this.phase === "talk"
+  }
+
+  private guideFail(text: string): void {
+    this.addLog("error", `Гид: ${text.replace(/\n/g, " ")}`)
+    if (!this.inMode() && this.phase !== "idle" && this.phase !== "answering") return
+    this.flash(text, 6000)
+  }
+
+  /** A guide answer made on the phone: kept like an AI answer (paging, «повтори», the chat). */
+  private guideAnswer(question: string, answer: string): void {
+    const at = this.now()
+    this.history.push({role: "user", content: question, at}, {role: "assistant", content: answer, at})
+    this.deps.store.saveHistory(this.history)
+    this.addLog("display", answer.replace(/\n/g, " · "))
+    if (this.inMode()) {
+      this.flash(answer, 15000)
+      return
+    }
+    // a question asked meanwhile wins
+    if (this.phase === "capturing" || this.phase === "thinking") return
+    this.requestSeq++
+    this.lastQuestion = question
+    this.lastAnswer = answer
+    this.lastError = ""
+    this.pages = paginate(sanitizeForG1(answer))
+    this.page = 0
+    this.followUpUntil = 0
+    this.showPage(0)
+  }
+
+  /** A note of «Гид на прогулке»; false when the glasses are busy with something else. */
+  private showGuideNote(title: string, text: string): boolean {
+    if (this.phase !== "idle" || this.clearTimer_ != null || this.navWait || this.phraseWait) return false
+    const at = this.now()
+    this.history.push({role: "user", content: `Гид: ${title}`, at}, {role: "assistant", content: text, at, by: asProvider(this.settings.provider)})
+    this.deps.store.saveHistory(this.history)
+    this.lastQuestion = title
+    this.lastAnswer = text
+    this.pages = paginate(sanitizeForG1(`${title}\n${text}`))
+    this.page = 0
+    this.followUpUntil = 0
+    this.showPage(0, GUIDE_SHOW_MS)
+    return true
+  }
+
+  // ───────────────────────────── translation: what to answer ─────────────────────────────
+
+  private cancelReplyTimer(): void {
+    if (this.trReplyTimer != null) this.clearTimerFn(this.trReplyTimer)
+    this.trReplyTimer = null
+  }
+
+  /** After the other person's phrase and a short pause, suggest replies (setting «Варианты ответа»). */
+  private armReplies(): void {
+    this.cancelReplyTimer()
+    if (!this.settings.translateReplies) return
+    this.trReplyTimer = this.setTimer(() => {
+      this.trReplyTimer = null
+      void this.suggestReplies(false)
+    }, REPLY_PAUSE_MS)
+  }
+
+  /** Two short replies in the other person's language, with what they mean. */
+  async suggestReplies(onDemand: boolean): Promise<void> {
+    if (this.phase !== "translating") return
+    const heard = this.trHeard.slice(-3)
+    const last = heard[heard.length - 1]
+    if (!last) {
+      if (onDemand) this.flash("Собеседник ещё ничего не сказал.", 2500)
+      return
+    }
+    if (!onDemand && wordCount(last.orig || last.text) < 2) return
+    const provider = asProvider(this.settings.provider)
+    if (!keyFor(this.settings, provider)) {
+      if (onDemand) this.flash(explainLLMError(provider, 401, "no_key", ""), 5000)
+      return
+    }
+    const seq = ++this.trReplySeq
+    if (onDemand) {
+      this.addLog("cmd", "Перевод: что ответить")
+      this.show(replyScreen(last.text, [{say: "…", means: ""}]))
+    }
+    try {
+      const {system, user} = buildReplyPrompt(heard, this.settings.translateTo === "en-US" ? "en" : "ru")
+      const replies = parseReplies(await this.completeOnce(system, user))
+      if (seq !== this.trReplySeq || this.phase !== "translating") return
+      if (!replies.length) {
+        this.addLog("translate", "Варианты ответа: здесь ответ не нужен")
+        if (onDemand) this.show(this.translationScreen || fitScreen(last.text))
+        return
+      }
+      this.trReplies = replies
+      const screen = replyScreen(last.text, replies)
+      this.translationScreen = screen
+      this.show(screen)
+      this.armTranslateIdle()
+      this.addLog("translate", `Можно ответить: ${replies.map((r) => `${r.say}${r.means ? ` (${r.means})` : ""}`).join(" / ")}`)
+      this.changed()
+    } catch (e) {
+      if (seq !== this.trReplySeq) return
+      const err = e as LLMError
+      const human = explainLLMError(err?.provider ?? provider, Number(err?.status) || 0, String(err?.code ?? ""), String(err?.message ?? ""))
+      this.addLog("error", `Варианты ответа: ${human}`)
+      if (onDemand) this.flash(human, 5000)
+    }
+  }
+
   // ───────────────────────────── state for the phone UI ─────────────────────────────
 
   snapshot() {
@@ -1660,6 +2048,13 @@ Notes are in the app.`
         frameId: this.nav.frameId,
         streets: this.nav.roads.length,
       },
+      guide: {
+        active: this.guide.active,
+        available: Boolean(this.deps.context),
+        notes: this.guide.notes.slice(-10),
+      },
+      context: this.deps.context ? this.deps.context.status() : {location: false, calendar: false},
+      replies: this.trReplies,
       glassesConnected: this.glassesConnected,
       settings: {
         ...this.settings,

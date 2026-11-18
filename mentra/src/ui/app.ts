@@ -39,7 +39,7 @@ let modelOptionsFor: Provider | null = null
 let sheetProvider: Provider = "openai"
 const TABS = ["glasses", "chat", "settings"] as const
 type Tab = (typeof TABS)[number]
-const PAGES = ["ai", "keys", "about", "voice", "display", "translate", "lecture", "talk", "log", "info", "notes", "commands", "nav"] as const
+const PAGES = ["ai", "keys", "about", "voice", "display", "context", "translate", "lecture", "talk", "log", "info", "notes", "commands", "nav"] as const
 type Page = (typeof PAGES)[number]
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
@@ -65,6 +65,8 @@ function previewBridge(): Bridge {
     lastError: "",
     glassesConnected: true,
     version: "preview",
+    context: {location: true, calendar: false},
+    guide: {active: false, available: true, notes: []},
     settings: {
       model: "gpt-6.1-terra",
       effort: "auto",
@@ -86,6 +88,11 @@ function previewBridge(): Bridge {
       talkEverySec: 10,
       talkGoal: "Договориться о скидке на ремонт",
       navMode: "walking",
+      useLocation: true,
+      useCalendar: true,
+      guideAuto: false,
+      translateReplies: true,
+      talkSearch: true,
       provider: "anthropic",
       anthropicModel: "claude-haiku-5-5",
       geminiModel: "gemini-3.8-flash",
@@ -494,6 +501,9 @@ function renderNavigator(s: any, st: any) {
   $("navMiniMapRow").classList.toggle("off", mini.disabled)
   $("navMiniMapSub").textContent =
     nav.active && sw.checked && mini.checked && !nav.streets ? "Улицы и маршрут справа от стрелки · загружается" : "Улицы и маршрут справа от стрелки"
+  const guide = $<HTMLInputElement>("navGuideSwitch")
+  if (!("guideAuto" in pending)) guide.checked = st.guideAuto === true
+  $("navGuideRow").hidden = s.guide?.available === false
   void refreshMap()
   renderOffline(s)
   $("navProblem").textContent = nav.problem ? `${capitalize(nav.problem)}.` : ""
@@ -944,7 +954,21 @@ function renderSettings(s: any, st: any) {
   setSub("voice", field<HTMLSelectElement>("listenMode").selectedOptions[0]?.textContent ?? "")
   setSub("translate", st.translateTo === "en-US" ? "На английский" : "На русский")
   setSub("lecture", `Тезисы каждые ${every} с`)
-  setSub("talk", tipEvery ? `Проверка фактов каждые ${tipEvery} с` : "Только вопросы и цитаты")
+  setSub("talk", tipEvery ? `Проверка фактов каждые ${tipEvery} с${st.talkSearch !== false ? ", с поиском" : ""}` : "Только вопросы и цитаты")
+
+  setSwitch("useLocation", st.useLocation !== false)
+  setSwitch("useCalendar", st.useCalendar !== false)
+  setSwitch("guideAuto", st.guideAuto === true)
+  setSwitch("translateReplies", st.translateReplies !== false)
+  setSwitch("talkSearch", st.talkSearch !== false)
+  setSub("context", st.guideAuto === true ? "Гид на прогулке включён" : st.useLocation !== false ? "Учитываю, где вы" : "Место не учитывается")
+  setSub("translate", `${st.translateTo === "en-US" ? "На английский" : "На русский"}${st.translateReplies !== false ? ", варианты ответа" : ""}`)
+  const perm = s.context ?? {location: true, calendar: true}
+  const missing = [!perm.location && "геопозиция", st.useCalendar !== false && !perm.calendar && "календарь"].filter(Boolean)
+  $("contextPerm").hidden = !missing.length || s.guide?.available === false
+  $("contextPerm").textContent = missing.length
+    ? `Нет доступа: ${missing.join(", ")}. Загрузите EVA-IA заново — Mentra → Settings → Miniapp Developer Settings → Load Miniapp from URL — и разрешите доступ.`
+    : ""
 
   if (!$("keySheet").hidden) fillKeySheet()
   $("versionText").textContent = s.version ? `Версия ${s.version}` : ""
@@ -1092,7 +1116,13 @@ function modelFromForm(): string {
   return field<HTMLInputElement>("customModel").value.trim() || PROVIDERS[p].models[0].id
 }
 
-const SWITCHES = new Set(["webSearch", "headNod", "voiceLock"])
+const SWITCHES = new Set(["webSearch", "headNod", "voiceLock", "useLocation", "useCalendar", "guideAuto", "translateReplies", "talkSearch"])
+
+/** A settings switch shows the saved value unless the user is changing it right now. */
+function setSwitch(name: string, on: boolean) {
+  const el = field<HTMLInputElement>(name)
+  if (document.activeElement !== el && !(name in pending)) el.checked = on
+}
 
 function wireSettings() {
   const f = form()
@@ -1382,6 +1412,9 @@ function wire() {
   )
   $<HTMLInputElement>("navMiniMapSwitch").addEventListener("change", (e) => {
     queueSave({navMiniMap: (e.target as HTMLInputElement).checked}, 0)
+  })
+  $<HTMLInputElement>("navGuideSwitch").addEventListener("change", (e) => {
+    queueSave({guideAuto: (e.target as HTMLInputElement).checked}, 0)
   })
   $<HTMLInputElement>("navMapSwitch").addEventListener("change", (e) => {
     queueSave({navMap: (e.target as HTMLInputElement).checked}, 0)

@@ -22,7 +22,7 @@ export function localDateTime(d: Date = new Date()): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())} (${days[d.getDay()]}, ${tz})`
 }
 
-export function buildInstructions(s: Settings, now: Date = new Date(), questionLang: Lang = "ru"): string {
+export function buildInstructions(s: Settings, now: Date = new Date(), questionLang: Lang = "ru", extra = ""): string {
   const parts = [
     "Ты — голосовой помощник. Твои ответы показываются на крошечном дисплее умных очков Even Realities G1: 5 строк примерно по 30 символов, монохромный текст. Пользователь не видит телефон.",
     "Отвечай на том же языке, на котором задан последний вопрос: на русский вопрос — по-русски, на английский — по-английски (English question → answer in English). Если пользователь прямо попросил другой язык — используй его.",
@@ -36,6 +36,8 @@ export function buildInstructions(s: Settings, now: Date = new Date(), questionL
   ]
   if (s.aboutMe.trim()) parts.push(`Что известно о пользователе (учитывай, когда уместно):\n${s.aboutMe.trim()}`)
   if (s.instructions.trim()) parts.push(`Дополнительные пожелания пользователя:\n${s.instructions.trim()}`)
+  // where you are, the weather, the calendar: gathered on the phone for this question
+  if (extra.trim()) parts.push(extra.trim())
   // Explicit per-question language, so a Russian system prompt never pulls an English answer into Russian.
   parts.push(
     questionLang === "en"
@@ -72,7 +74,7 @@ export function buildRequestBody(
   s: Settings,
   history: Message[],
   question: string,
-  opts: {includeReasoning?: boolean; now?: Date; system?: string} = {},
+  opts: {includeReasoning?: boolean; now?: Date; system?: string; extra?: string} = {},
 ): Record<string, unknown> {
   const recent = s.historyMessages > 0 ? history.slice(-s.historyMessages) : []
   const input = [
@@ -81,7 +83,7 @@ export function buildRequestBody(
   ]
   const body: Record<string, unknown> = {
     model: s.model,
-    instructions: opts.system ?? buildInstructions(s, opts.now, detectLang(question)),
+    instructions: opts.system ?? buildInstructions(s, opts.now, detectLang(question), opts.extra),
     input,
     store: false,
     max_output_tokens: openAIMaxTokens(s),
@@ -172,7 +174,7 @@ export async function askOpenAI(
   s: Settings,
   history: Message[],
   question: string,
-  opts: {timeoutMs?: number; setTimer?: typeof setTimeout; now?: () => number; system?: string} = {},
+  opts: {timeoutMs?: number; setTimer?: typeof setTimeout; now?: () => number; system?: string; extra?: string} = {},
 ): Promise<AskResult> {
   if (!s.apiKey) throw new OpenAIError("no key", 401, "no_key", "")
   const now = opts.now ?? Date.now
@@ -180,7 +182,7 @@ export async function askOpenAI(
   const started = now()
 
   const send = async (includeReasoning: boolean) => {
-    const body = JSON.stringify(buildRequestBody(s, history, question, {includeReasoning, system: opts.system}))
+    const body = JSON.stringify(buildRequestBody(s, history, question, {includeReasoning, system: opts.system, extra: opts.extra}))
     let res
     try {
       res = await withTimeout(

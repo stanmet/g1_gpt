@@ -165,6 +165,8 @@ function maxTokens(s: Settings): number {
 interface HttpOpts {
   /** Replaces the assistant's system prompt (lecture notes, audience questions). */
   system?: string
+  /** Added to the assistant's system prompt: where you are, the weather, the calendar. */
+  extra?: string
   timeoutMs?: number
   setTimer?: typeof setTimeout
   now?: () => number
@@ -230,12 +232,12 @@ export function buildAnthropicBody(
   s: Settings,
   history: Message[],
   question: string,
-  opts: {includeReasoning?: boolean; now?: Date; system?: string} = {},
+  opts: {includeReasoning?: boolean; now?: Date; system?: string; extra?: string} = {},
 ): Record<string, unknown> {
   const body: Record<string, unknown> = {
     model: s.anthropicModel,
     max_tokens: maxTokens(s),
-    system: opts.system ?? buildInstructions(s, opts.now, detectLang(question)),
+    system: opts.system ?? buildInstructions(s, opts.now, detectLang(question), opts.extra),
     messages: [
       ...alternatingHistory(history, s.historyMessages).map((m) => ({role: m.role, content: m.content})),
       {role: "user", content: question},
@@ -265,9 +267,9 @@ async function askAnthropic(fetchFn: FetchLike, s: Settings, history: Message[],
   const key = s.anthropicKey
   if (!key) throw new LLMError("no key", "anthropic", 401, "no_key")
   const headers = {"content-type": "application/json", "x-api-key": key, "anthropic-version": ANTHROPIC_VERSION}
-  let r = await post("anthropic", fetchFn, ANTHROPIC_URL, headers, buildAnthropicBody(s, history, q, {system: opts.system}), opts)
+  let r = await post("anthropic", fetchFn, ANTHROPIC_URL, headers, buildAnthropicBody(s, history, q, {system: opts.system, extra: opts.extra}), opts)
   if (!r.ok && r.status === 400 && /thinking|effort|output_config/i.test(r.raw)) {
-    r = await post("anthropic", fetchFn, ANTHROPIC_URL, headers, buildAnthropicBody(s, history, q, {includeReasoning: false, system: opts.system}), opts)
+    r = await post("anthropic", fetchFn, ANTHROPIC_URL, headers, buildAnthropicBody(s, history, q, {includeReasoning: false, system: opts.system, extra: opts.extra}), opts)
   }
   const data = parseJson("anthropic", r.status, r.raw)
   if (!r.ok) {
@@ -297,12 +299,12 @@ export function buildGeminiBody(
   s: Settings,
   history: Message[],
   question: string,
-  opts: {includeReasoning?: boolean; now?: Date; system?: string} = {},
+  opts: {includeReasoning?: boolean; now?: Date; system?: string; extra?: string} = {},
 ): Record<string, unknown> {
   const generationConfig: Record<string, unknown> = {maxOutputTokens: maxTokens(s)}
   if (opts.includeReasoning !== false) generationConfig.thinkingConfig = {thinkingLevel: geminiThinkingLevel(s)}
   const body: Record<string, unknown> = {
-    systemInstruction: {parts: [{text: opts.system ?? buildInstructions(s, opts.now, detectLang(question))}]},
+    systemInstruction: {parts: [{text: opts.system ?? buildInstructions(s, opts.now, detectLang(question), opts.extra)}]},
     contents: [
       ...alternatingHistory(history, s.historyMessages).map((m) => ({
         role: m.role === "assistant" ? "model" : "user",
@@ -330,9 +332,9 @@ async function askGemini(fetchFn: FetchLike, s: Settings, history: Message[], q:
   if (!key) throw new LLMError("no key", "gemini", 401, "no_key")
   const url = `${GEMINI_BASE}${encodeURIComponent(s.geminiModel)}:generateContent`
   const headers = {"Content-Type": "application/json", "x-goog-api-key": key}
-  let r = await post("gemini", fetchFn, url, headers, buildGeminiBody(s, history, q, {system: opts.system}), opts)
+  let r = await post("gemini", fetchFn, url, headers, buildGeminiBody(s, history, q, {system: opts.system, extra: opts.extra}), opts)
   if (!r.ok && r.status === 400 && /thinking/i.test(r.raw)) {
-    r = await post("gemini", fetchFn, url, headers, buildGeminiBody(s, history, q, {includeReasoning: false, system: opts.system}), opts)
+    r = await post("gemini", fetchFn, url, headers, buildGeminiBody(s, history, q, {includeReasoning: false, system: opts.system, extra: opts.extra}), opts)
   }
   const data = parseJson("gemini", r.status, r.raw)
   if (!r.ok) {

@@ -7,6 +7,7 @@
  *   and, every ~10 s of talk (sooner after a claim with numbers, dates, «доказано»…), an analysis
  *   of what was said — a fact check or evidence, never advice on what to ask or say:
  *     «Неверно: …», «Спорно: …», «Верно: …», «Факт: …», «Довод: …», «Цитата: …»
+ *   A check after such a claim searches the web (setting «Проверять в интернете»).
  *
  * Questions go through a fast lane of their own (a placeholder shows at once, the answer replaces
  * it), checked locally first from the live transcript; proactive hints never hold them up. The
@@ -262,6 +263,7 @@ export function buildTipPrompt(
   prevTips: string[],
   goal: string,
   lang: Lang,
+  search = false,
 ): {system: string; user: string} {
   const L = TIP_LABELS[lang]
   const system = [
@@ -276,7 +278,9 @@ export function buildTipPrompt(
     `${L.evidence}: <конкретный факт, цифра, исследование, закон или прецедент, подтверждающий или опровергающий позицию в разговоре>`,
     `${L.true}: <утверждение верно — чем подтверждается, если это неочевидно или собеседник сомневается>`,
     `${L.answer}: <ответ по существу, если пользователю только что задали вопрос>`,
-    "Называй источник кратко в скобках, если знаешь его точно (ВОЗ, 2023; Росстат; ГК РФ ст. 475). Никогда не придумывай цифры, исследования и источники; не уверен — пиши «Спорно» или SKIP.",
+    search
+      ? "Проверь прозвучавшее утверждение поиском в интернете и опирайся на найденное. Источник называй кратко в скобках (ВОЗ, 2023; Росстат; BBC). Никогда не придумывай цифры, исследования и источники; ничего надёжного не нашёл — пиши «Спорно» или SKIP."
+      : "Называй источник кратко в скобках, если знаешь его точно (ВОЗ, 2023; Росстат; ГК РФ ст. 475). Никогда не придумывай цифры, исследования и источники; не уверен — пиши «Спорно» или SKIP.",
     "Опирайся на последние реплики. Не повторяй прошлые находки.",
     `Пиши на ${lang === "en" ? "английском (English)" : "русском"} языке. Без Markdown и пояснений.`,
     "Если в последних репликах нет ни утверждений, которые стоит проверить, ни фактов, которые стоит уточнить (бытовой разговор, эмоции, пауза, всё уже проверено), — ответь ровно SKIP.",
@@ -306,7 +310,9 @@ export function tipLine(label: TipLabel, text: string, lang: Lang): string {
 // ───────────────────────── the mode itself ─────────────────────────
 
 export interface TalkDeps {
-  complete(system: string, user: string): Promise<string>
+  complete(system: string, user: string, opts?: {search?: boolean}): Promise<string>
+  /** Claims are checked with a web search (setting «Проверять в интернете»). */
+  search?(): boolean
   explainError(e: unknown): string
   show(text: string): void
   clear(): void
@@ -347,6 +353,8 @@ export class Talk {
   private tipBusy = false
   private lastTipAt = 0
   private wordsSinceTip = 0
+  /** Something checkable was said since the last analysis: worth a web search. */
+  private claimSinceTip = false
   private lastAnswerAt = -Infinity
   // the glasses show a rolling feed, newest at the bottom
   private feed: FeedItem[] = []
@@ -373,6 +381,7 @@ export class Talk {
     this.tipBusy = false
     this.lastTipAt = this.deps.now()
     this.wordsSinceTip = 0
+    this.claimSinceTip = false
     this.lastAnswerAt = -Infinity
     this.feed = []
     const prev = this.record
@@ -465,7 +474,9 @@ export class Talk {
       if (trigger) this.request(trigger, "")
     }
     // a claim with numbers, dates, «доказано» is checked soon, not at the next regular hint
-    this.maybeTip(looksLikeClaim(t))
+    const claim = looksLikeClaim(t)
+    if (claim) this.claimSinceTip = true
+    this.maybeTip(claim)
   }
 
   /** The user's own question («Вопрос, …»): always answered. */
@@ -574,12 +585,16 @@ export class Talk {
     this.tipBusy = true
     this.lastTipAt = this.deps.now()
     this.wordsSinceTip = 0
+    // a web search only when something checkable was said: it is slower and costs more
+    const search = this.claimSinceTip && Boolean(this.deps.search?.())
+    this.claimSinceTip = false
     const context = [...this.recent, this.interim].filter(Boolean).join(" ")
     const lang = detectLang(context.split(/\s+/).slice(-60).join(" "))
     const prevTips = (this.record?.notes ?? []).slice(-PREV_TIPS).map((n) => `${n.q}: ${n.text}`)
-    const {system, user} = buildTipPrompt(context, prevTips, this.deps.goal?.() ?? "", lang)
+    const {system, user} = buildTipPrompt(context, prevTips, this.deps.goal?.() ?? "", lang, search)
+    if (search) this.deps.log("talk", "Проверяю утверждение в интернете…")
     try {
-      const reply = await this.deps.complete(system, user)
+      const reply = await this.deps.complete(system, user, search ? {search: true} : undefined)
       if (session !== this.session) return
       const tip = parseTip(reply)
       if (!tip) {

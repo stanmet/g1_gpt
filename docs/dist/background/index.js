@@ -4559,160 +4559,6 @@
       });
     };
   }
-  // src/background/glyphs.ts
-  var G1_GLYPH_PX = { " ": 6, "!": 4, '"': 6, "#": 14, $: 12, "%": 14, "&": 16, "'": 4, "(": 6, ")": 6, "*": 8, "+": 10, ",": 4, "-": 10, ".": 4, "/": 8, "0": 12, "1": 8, "2": 12, "3": 12, "4": 12, "5": 12, "6": 12, "7": 12, "8": 12, "9": 12, ":": 4, ";": 4, "<": 10, "=": 10, ">": 10, "?": 12, "@": 16, A: 14, B: 12, C: 12, D: 12, E: 10, F: 10, G: 12, H: 12, I: 6, J: 8, K: 12, L: 10, M: 16, N: 12, O: 12, P: 12, Q: 12, R: 12, S: 12, T: 12, U: 12, V: 14, W: 16, X: 14, Y: 14, Z: 12, "[": 6, "\\": 8, "]": 6, "^": 10, _: 8, "`": 6, a: 12, b: 10, c: 10, d: 10, e: 10, f: 10, g: 10, h: 10, i: 4, j: 6, k: 10, l: 4, m: 16, n: 10, o: 10, p: 10, q: 10, r: 8, s: 10, t: 8, u: 12, v: 12, w: 16, x: 12, y: 12, z: 10, "{": 8, "|": 4, "}": 8, "~": 16, "À": 16, "Â": 16, "Ç": 16, "È": 16, "É": 16, "Ê": 16, "Ë": 16, "Î": 16, "Ï": 16, "Ô": 16, "Ù": 16, "Û": 16, "Ü": 16, "à": 16, "ç": 16, "è": 16, "é": 16, "ê": 16, "ë": 16, "î": 16, "ï": 16, "ô": 16, "ù": 16, "û": 16, "ü": 16, "ÿ": 16, "Ÿ": 16, "Ä": 16, "ä": 16, "Ö": 16, "ö": 16, "ß": 16, "ẞ": 16, "â": 16, "Á": 16, "á": 16, "Í": 16, "í": 16, "Ñ": 16, "ñ": 16, "ú": 16, "Ó": 16, "ó": 16, "Ú": 16, "…": 16, "·": 16, "•": 16, "–": 16, "—": 16, "“": 16, "”": 16, "‘": 16, "’": 16, "‹": 16, "›": 16, "⁄": 16, "½": 16, "¼": 16, "¾": 16, "⅛": 16, "⅜": 16, "⅝": 16, "⅞": 16, "₀": 16, "₁": 16, "₂": 16, "₃": 16, "₄": 16, "₅": 16, "₆": 16, "₇": 16, "₈": 16, "₉": 16, "⁰": 16, "ⁱ": 16, "⁲": 16, "⁳": 16, "⁴": 16, "⁵": 16, "⁶": 16, "⁷": 16, "⁸": 16, "⁹": 16, "¿": 16, "‚": 16, "„": 16, "«": 16, "»": 16, "฿": 16, "¶": 16, "§": 16, "©": 18, "®": 16, "™": 16, "°": 16, "¦": 16, "†": 16, "‡": 16, "€": 16, "₿": 16, "¢": 16, "£": 16, "¥": 16, "−": 16, "×": 16, "÷": 16, "≠": 16, "≥": 16, "≤": 16, "±": 16, "≈": 16, "¬": 16, "∞": 18, "∫": 16, "∏": 16, "∑": 16, "√": 16, "∂": 16, "‰": 16, "↑": 16, "↗": 16, "→": 16, "↘": 16, "↓": 16, "↙": 16, "←": 16, "↖": 16, "↔": 18, "↕": 16, "◌": 20, "◊": 16, "¨": 16, "˙": 16, "´": 16, "˝": 16, "ˆ": 16, "ˇ": 16, "˘": 16, "˚": 16, "˜": 16, "¯": 16, "¸": 16, "˛": 16, "Ĳ": 16, "ĳ": 16, "Š": 16, "š": 16, "Ž": 16, "ž": 16, "Ã": 16, "Å": 16, "Æ": 18, "Ì": 16, "Ð": 16, "Ò": 16, "Õ": 16, "Ø": 16, "Ý": 16, "Þ": 16, "ã": 16, "å": 16, "æ": 18, "ì": 16, "ð": 16, "ò": 16, "õ": 16, "ø": 16, "ý": 16, "þ": 16, "Ą": 16, "ą": 16, "Ć": 16, "ć": 16, "Č": 16, "č": 16, "Ď": 16, "ď": 16, "Ę": 16, "ę": 16, "Ě": 16, "ě": 16, "Ğ": 16, "ğ": 16, "Ł": 16, "ł": 16, "Ń": 16, "ń": 16, "Ň": 16, "ň": 16, "Ř": 16, "ř": 16, "Ś": 16, "ś": 16, "Ş": 16, "ş": 16, "Ť": 16, "ť": 16, "Ů": 16, "ů": 16, "Ź": 16, "ź": 16, "Ż": 16, "ż": 16, "☐": 24, "✓": 24, "Ă": 16, "ă": 16, "ı": 16, "Ș": 16, "ș": 16, "Ț": 16, "ț": 16, "А": 18, "Б": 18, "В": 18, "Г": 18, "Ѓ": 18, "Ґ": 18, "Д": 18, "Е": 18, "Ё": 18, "Ж": 18, "З": 18, "И": 18, "Й": 18, "К": 18, "Ќ": 18, "Л": 18, "М": 18, "Н": 18, "О": 18, "П": 18, "Р": 18, "С": 18, "Т": 18, "У": 18, "Ў": 18, "Ф": 18, "Х": 18, "Ч": 18, "Ц": 18, "Ш": 18, "Щ": 20, "Џ": 18, "Ь": 18, "Ы": 18, "Ъ": 18, "Љ": 26, "Њ": 22, "Ѕ": 18, "Є": 18, "Э": 18, "І": 18, "Ї": 18, "Ј": 18, "Ћ": 18, "Ю": 18, "Я": 18, "Ђ": 18, "а": 18, "б": 18, "в": 18, "г": 18, "ѓ": 18, "ґ": 18, "д": 18, "е": 18, "ё": 18, "ж": 18, "з": 18, "и": 18, "й": 18, "к": 18, "ќ": 18, "л": 18, "м": 18, "н": 18, "о": 18, "п": 18, "р": 18, "с": 18, "т": 18, "у": 18, "ў": 18, "ф": 18, "х": 18, "ч": 18, "ц": 18, "ш": 18, "щ": 18, "џ": 18, "ь": 18, "ы": 18, "ъ": 18, "љ": 20, "њ": 18, "ѕ": 18, "є": 18, "э": 18, "і": 18, "ї": 18, "ј": 18, "ћ": 18, "ю": 18, "я": 18, "ђ": 18, "ǖ": 16, "ǘ": 16, "ǚ": 16, "ǜ": 16, "ǎ": 16, "ǐ": 16, "ǒ": 16, "ǔ": 16, "Ő": 16, "ő": 16, "Ű": 16, "ű": 16 };
-
-  // src/background/g1text.ts
-  var G1_LINE_PX = 556;
-  var G1_LINES = 5;
-  var UNKNOWN_PX = 18;
-  function charPx(ch) {
-    return G1_GLYPH_PX[ch] ?? UNKNOWN_PX;
-  }
-  function textPx(s) {
-    let w = 0;
-    for (const ch of s)
-      w += charPx(ch);
-    return w;
-  }
-  var REPLACE = {
-    "№": "No",
-    " ": " ",
-    " ": " ",
-    " ": " ",
-    "\t": " ",
-    "‑": "-",
-    "‐": "-",
-    "−": "-",
-    "×": "x",
-    "✓": "+",
-    "✔": "+",
-    "✗": "x",
-    "★": "*",
-    "➜": "→",
-    "⇒": "→",
-    "⟶": "→",
-    "´": "'",
-    "`": "'"
-  };
-  function sanitizeForG1(input) {
-    let t = String(input ?? "").replace(/\r\n?/g, `
-`);
-    t = t.replace(/```[^\n]*\n?/g, "");
-    t = t.replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1");
-    t = t.replace(/\[([^\]]+)\]\((?:[^()]|\([^)]*\))*\)/g, "$1");
-    t = t.replace(/https?:\/\/(?:www\.)?([^\s/)]+)[^\s)]*/g, "$1");
-    t = t.replace(/^[ \t]{0,3}#{1,6}[ \t]+/gm, "");
-    t = t.replace(/^[ \t]{0,3}>[ \t]?/gm, "");
-    t = t.replace(/^[ \t]*([-*_])([ \t]*\1){2,}[ \t]*$/gm, "");
-    t = t.replace(/^[ \t]*\|?([ \t]*:?-{2,}:?[ \t]*\|)+[ \t]*:?-*:?[ \t]*$/gm, "");
-    t = t.replace(/^[ \t]*\|(.*)\|[ \t]*$/gm, (_m, inner) => inner.split("|").map((c) => c.trim()).filter(Boolean).join(" · "));
-    t = t.replace(/^[ \t]*[-*+•▪●◦][ \t]+/gm, "• ");
-    t = t.replace(/(\*\*|__)(.+?)\1/g, "$2");
-    t = t.replace(/(^|[\s(«"])[*_]([^*_\n]+)[*_](?=[\s).,!?:;»"]|$)/g, "$1$2");
-    t = t.replace(/`([^`]*)`/g, "$1");
-    t = t.replace(/【[^】]*】/g, "");
-    t = t.replace(/\s?\[\d+(?:,\s*\d+)*\]/g, "");
-    let out = "";
-    for (const ch of t) {
-      const r = REPLACE[ch];
-      if (r !== undefined) {
-        out += r;
-      } else if (ch === `
-` || G1_GLYPH_PX[ch] !== undefined) {
-        out += ch;
-      }
-    }
-    return out.split(`
-`).map((l) => l.replace(/ {2,}/g, " ").trim()).filter((l) => l.length > 0).join(`
-`);
-  }
-  function splitLongWord(word, maxPx) {
-    const parts = [];
-    let cur = "";
-    let w = 0;
-    const hyphen = charPx("-");
-    for (const ch of word) {
-      const cw = charPx(ch);
-      if (cur && w + cw + hyphen > maxPx) {
-        parts.push(cur + "-");
-        cur = "";
-        w = 0;
-      }
-      cur += ch;
-      w += cw;
-    }
-    if (cur)
-      parts.push(cur);
-    return parts;
-  }
-  function wrapLines(text, maxPx = G1_LINE_PX) {
-    const lines = [];
-    const space = charPx(" ");
-    for (const para of text.split(`
-`)) {
-      const words = para.split(" ").filter(Boolean);
-      let cur = "";
-      let w = 0;
-      for (const word of words) {
-        const pieces = textPx(word) > maxPx ? splitLongWord(word, maxPx) : [word];
-        for (const piece of pieces) {
-          const pw = textPx(piece);
-          if (!cur) {
-            cur = piece;
-            w = pw;
-          } else if (w + space + pw <= maxPx) {
-            cur += " " + piece;
-            w += space + pw;
-          } else {
-            lines.push(cur);
-            cur = piece;
-            w = pw;
-          }
-        }
-      }
-      if (cur)
-        lines.push(cur);
-    }
-    return lines;
-  }
-  var FOOTER = {
-    ru: { next: "дальше", last: "назад · сначала" },
-    en: { next: "next", last: "back · first page" }
-  };
-  function paginate(text, opts = {}) {
-    const linesPerScreen = opts.linesPerScreen ?? G1_LINES;
-    const maxPx = opts.maxPx ?? G1_LINE_PX;
-    const lines = wrapLines(text, maxPx);
-    if (lines.length === 0)
-      return [];
-    if (lines.length <= linesPerScreen)
-      return [lines.join(`
-`)];
-    const perPage = linesPerScreen - 1;
-    const total = Math.ceil(lines.length / perPage);
-    const pages = [];
-    for (let i = 0;i < total; i++) {
-      const chunk = lines.slice(i * perPage, (i + 1) * perPage);
-      const words = FOOTER[opts.lang ?? "ru"];
-      const hint = i === total - 1 ? words.last : words.next;
-      const footer = `${i + 1}/${total} · ${hint}`;
-      pages.push([...chunk, footer].join(`
-`));
-    }
-    return pages;
-  }
-  function fitScreen(text, maxLines = G1_LINES) {
-    const lines = wrapLines(sanitizeForG1(text));
-    if (lines.length <= maxLines)
-      return lines.join(`
-`);
-    const kept = lines.slice(0, maxLines);
-    kept[maxLines - 1] = kept[maxLines - 1].replace(/\s*\S*$/, "") + "…";
-    return kept.join(`
-`);
-  }
-
   // src/background/voice.ts
   function normalize(s) {
     return String(s ?? "").toLowerCase().replace(/ё/g, "е").replace(/[^\p{L}\p{N}\s-]/gu, " ").replace(/-/g, " ").replace(/\s+/g, " ").trim();
@@ -5230,958 +5076,467 @@
     return { kind: "go", query, mode };
   }
 
-  // src/background/openai.ts
-  var OPENAI_URL = "https://api.openai.com/v1/responses";
-  function pad(n) {
-    return n < 10 ? "0" + n : String(n);
+  // src/background/context.ts
+  var WEATHER_WORDS = /(?:^| )(?:погод|дожд|зонт|снег|снеж|градус|температур|прогноз|осадк|гроз|ливн|ливен|туман|мороз|ветр|ветер|холодн|жарк|жара|солнечн|пасмурн|облачн|гололед|куртк|что надеть|во что одеться|weather|rain|umbrella|snow|forecast|temperature|degrees|windy|sunny|cloudy|jacket)/;
+  function needsWeather(q) {
+    return WEATHER_WORDS.test(normalize(q));
   }
-  function localDateTime(d = new Date) {
-    const days = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
-    const off = -d.getTimezoneOffset();
-    const sign = off >= 0 ? "+" : "-";
-    const tz = `UTC${sign}${pad(Math.floor(Math.abs(off) / 60))}:${pad(Math.abs(off) % 60)}`;
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())} (${days[d.getDay()]}, ${tz})`;
+  var NOT_A_PLACE = new Set([
+    "понедельник",
+    "вторник",
+    "среду",
+    "четверг",
+    "пятницу",
+    "субботу",
+    "воскресенье",
+    "выходные",
+    "обед",
+    "полдень",
+    "полночь",
+    "течение",
+    "ближайшие",
+    "ближайший",
+    "час",
+    "часов",
+    "часа",
+    "минуту",
+    "городе",
+    "центре",
+    "офисе",
+    "парке",
+    "районе",
+    "горах",
+    "лесу",
+    "поле",
+    "доме",
+    "квартире",
+    "машине",
+    "дороге",
+    "пути",
+    "мае",
+    "июне",
+    "июле",
+    "августе",
+    "сентябре",
+    "октябре",
+    "ноябре",
+    "декабре",
+    "январе",
+    "феврале",
+    "марте",
+    "апреле",
+    "этом",
+    "этот",
+    "эту",
+    "следующем",
+    "следующие",
+    "следующую",
+    "среднем",
+    "целом",
+    "общем",
+    "итоге",
+    "принципе",
+    "любом",
+    "той",
+    "том",
+    "this",
+    "the",
+    "next",
+    "general",
+    "morning",
+    "evening",
+    "afternoon"
+  ]);
+  var TIME_TAIL = /\s+(?:сегодня|завтра|послезавтра|сейчас|утром|днем|днём|вечером|ночью|на выходных|на неделе|на этой неделе|на следующей неделе|today|tomorrow|tonight|now|this week|next week|this weekend)\b.*$/iu;
+  function weatherPlace(q) {
+    const t = String(q ?? "").replace(/[?？!.…,]+/gu, " ").replace(/\s+/g, " ").trim();
+    const m = /(?:^|\s)(?:в|во|на|in|at|for)\s+((?:[A-ZА-ЯЁ][\p{L}'’-]*)(?:[\s-]+[A-ZА-ЯЁ][\p{L}'’-]*){0,2})/u.exec(t);
+    if (!m)
+      return null;
+    const place = m[1].replace(TIME_TAIL, "").trim();
+    const first = normalize(place.split(/\s+/)[0] ?? "");
+    if (!place || NOT_A_PLACE.has(first) || /^\d/.test(place))
+      return null;
+    return place;
   }
-  function buildInstructions(s, now = new Date, questionLang = "ru") {
-    const parts = [
-      "Ты — голосовой помощник. Твои ответы показываются на крошечном дисплее умных очков Even Realities G1: 5 строк примерно по 30 символов, монохромный текст. Пользователь не видит телефон.",
-      "Отвечай на том же языке, на котором задан последний вопрос: на русский вопрос — по-русски, на английский — по-английски (English question → answer in English). Если пользователь прямо попросил другой язык — используй его.",
-      "Пиши обычным текстом без Markdown: без заголовков, звёздочек, таблиц, ссылок, эмодзи и блоков кода.",
-      `Начинай сразу с сути, без вступлений и повторения вопроса. По умолчанию уложись примерно в ${s.answerWords} слов. Если пользователь просит подробнее или вопрос этого требует — можно длиннее, короткими абзацами.`,
-      "Списки оформляй короткими строками, каждая начинается с «• ». Числа пиши цифрами.",
-      "Вопрос получен через распознавание речи и может содержать ошибки — угадывай смысл по контексту.",
-      "Старайся отвечать сразу, без встречных вопросов: если чего-то не хватает (например, города отправления), сделай разумное предположение — по сведениям о пользователе, если они есть, — коротко назови его и ответь. Переспрашивай, только если без уточнения ответ бесполезен, и тогда задай один короткий вопрос.",
-      "Учитывай предыдущие реплики разговора: пользователь может задавать уточняющие вопросы.",
-      `Текущие дата и время у пользователя: ${localDateTime(now)}.`
-    ];
-    if (s.aboutMe.trim())
-      parts.push(`Что известно о пользователе (учитывай, когда уместно):
-${s.aboutMe.trim()}`);
-    if (s.instructions.trim())
-      parts.push(`Дополнительные пожелания пользователя:
-${s.instructions.trim()}`);
-    parts.push(questionLang === "en" ? "The latest question was asked in English. Answer in English (unless the user explicitly asks for another language)." : "Последний вопрос задан по-русски — отвечай по-русски (если пользователь прямо не попросил другой язык).");
-    return parts.join(`
-
-`);
-  }
-  function effortFor(s) {
-    if (s.effort !== "auto")
-      return s.effort;
-    const m = s.model.toLowerCase();
-    if (m.includes("terra") || m.includes("luna"))
-      return "none";
-    if (m.includes("sol") || m.includes("astra"))
-      return "low";
-    return null;
-  }
-  function openAIMaxTokens(s) {
-    const base = Math.min(8000, Math.max(800, s.answerWords * 12));
-    const effort = effortFor(s);
-    if (effort === "high")
-      return 16000;
-    if (effort === "medium")
-      return Math.max(base, 8000);
-    if (effort === "low")
-      return Math.max(base, 4000);
-    return base;
-  }
-  function buildRequestBody(s, history, question, opts = {}) {
-    const recent = s.historyMessages > 0 ? history.slice(-s.historyMessages) : [];
-    const input = [
-      ...recent.map((m) => ({ role: m.role, content: m.content })),
-      { role: "user", content: question }
-    ];
-    const body = {
-      model: s.model,
-      instructions: opts.system ?? buildInstructions(s, opts.now, detectLang(question)),
-      input,
-      store: false,
-      max_output_tokens: openAIMaxTokens(s)
-    };
-    const effort = effortFor(s);
-    if (effort && opts.includeReasoning !== false)
-      body.reasoning = { effort };
-    if (s.webSearch)
-      body.tools = [{ type: "web_search" }];
-    return body;
-  }
-  function extractText(data) {
-    if (data && typeof data.output_text === "string" && data.output_text.trim())
-      return data.output_text.trim();
+  function placeVariants(place) {
+    const words = place.trim().split(/\s+/);
+    const last = words.pop() ?? "";
+    const head = words.length ? words.join(" ") + " " : "";
     const out = [];
-    for (const item of Array.isArray(data?.output) ? data.output : []) {
-      if (item?.type !== "message")
-        continue;
-      for (const c of Array.isArray(item.content) ? item.content : []) {
-        if ((c?.type === "output_text" || c?.type === "text") && typeof c.text === "string")
-          out.push(c.text);
-      }
-    }
-    return out.join(`
-`).trim();
-  }
-
-  class OpenAIError extends Error {
-    status;
-    code;
-    raw;
-    constructor(message, status, code, raw) {
-      super(message);
-      this.status = status;
-      this.code = code;
-      this.raw = raw;
-      this.name = "OpenAIError";
-    }
-  }
-  function parseError(status, raw) {
-    let code = "";
-    let message = raw.slice(0, 300);
-    try {
-      const j = JSON.parse(raw);
-      code = String(j?.error?.code ?? j?.error?.type ?? "");
-      message = String(j?.error?.message ?? message);
-    } catch {}
-    return new OpenAIError(message, status, code, raw.slice(0, 1000));
-  }
-  function withTimeout(p, ms, setTimer) {
-    return new Promise((resolve, reject) => {
-      const t = setTimer(() => reject(new OpenAIError("timeout", 0, "timeout", "")), ms);
-      p.then((v) => {
-        clearTimeout(t);
-        resolve(v);
-      }, (e) => {
-        clearTimeout(t);
-        reject(e);
-      });
-    });
-  }
-  async function askOpenAI(fetchFn, s, history, question, opts = {}) {
-    if (!s.apiKey)
-      throw new OpenAIError("no key", 401, "no_key", "");
-    const now = opts.now ?? Date.now;
-    const setTimer = opts.setTimer ?? setTimeout;
-    const started = now();
-    const send = async (includeReasoning) => {
-      const body = JSON.stringify(buildRequestBody(s, history, question, { includeReasoning, system: opts.system }));
-      let res;
-      try {
-        res = await withTimeout(fetchFn(OPENAI_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${s.apiKey}` },
-          body
-        }), opts.timeoutMs ?? 60000, setTimer);
-      } catch (e) {
-        if (e instanceof OpenAIError)
-          throw e;
-        throw new OpenAIError(String(e?.message ?? e), 0, "network", "");
-      }
-      const raw = await res.text();
-      return { res, raw };
+    const add = (w) => {
+      const v = (head + w).trim();
+      if (v.length >= 2 && !out.includes(v))
+        out.push(v);
     };
-    let { res, raw } = await send(true);
-    if (!res.ok && res.status === 400 && /reasoning|effort/i.test(raw) && effortFor(s)) {
-      ({ res, raw } = await send(false));
+    if (/[а-яё]$/i.test(last)) {
+      if (/ии$/i.test(last))
+        add(last.replace(/ии$/i, "ия"));
+      if (/е$/i.test(last)) {
+        add(last.replace(/е$/i, ""));
+        add(last.replace(/е$/i, "а"));
+      }
+      if (/и$/i.test(last) && !/ии$/i.test(last))
+        add(last.replace(/и$/i, "ь"));
+      if (/ах$/i.test(last))
+        add(last.replace(/ах$/i, "ы"));
+      if (/ях$/i.test(last))
+        add(last.replace(/ях$/i, "и"));
     }
-    if (!res.ok)
-      throw parseError(res.status, raw);
-    let data;
-    try {
-      data = JSON.parse(raw);
-    } catch {
-      throw new OpenAIError("bad json", res.status, "bad_json", raw.slice(0, 300));
-    }
-    const text = extractText(data);
-    if (!text) {
-      const reason = data?.incomplete_details?.reason ?? data?.status ?? "empty";
-      throw new OpenAIError(`empty answer (${reason})`, res.status, "empty", raw.slice(0, 300));
-    }
-    return { text, ms: now() - started, model: String(data?.model ?? s.model), usage: data?.usage };
-  }
-
-  // src/background/llm.ts
-  var PROVIDERS = {
-    openai: {
-      label: "ChatGPT",
-      company: "OpenAI",
-      keyField: "apiKey",
-      modelField: "model",
-      keyPlaceholder: "sk-…",
-      keyWhere: "platform.openai.com → API keys",
-      models: [
-        { id: "gpt-6.1-terra", label: "GPT‑6.1 Terra" },
-        { id: "gpt-6-luna", label: "GPT‑6 Luna" },
-        { id: "gpt-6.1-sol", label: "GPT‑6.1 Sol" },
-        { id: "gpt-6-astra", label: "GPT‑6 Astra" }
-      ]
-    },
-    anthropic: {
-      label: "Claude",
-      company: "Anthropic",
-      keyField: "anthropicKey",
-      modelField: "anthropicModel",
-      keyPlaceholder: "sk-ant-…",
-      keyWhere: "platform.claude.com/settings/keys → Create key; в поле Workspace выберите рабочее пространство (например, Default)",
-      models: [
-        { id: "claude-haiku-5-5", label: "Haiku 5.5" },
-        { id: "claude-sonnet-5-5", label: "Sonnet 5.5" },
-        { id: "claude-opus-5-5", label: "Opus 5.5" },
-        { id: "claude-fable-5-1", label: "Fable 5.1" }
-      ]
-    },
-    gemini: {
-      label: "Gemini",
-      company: "Google",
-      keyField: "geminiKey",
-      modelField: "geminiModel",
-      keyPlaceholder: "AIza…",
-      keyWhere: "aistudio.google.com/apikey → Create API key",
-      models: [
-        { id: "gemini-3.8-flash", label: "3.8 Flash" },
-        { id: "gemini-3.5-flash-lite", label: "3.5 Flash‑Lite" },
-        { id: "gemini-4-argon", label: "4 Argon" }
-      ]
-    }
-  };
-  function asProvider(v) {
-    return v === "anthropic" || v === "gemini" ? v : "openai";
-  }
-  function keyFor(s, p) {
-    return String(s[PROVIDERS[p].keyField] ?? "");
-  }
-  function modelFor(s, p) {
-    return String(s[PROVIDERS[p].modelField] ?? "");
-  }
-  function modelLabel(p, id) {
-    return PROVIDERS[p].models.find((m) => m.id === id)?.label ?? id;
-  }
-  function displayName(s, p) {
-    return `${PROVIDERS[p].label} ${modelLabel(p, modelFor(s, p))}`;
-  }
-
-  class LLMError extends Error {
-    provider;
-    status;
-    code;
-    constructor(message, provider, status, code) {
-      super(message);
-      this.provider = provider;
-      this.status = status;
-      this.code = code;
-      this.name = "LLMError";
-    }
-  }
-  function explainLLMError(p, status, code, message) {
-    const name = p === "openai" ? "OpenAI" : PROVIDERS[p].label;
-    const m = (message || "").toLowerCase();
-    const c = (code || "").toLowerCase();
-    if (c === "no_key")
-      return `Нет ключа ${name}. Добавьте его в настройках приложения.`;
-    if (c === "timeout")
-      return `${name} не ответил вовремя. Повторите вопрос.`;
-    if (status === 0)
-      return `Нет связи с ${name}. Проверьте интернет на телефоне.`;
-    if (status === 401 || c === "authentication_error" || /api key not valid|invalid api key|invalid x-api-key/.test(m))
-      return `Ключ ${name} не принят. Проверьте ключ в настройках.`;
-    if (/anthropic-workspace-id|not scoped to a workspace/.test(m))
-      return "Ключ Claude не привязан к рабочему пространству. Создайте новый на platform.claude.com/settings/keys и выберите Workspace (например, Default).";
-    if (c === "insufficient_quota" || /credit balance|billing|insufficient.*(funds|credit)/.test(m) || p === "openai" && m.includes("quota"))
-      return p === "openai" ? "На счёте OpenAI API нет средств. Пополните баланс на platform.openai.com." : `На счёте ${name} нет средств. Пополните баланс у ${PROVIDERS[p].company}.`;
-    if (p === "gemini" && (status === 429 || c === "resource_exhausted"))
-      return "Лимит Gemini исчерпан. Подождите минуту или подключите оплату в Google AI Studio.";
-    if (c === "empty")
-      return /max_output_tokens|max_tokens|incomplete/.test(m) ? `${name}: ответ не уместился — модель потратила лимит на размышления. Уменьшите «Размышления» в настройках.` : `${name} вернул пустой ответ. Повторите вопрос.`;
-    if (status === 529 || c === "overloaded_error")
-      return `${name} сейчас перегружен. Повторите через минуту.`;
-    if (status === 429)
-      return `${name} просит подождать (лимит запросов). Повторите через минуту.`;
-    if (status === 404 || c === "model_not_found" || c === "not_found_error" || c === "not_found")
-      return "Модель недоступна для вашего ключа. Выберите другую в настройках.";
-    if (status === 403)
-      return `Доступ запрещён: проверьте ключ и права ${name}.`;
-    if (status >= 500)
-      return `Сбой на стороне ${name}. Повторите вопрос.`;
-    return `Ошибка ${name} ${status}${code ? " (" + code + ")" : ""}.`;
-  }
-  function alternatingHistory(history, limit) {
-    const recent = limit > 0 ? history.slice(-limit) : [];
-    const out = [];
-    for (const m of recent) {
-      if (!out.length && m.role !== "user")
-        continue;
-      if (out.length && out[out.length - 1].role === m.role) {
-        out[out.length - 1] = { ...out[out.length - 1], content: out[out.length - 1].content + `
-` + m.content };
-      } else
-        out.push(m);
-    }
-    if (out.length && out[out.length - 1].role === "user")
-      out.pop();
+    add(last);
     return out;
   }
-  function maxTokens(s) {
-    const base = Math.min(8000, Math.max(1024, s.answerWords * 12));
-    if (s.effort === "high")
-      return Math.max(base, 16000);
-    if (s.effort === "medium")
-      return Math.max(base, 8000);
-    return base;
+  function openMeteoUrl(lat, lng) {
+    const r = (v) => Math.round(v * 100) / 100;
+    return `https://api.open-meteo.com/v1/forecast?latitude=${r(lat)}&longitude=${r(lng)}` + "&current=temperature_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_gusts_10m" + "&hourly=temperature_2m,precipitation_probability,precipitation,weather_code" + "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,wind_speed_10m_max,sunrise,sunset" + "&timezone=auto&forecast_days=3&wind_speed_unit=ms";
   }
-  async function post(p, fetchFn, url, headers, body, opts) {
-    const setTimer = opts.setTimer ?? setTimeout;
-    const req = fetchFn(url, { method: "POST", headers, body: JSON.stringify(body) });
-    let res;
-    try {
-      res = await new Promise((resolve, reject) => {
-        const t = setTimer(() => reject(new LLMError("timeout", p, 0, "timeout")), opts.timeoutMs ?? 60000);
-        req.then((v) => {
-          clearTimeout(t);
-          resolve(v);
-        }, (e) => {
-          clearTimeout(t);
-          reject(e);
-        });
-      });
-    } catch (e) {
-      if (e instanceof LLMError)
-        throw e;
-      throw new LLMError(String(e?.message ?? e), p, 0, "network");
-    }
-    return { ok: res.ok, status: res.status, raw: await res.text() };
+  function geocodeUrl(name, lang) {
+    return `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=5&language=${lang}&format=json`;
   }
-  function parseJson(p, status, raw) {
-    try {
-      return JSON.parse(raw);
-    } catch {
-      throw new LLMError(`bad json: ${raw.slice(0, 200)}`, p, status, "bad_json");
-    }
+  function pickGeocode(data, wanted) {
+    const list = Array.isArray(data?.results) ? data.results : [];
+    if (!list.length)
+      return null;
+    const w = normalize(wanted);
+    const exact = list.filter((r) => normalize(String(r?.name ?? "")) === w);
+    const pool = exact.length ? exact : list;
+    const best = [...pool].sort((a, b) => (Number(b?.population) || 0) - (Number(a?.population) || 0))[0];
+    const lat = Number(best?.latitude);
+    const lng = Number(best?.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng))
+      return null;
+    return { name: String(best.name ?? wanted), country: String(best.country ?? ""), lat, lng };
   }
-  var ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
-  var ANTHROPIC_VERSION = "2023-06-01";
-  function anthropicReasoning(s) {
-    const m = s.anthropicModel.toLowerCase();
-    if (s.effort === "auto" || s.effort === "none") {
-      if (m.includes("haiku"))
-        return { thinking: { type: "disabled" }, output_config: { effort: "low" } };
-      if (m.includes("sonnet"))
-        return { thinking: { type: "between_tools" }, output_config: { effort: "low" } };
-      return { output_config: { effort: "low" } };
-    }
-    return { output_config: { effort: s.effort } };
+  function weatherWord(code, lang = "ru") {
+    const ru = [
+      [[0], "ясно"],
+      [[1], "в основном ясно"],
+      [[2], "переменная облачность"],
+      [[3], "пасмурно"],
+      [[45, 48], "туман"],
+      [[51, 53, 55], "морось"],
+      [[56, 57], "ледяная морось"],
+      [[61], "слабый дождь"],
+      [[63], "дождь"],
+      [[65], "сильный дождь"],
+      [[66, 67], "ледяной дождь"],
+      [[71], "слабый снег"],
+      [[73], "снег"],
+      [[75], "сильный снег"],
+      [[77], "снежная крупа"],
+      [[80], "ливень"],
+      [[81], "ливни"],
+      [[82], "сильные ливни"],
+      [[85, 86], "снегопад"],
+      [[95], "гроза"],
+      [[96, 99], "гроза с градом"]
+    ];
+    const en = [
+      [[0], "clear"],
+      [[1], "mainly clear"],
+      [[2], "partly cloudy"],
+      [[3], "overcast"],
+      [[45, 48], "fog"],
+      [[51, 53, 55], "drizzle"],
+      [[56, 57], "freezing drizzle"],
+      [[61], "light rain"],
+      [[63], "rain"],
+      [[65], "heavy rain"],
+      [[66, 67], "freezing rain"],
+      [[71], "light snow"],
+      [[73], "snow"],
+      [[75], "heavy snow"],
+      [[77], "snow grains"],
+      [[80], "showers"],
+      [[81], "showers"],
+      [[82], "heavy showers"],
+      [[85, 86], "snow showers"],
+      [[95], "thunderstorm"],
+      [[96, 99], "thunderstorm with hail"]
+    ];
+    for (const [codes, word] of lang === "en" ? en : ru)
+      if (codes.includes(code))
+        return word;
+    return lang === "en" ? `code ${code}` : `код ${code}`;
   }
-  function buildAnthropicBody(s, history, question, opts = {}) {
-    const body = {
-      model: s.anthropicModel,
-      max_tokens: maxTokens(s),
-      system: opts.system ?? buildInstructions(s, opts.now, detectLang(question)),
-      messages: [
-        ...alternatingHistory(history, s.historyMessages).map((m) => ({ role: m.role, content: m.content })),
-        { role: "user", content: question }
-      ]
-    };
-    if (opts.includeReasoning !== false)
-      Object.assign(body, anthropicReasoning(s));
-    if (s.webSearch)
-      body.tools = [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }];
-    return body;
-  }
-  function extractAnthropicText(data) {
-    const blocks = Array.isArray(data?.content) ? data.content : [];
-    let start = 0;
-    blocks.forEach((b, i) => {
-      if (b?.type === "web_search_tool_result")
-        start = i + 1;
-    });
-    const tail = blocks.slice(start).filter((b) => b?.type === "text" && typeof b.text === "string");
-    const use = tail.length ? tail : blocks.filter((b) => b?.type === "text" && typeof b.text === "string");
-    return use.map((b) => b.text).join("").trim();
-  }
-  async function askAnthropic(fetchFn, s, history, q, opts) {
-    const key = s.anthropicKey;
-    if (!key)
-      throw new LLMError("no key", "anthropic", 401, "no_key");
-    const headers = { "content-type": "application/json", "x-api-key": key, "anthropic-version": ANTHROPIC_VERSION };
-    let r = await post("anthropic", fetchFn, ANTHROPIC_URL, headers, buildAnthropicBody(s, history, q, { system: opts.system }), opts);
-    if (!r.ok && r.status === 400 && /thinking|effort|output_config/i.test(r.raw)) {
-      r = await post("anthropic", fetchFn, ANTHROPIC_URL, headers, buildAnthropicBody(s, history, q, { includeReasoning: false, system: opts.system }), opts);
-    }
-    const data = parseJson("anthropic", r.status, r.raw);
-    if (!r.ok) {
-      throw new LLMError(String(data?.error?.message ?? r.raw.slice(0, 300)), "anthropic", r.status, String(data?.error?.type ?? ""));
-    }
-    const text = extractAnthropicText(data);
-    if (!text)
-      throw new LLMError(`empty answer (${data?.stop_reason ?? "?"})`, "anthropic", r.status, "empty");
-    return {
-      text,
-      ms: 0,
-      model: String(data?.model ?? s.anthropicModel),
-      usage: { input_tokens: data?.usage?.input_tokens, output_tokens: data?.usage?.output_tokens }
-    };
-  }
-  var GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
-  function geminiThinkingLevel(s) {
-    if (s.effort === "low" || s.effort === "medium" || s.effort === "high")
-      return s.effort;
-    return s.geminiModel.toLowerCase().includes("lite") ? "minimal" : "low";
-  }
-  function buildGeminiBody(s, history, question, opts = {}) {
-    const generationConfig = { maxOutputTokens: maxTokens(s) };
-    if (opts.includeReasoning !== false)
-      generationConfig.thinkingConfig = { thinkingLevel: geminiThinkingLevel(s) };
-    const body = {
-      systemInstruction: { parts: [{ text: opts.system ?? buildInstructions(s, opts.now, detectLang(question)) }] },
-      contents: [
-        ...alternatingHistory(history, s.historyMessages).map((m) => ({
-          role: m.role === "assistant" ? "model" : "user",
-          parts: [{ text: m.content }]
-        })),
-        { role: "user", parts: [{ text: question }] }
-      ],
-      generationConfig
-    };
-    if (s.webSearch)
-      body.tools = [{ google_search: {} }];
-    return body;
-  }
-  function extractGeminiText(data) {
-    const parts = data?.candidates?.[0]?.content?.parts ?? [];
-    return parts.filter((p) => p && !p.thought && typeof p.text === "string").map((p) => p.text).join("").trim();
-  }
-  async function askGemini(fetchFn, s, history, q, opts) {
-    const key = s.geminiKey;
-    if (!key)
-      throw new LLMError("no key", "gemini", 401, "no_key");
-    const url = `${GEMINI_BASE}${encodeURIComponent(s.geminiModel)}:generateContent`;
-    const headers = { "Content-Type": "application/json", "x-goog-api-key": key };
-    let r = await post("gemini", fetchFn, url, headers, buildGeminiBody(s, history, q, { system: opts.system }), opts);
-    if (!r.ok && r.status === 400 && /thinking/i.test(r.raw)) {
-      r = await post("gemini", fetchFn, url, headers, buildGeminiBody(s, history, q, { includeReasoning: false, system: opts.system }), opts);
-    }
-    const data = parseJson("gemini", r.status, r.raw);
-    if (!r.ok) {
-      throw new LLMError(String(data?.error?.message ?? r.raw.slice(0, 300)), "gemini", r.status, String(data?.error?.status ?? ""));
-    }
-    const text = extractGeminiText(data);
-    if (!text) {
-      const reason = data?.promptFeedback?.blockReason ?? data?.candidates?.[0]?.finishReason ?? "?";
-      throw new LLMError(`empty answer (${reason})`, "gemini", r.status, "empty");
-    }
-    const u = data?.usageMetadata ?? {};
-    return {
-      text,
-      ms: 0,
-      model: String(data?.modelVersion ?? s.geminiModel),
-      usage: { input_tokens: u.promptTokenCount, output_tokens: (u.candidatesTokenCount ?? 0) + (u.thoughtsTokenCount ?? 0) }
-    };
-  }
-  async function askLLM(fetchFn, s, provider, history, question, opts = {}) {
-    const now = opts.now ?? Date.now;
-    const started = now();
-    try {
-      let res;
-      if (provider === "anthropic")
-        res = await askAnthropic(fetchFn, s, history, question, opts);
-      else if (provider === "gemini")
-        res = await askGemini(fetchFn, s, history, question, opts);
-      else
-        res = await askOpenAI(fetchFn, s, history, question, opts);
-      return { ...res, ms: now() - started, provider };
-    } catch (e) {
-      if (e instanceof LLMError)
-        throw e;
-      if (e instanceof OpenAIError)
-        throw new LLMError(e.message, "openai", e.status, e.code);
-      throw new LLMError(String(e?.message ?? e), provider, 0, "network");
-    }
-  }
-
-  // src/background/lecture.ts
-  var DEFAULT_LECTURE_EVERY_SEC = 15;
-  var LECTURE_EVERY_MIN_SEC = 10;
-  var LECTURE_EVERY_MAX_SEC = 60;
-  function lectureTiming(everySec) {
-    const sec = Math.max(LECTURE_EVERY_MIN_SEC, Math.min(LECTURE_EVERY_MAX_SEC, Math.round(Number(everySec) || DEFAULT_LECTURE_EVERY_SEC)));
-    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(v)));
-    return {
-      intervalMs: sec * 1000,
-      minWords: clamp(sec * 1.2, 10, 70),
-      maxWords: clamp(sec * 4, 50, 240),
-      flushMs: clamp(sec * 500, 4000, 12000),
-      flushMinWords: 8,
-      maxPoints: sec <= 25 ? 2 : 3
-    };
-  }
-  var LECTURE_ANSWER_HOLD_MS = 30000;
-  var CONTEXT_WORDS = 600;
-  var LECTURE_RESUME_MS = 20 * 60000;
-  var PREV_POINTS = 8;
-  var NOTES_MAX = 400;
-  var ERROR_SHOW_EVERY_MS = 60000;
-  function wordCount(s) {
-    return String(s ?? "").split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length;
-  }
-  var HOUSEKEEPING = [
-    "any questions",
-    "are there any questions",
-    "do you have any questions",
-    "any more questions",
-    "any other questions",
-    "questions so far",
-    "can you hear me",
-    "can everyone hear",
-    "can you all hear",
-    "can you see",
-    "can everyone see",
-    "is that clear",
-    "is this clear",
-    "does that make sense",
-    "does this make sense",
-    "are you with me",
-    "are we ready",
-    "everyone ready",
-    "is everyone ready",
-    "are you ready",
-    "is everyone here",
-    "shall we start",
-    "shall we begin",
-    "shall we continue",
-    "ok",
-    "okay",
-    "right",
-    "yes",
-    "all right",
-    "alright",
-    "you know",
-    "есть вопросы",
-    "есть ли вопросы",
-    "какие то вопросы",
-    "все слышат",
-    "всем слышно",
-    "меня слышно",
-    "понятно",
-    "всем понятно",
-    "всё понятно",
-    "все понятно",
-    "готовы",
-    "продолжим",
-    "начнем",
-    "начинаем",
-    "да"
-  ];
-  var AUDIENCE_CUES = [
-    "does anyone",
-    "does anybody",
-    "can anyone",
-    "can anybody",
-    "can someone",
-    "could anyone",
-    "could someone",
-    "anyone know",
-    "anybody know",
-    "who can tell",
-    "who knows",
-    "who can explain",
-    "who wants to",
-    "any ideas",
-    "any guesses",
-    "what do you think",
-    "what would you say",
-    "raise your hand",
-    "hands up",
-    "who remembers",
-    "кто знает",
-    "кто может",
-    "кто скажет",
-    "кто нибудь",
-    "как вы думаете",
-    "есть идеи",
-    "кто помнит",
-    "поднимите руку"
-  ];
-  function findAudienceQuestion(text) {
-    const sentences = String(text ?? "").replace(/\s+/g, " ").split(/(?<=[.!?…])\s+/).map((s) => s.trim()).filter(Boolean);
-    for (let i = sentences.length - 1;i >= 0; i--) {
-      const s = sentences[i];
-      const n = normalize(s);
-      if (wordCount(s) < 4)
-        continue;
-      if (HOUSEKEEPING.some((h) => n === h || n.startsWith(h + " ")))
-        continue;
-      if (/\?["»”')\s]*$/.test(s) || AUDIENCE_CUES.some((c) => (" " + n + " ").includes(" " + c + " ")))
-        return s;
-    }
-    return null;
-  }
-  function langName(lang) {
-    return lang === "en" ? "английском (English)" : "русском";
-  }
-  function buildPointsPrompt(prevPoints, chunk, lang, maxPoints = 2) {
-    const system = [
-      "Ты помогаешь студенту на лекции. Твой ответ показывается на крошечном дисплее умных очков: 5 строк примерно по 30 символов.",
-      "Тебе дают свежий фрагмент речи лектора, распознанный автоматически: возможны ошибки распознавания и обрывки фраз — угадывай смысл по контексту.",
-      `Выдели суть: ${maxPoints <= 1 ? "один короткий тезис" : `1–${maxPoints} коротких тезиса (чаще хватает одного)`} на ${langName(lang)} языке, каждый с новой строки и начинается с «• », не длиннее 12 слов.`,
-      "Не переводи и не пересказывай дословно — только главное: определения, утверждения, формулы, числа и даты, примеры, выводы. Термины можно оставлять в оригинале.",
-      "Если лектор цитирует кого-то, сделай отдельный тезис «Цитата: автор (источник) — суть»; если цитату приписали не тому — укажи настоящего автора.",
-      "Не повторяй уже записанные тезисы. Если во фрагменте нет ничего содержательного (приветствие, организационные моменты, шум, повтор), ответь ровно SKIP.",
-      "Без Markdown, без вступлений и пояснений."
-    ].join(`
-`);
-    const prev = prevPoints.length ? `Уже записанные тезисы:
-${prevPoints.map((p) => "• " + p).join(`
-`)}
-
-` : "";
-    return { system, user: `${prev}Новый фрагмент лекции:
-«${chunk.trim()}»` };
-  }
-  function buildAnswerPrompt(context, question, lang, fromUser) {
-    const system = fromUser ? [
-      "Студент сидит на лекции и тихо задаёт тебе вопрос. Ответ показывается на крошечном дисплее умных очков.",
-      `Ответь коротко и по делу, не больше 30 слов, на ${langName(lang)} языке. Если вопрос относится к лекции — учитывай её контекст.`,
-      `Формат ровно две строки:
-Q: <вопрос, до 8 слов>
-A: <ответ>`,
-      "Без Markdown и вступлений."
-    ].join(`
-`) : [
-      "Ты помогаешь студенту на лекции. Лектор только что обратился к аудитории с вопросом; текст распознан автоматически, возможны ошибки.",
-      `Дай короткий правильный ответ, который студент может сказать вслух: не больше 25 слов, на ${langName(lang)} языке. Учитывай контекст лекции.`,
-      `Формат ровно две строки:
-Q: <вопрос лектора, до 8 слов>
-A: <ответ>`,
-      "Если это организационный вопрос (есть ли вопросы, слышно ли, понятно ли, готовы ли) или вопрос, на который нечего ответить по существу, ответь ровно SKIP.",
-      "Без Markdown и вступлений."
-    ].join(`
-`);
-    const ctx = context.trim() ? `Недавно на лекции:
-«${context.trim()}»
-
-` : "";
-    return { system, user: `${ctx}${fromUser ? "Вопрос студента" : "Вопрос лектора"}: «${question.trim()}»` };
-  }
-  var isSkip = (t) => /^\s*skip\b/i.test(t) || /^\s*[—–-]\s*$/.test(t);
-  function parsePoints(text) {
-    if (!String(text ?? "").trim() || isSkip(text))
-      return [];
-    return String(text).split(/\n+/).map((l) => l.replace(/^\s*(?:[•*\-–—]|\d+[.)])\s*/, "").replace(/\*\*/g, "").trim()).filter((l) => l && !isSkip(l)).slice(0, 3);
-  }
-  function feedScreen(allPoints, newCount) {
-    const blocks = [];
-    let used = 0;
-    for (let i = allPoints.length - 1;i >= 0; i--) {
-      const isNew = i >= allPoints.length - newCount;
-      const lines = wrapLines(sanitizeForG1((isNew ? "• " : "· ") + allPoints[i]));
-      if (used + lines.length > G1_LINES) {
-        if (!blocks.length)
-          blocks.unshift(lines);
-        break;
+  var hm = (iso) => String(iso ?? "").slice(11, 16);
+  var round = (v) => Number.isFinite(Number(v)) ? Math.round(Number(v)) : null;
+  var one = (v) => Number.isFinite(Number(v)) ? Math.round(Number(v) * 10) / 10 : null;
+  function formatWeather(data, place) {
+    const c = data?.current ?? {};
+    const lines = [];
+    const now = String(c.time ?? "");
+    const parts = [
+      round(c.temperature_2m) != null ? `${round(c.temperature_2m)} °C` : "",
+      round(c.apparent_temperature) != null ? `ощущается как ${round(c.apparent_temperature)} °C` : "",
+      Number.isFinite(Number(c.weather_code)) ? weatherWord(Number(c.weather_code)) : "",
+      one(c.wind_speed_10m) != null ? `ветер ${one(c.wind_speed_10m)} м/с${one(c.wind_gusts_10m) != null ? ` (порывы ${one(c.wind_gusts_10m)})` : ""}` : "",
+      one(c.precipitation) ? `осадки ${one(c.precipitation)} мм` : ""
+    ].filter(Boolean);
+    lines.push(`Погода${place ? ` — ${place}` : ""} (Open-Meteo), сейчас${now ? ` ${hm(now)}` : ""}: ${parts.join(", ")}.`);
+    const h = data?.hourly ?? {};
+    const times = Array.isArray(h.time) ? h.time : [];
+    const start = now ? times.findIndex((t) => t > now) : -1;
+    if (start >= 0) {
+      const next = [];
+      for (let i = start;i < Math.min(times.length, start + 12); i += 2) {
+        const p = round(h.precipitation_probability?.[i]);
+        const code = Number(h.weather_code?.[i]);
+        next.push(`${hm(times[i])} ${round(h.temperature_2m?.[i]) ?? "?"}°${p != null ? ` ${p}%` : ""}${Number.isFinite(code) && code >= 51 ? ` ${weatherWord(code)}` : ""}`);
       }
-      blocks.unshift(lines);
-      used += lines.length;
+      if (next.length)
+        lines.push(`Ближайшие часы (температура, вероятность осадков): ${next.join(" · ")}.`);
     }
-    const lines = blocks.flat();
-    if (lines.length <= G1_LINES)
+    const d = data?.daily ?? {};
+    const days = Array.isArray(d.time) ? d.time : [];
+    const names = ["Сегодня", "Завтра", "Послезавтра"];
+    days.slice(0, 3).forEach((day, i) => {
+      const p = round(d.precipitation_probability_max?.[i]);
+      const sum = one(d.precipitation_sum?.[i]);
+      const bits = [
+        `${round(d.temperature_2m_min?.[i]) ?? "?"}…${round(d.temperature_2m_max?.[i]) ?? "?"} °C`,
+        Number.isFinite(Number(d.weather_code?.[i])) ? weatherWord(Number(d.weather_code[i])) : "",
+        p != null ? `осадки ${p}%${sum ? `, ${sum} мм` : ""}` : "",
+        one(d.wind_speed_10m_max?.[i]) != null ? `ветер до ${one(d.wind_speed_10m_max[i])} м/с` : "",
+        i === 0 && d.sunrise?.[0] ? `восход ${hm(d.sunrise[0])}, закат ${hm(d.sunset?.[0])}` : ""
+      ].filter(Boolean);
+      lines.push(`${names[i]} (${day}): ${bits.join(", ")}.`);
+    });
+    return lines.join(`
+`);
+  }
+  var CALENDAR_WORDS = /(?:^| )(?:календар|расписани|встреч|совещани|созвон|планы|план на|что у меня|что запланирован|запланирован|мероприяти|событи|занят ли|занята ли|свободен ли|свободна ли|когда у меня|во сколько у меня|calendar|schedule|meeting|appointment|agenda|what do i have|am i free|am i busy|my day)/;
+  function needsCalendar(q) {
+    return CALENDAR_WORDS.test(normalize(q));
+  }
+  var WEEKDAYS = [
+    [/(?:^| )(?:в )?(?:понедельник|monday)/, 1],
+    [/(?:^| )(?:во )?(?:вторник|tuesday)/, 2],
+    [/(?:^| )(?:в )?(?:среду|среда|wednesday)/, 3],
+    [/(?:^| )(?:в )?(?:четверг|thursday)/, 4],
+    [/(?:^| )(?:в )?(?:пятницу|пятница|friday)/, 5],
+    [/(?:^| )(?:в )?(?:субботу|суббота|saturday)/, 6],
+    [/(?:^| )(?:в )?(?:воскресенье|sunday)/, 0]
+  ];
+  function startOfDay(d) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+  function addDays(d, n) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+  }
+  function calendarWindow(q, now) {
+    const n = normalize(q);
+    const today = startOfDay(now);
+    if (/послезавтра|day after tomorrow/.test(n))
+      return { from: addDays(today, 2), to: addDays(today, 3), label: "послезавтра" };
+    if (/завтра|tomorrow/.test(n))
+      return { from: addDays(today, 1), to: addDays(today, 2), label: "завтра" };
+    if (/выходн|weekend/.test(n)) {
+      const dow = today.getDay();
+      const sat = dow === 6 ? today : dow === 0 ? addDays(today, -1) : addDays(today, 6 - dow);
+      return { from: dow === 0 ? today : sat, to: addDays(sat, 2), label: "выходные" };
+    }
+    if (/недел|week/.test(n))
+      return { from: today, to: addDays(today, 7), label: "7 дней" };
+    if (/месяц|month/.test(n))
+      return { from: today, to: addDays(today, 31), label: "месяц" };
+    for (const [re, dow] of WEEKDAYS) {
+      if (re.test(n)) {
+        const ahead = (dow - today.getDay() + 7) % 7;
+        const day = addDays(today, ahead);
+        return { from: day, to: addDays(day, 1), label: n.match(re)[0].trim() };
+      }
+    }
+    if (/сегодня|today|tonight|вечером|утром|днем/.test(n))
+      return { from: today, to: addDays(today, 1), label: "сегодня" };
+    return { from: today, to: addDays(today, 2), label: "сегодня и завтра" };
+  }
+  var DOW = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
+  var pad = (n) => n < 10 ? "0" + n : String(n);
+  function formatEvents(events, label, truncated = false) {
+    if (!events.length)
+      return `Календарь телефона (${label}): событий нет.`;
+    const lines = [`Календарь телефона (${label}):`];
+    const sorted = [...events].sort((a, b) => String(a.startsAt).localeCompare(String(b.startsAt)));
+    for (const e of sorted.slice(0, 30)) {
+      const s = new Date(e.startsAt);
+      const en = new Date(e.endsAt);
+      if (Number.isNaN(s.getTime()))
+        continue;
+      const day = `${DOW[s.getDay()]} ${pad(s.getDate())}.${pad(s.getMonth() + 1)}`;
+      const time = e.allDay ? "весь день" : `${pad(s.getHours())}:${pad(s.getMinutes())}${Number.isNaN(en.getTime()) ? "" : `–${pad(en.getHours())}:${pad(en.getMinutes())}`}`;
+      const title = String(e.title ?? "").trim() || "(без названия)";
+      const loc = String(e.location ?? "").replace(/\s+/g, " ").trim();
+      lines.push(`• ${day} ${time} ${title}${loc ? ` (${loc.slice(0, 80)})` : ""}`);
+    }
+    if (truncated || sorted.length > 30)
+      lines.push("… (есть ещё события)");
+    return lines.join(`
+`);
+  }
+  function contextBlock(parts) {
+    const p = parts.map((s) => s.trim()).filter(Boolean);
+    if (!p.length)
+      return "";
+    return [
+      "Сведения с телефона пользователя (используй, только если они относятся к вопросу; не пересказывай их без нужды):",
+      ...p
+    ].join(`
+`);
+  }
+
+  // src/background/glyphs.ts
+  var G1_GLYPH_PX = { " ": 6, "!": 4, '"': 6, "#": 14, $: 12, "%": 14, "&": 16, "'": 4, "(": 6, ")": 6, "*": 8, "+": 10, ",": 4, "-": 10, ".": 4, "/": 8, "0": 12, "1": 8, "2": 12, "3": 12, "4": 12, "5": 12, "6": 12, "7": 12, "8": 12, "9": 12, ":": 4, ";": 4, "<": 10, "=": 10, ">": 10, "?": 12, "@": 16, A: 14, B: 12, C: 12, D: 12, E: 10, F: 10, G: 12, H: 12, I: 6, J: 8, K: 12, L: 10, M: 16, N: 12, O: 12, P: 12, Q: 12, R: 12, S: 12, T: 12, U: 12, V: 14, W: 16, X: 14, Y: 14, Z: 12, "[": 6, "\\": 8, "]": 6, "^": 10, _: 8, "`": 6, a: 12, b: 10, c: 10, d: 10, e: 10, f: 10, g: 10, h: 10, i: 4, j: 6, k: 10, l: 4, m: 16, n: 10, o: 10, p: 10, q: 10, r: 8, s: 10, t: 8, u: 12, v: 12, w: 16, x: 12, y: 12, z: 10, "{": 8, "|": 4, "}": 8, "~": 16, "À": 16, "Â": 16, "Ç": 16, "È": 16, "É": 16, "Ê": 16, "Ë": 16, "Î": 16, "Ï": 16, "Ô": 16, "Ù": 16, "Û": 16, "Ü": 16, "à": 16, "ç": 16, "è": 16, "é": 16, "ê": 16, "ë": 16, "î": 16, "ï": 16, "ô": 16, "ù": 16, "û": 16, "ü": 16, "ÿ": 16, "Ÿ": 16, "Ä": 16, "ä": 16, "Ö": 16, "ö": 16, "ß": 16, "ẞ": 16, "â": 16, "Á": 16, "á": 16, "Í": 16, "í": 16, "Ñ": 16, "ñ": 16, "ú": 16, "Ó": 16, "ó": 16, "Ú": 16, "…": 16, "·": 16, "•": 16, "–": 16, "—": 16, "“": 16, "”": 16, "‘": 16, "’": 16, "‹": 16, "›": 16, "⁄": 16, "½": 16, "¼": 16, "¾": 16, "⅛": 16, "⅜": 16, "⅝": 16, "⅞": 16, "₀": 16, "₁": 16, "₂": 16, "₃": 16, "₄": 16, "₅": 16, "₆": 16, "₇": 16, "₈": 16, "₉": 16, "⁰": 16, "ⁱ": 16, "⁲": 16, "⁳": 16, "⁴": 16, "⁵": 16, "⁶": 16, "⁷": 16, "⁸": 16, "⁹": 16, "¿": 16, "‚": 16, "„": 16, "«": 16, "»": 16, "฿": 16, "¶": 16, "§": 16, "©": 18, "®": 16, "™": 16, "°": 16, "¦": 16, "†": 16, "‡": 16, "€": 16, "₿": 16, "¢": 16, "£": 16, "¥": 16, "−": 16, "×": 16, "÷": 16, "≠": 16, "≥": 16, "≤": 16, "±": 16, "≈": 16, "¬": 16, "∞": 18, "∫": 16, "∏": 16, "∑": 16, "√": 16, "∂": 16, "‰": 16, "↑": 16, "↗": 16, "→": 16, "↘": 16, "↓": 16, "↙": 16, "←": 16, "↖": 16, "↔": 18, "↕": 16, "◌": 20, "◊": 16, "¨": 16, "˙": 16, "´": 16, "˝": 16, "ˆ": 16, "ˇ": 16, "˘": 16, "˚": 16, "˜": 16, "¯": 16, "¸": 16, "˛": 16, "Ĳ": 16, "ĳ": 16, "Š": 16, "š": 16, "Ž": 16, "ž": 16, "Ã": 16, "Å": 16, "Æ": 18, "Ì": 16, "Ð": 16, "Ò": 16, "Õ": 16, "Ø": 16, "Ý": 16, "Þ": 16, "ã": 16, "å": 16, "æ": 18, "ì": 16, "ð": 16, "ò": 16, "õ": 16, "ø": 16, "ý": 16, "þ": 16, "Ą": 16, "ą": 16, "Ć": 16, "ć": 16, "Č": 16, "č": 16, "Ď": 16, "ď": 16, "Ę": 16, "ę": 16, "Ě": 16, "ě": 16, "Ğ": 16, "ğ": 16, "Ł": 16, "ł": 16, "Ń": 16, "ń": 16, "Ň": 16, "ň": 16, "Ř": 16, "ř": 16, "Ś": 16, "ś": 16, "Ş": 16, "ş": 16, "Ť": 16, "ť": 16, "Ů": 16, "ů": 16, "Ź": 16, "ź": 16, "Ż": 16, "ż": 16, "☐": 24, "✓": 24, "Ă": 16, "ă": 16, "ı": 16, "Ș": 16, "ș": 16, "Ț": 16, "ț": 16, "А": 18, "Б": 18, "В": 18, "Г": 18, "Ѓ": 18, "Ґ": 18, "Д": 18, "Е": 18, "Ё": 18, "Ж": 18, "З": 18, "И": 18, "Й": 18, "К": 18, "Ќ": 18, "Л": 18, "М": 18, "Н": 18, "О": 18, "П": 18, "Р": 18, "С": 18, "Т": 18, "У": 18, "Ў": 18, "Ф": 18, "Х": 18, "Ч": 18, "Ц": 18, "Ш": 18, "Щ": 20, "Џ": 18, "Ь": 18, "Ы": 18, "Ъ": 18, "Љ": 26, "Њ": 22, "Ѕ": 18, "Є": 18, "Э": 18, "І": 18, "Ї": 18, "Ј": 18, "Ћ": 18, "Ю": 18, "Я": 18, "Ђ": 18, "а": 18, "б": 18, "в": 18, "г": 18, "ѓ": 18, "ґ": 18, "д": 18, "е": 18, "ё": 18, "ж": 18, "з": 18, "и": 18, "й": 18, "к": 18, "ќ": 18, "л": 18, "м": 18, "н": 18, "о": 18, "п": 18, "р": 18, "с": 18, "т": 18, "у": 18, "ў": 18, "ф": 18, "х": 18, "ч": 18, "ц": 18, "ш": 18, "щ": 18, "џ": 18, "ь": 18, "ы": 18, "ъ": 18, "љ": 20, "њ": 18, "ѕ": 18, "є": 18, "э": 18, "і": 18, "ї": 18, "ј": 18, "ћ": 18, "ю": 18, "я": 18, "ђ": 18, "ǖ": 16, "ǘ": 16, "ǚ": 16, "ǜ": 16, "ǎ": 16, "ǐ": 16, "ǒ": 16, "ǔ": 16, "Ő": 16, "ő": 16, "Ű": 16, "ű": 16 };
+
+  // src/background/g1text.ts
+  var G1_LINE_PX = 556;
+  var G1_LINES = 5;
+  var UNKNOWN_PX = 18;
+  function charPx(ch) {
+    return G1_GLYPH_PX[ch] ?? UNKNOWN_PX;
+  }
+  function textPx(s) {
+    let w = 0;
+    for (const ch of s)
+      w += charPx(ch);
+    return w;
+  }
+  var REPLACE = {
+    "№": "No",
+    " ": " ",
+    " ": " ",
+    " ": " ",
+    "\t": " ",
+    "‑": "-",
+    "‐": "-",
+    "−": "-",
+    "×": "x",
+    "✓": "+",
+    "✔": "+",
+    "✗": "x",
+    "★": "*",
+    "➜": "→",
+    "⇒": "→",
+    "⟶": "→",
+    "´": "'",
+    "`": "'"
+  };
+  function sanitizeForG1(input) {
+    let t = String(input ?? "").replace(/\r\n?/g, `
+`);
+    t = t.replace(/```[^\n]*\n?/g, "");
+    t = t.replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1");
+    t = t.replace(/\[([^\]]+)\]\((?:[^()]|\([^)]*\))*\)/g, "$1");
+    t = t.replace(/https?:\/\/(?:www\.)?([^\s/)]+)[^\s)]*/g, "$1");
+    t = t.replace(/^[ \t]{0,3}#{1,6}[ \t]+/gm, "");
+    t = t.replace(/^[ \t]{0,3}>[ \t]?/gm, "");
+    t = t.replace(/^[ \t]*([-*_])([ \t]*\1){2,}[ \t]*$/gm, "");
+    t = t.replace(/^[ \t]*\|?([ \t]*:?-{2,}:?[ \t]*\|)+[ \t]*:?-*:?[ \t]*$/gm, "");
+    t = t.replace(/^[ \t]*\|(.*)\|[ \t]*$/gm, (_m, inner) => inner.split("|").map((c) => c.trim()).filter(Boolean).join(" · "));
+    t = t.replace(/^[ \t]*[-*+•▪●◦][ \t]+/gm, "• ");
+    t = t.replace(/(\*\*|__)(.+?)\1/g, "$2");
+    t = t.replace(/(^|[\s(«"])[*_]([^*_\n]+)[*_](?=[\s).,!?:;»"]|$)/g, "$1$2");
+    t = t.replace(/`([^`]*)`/g, "$1");
+    t = t.replace(/【[^】]*】/g, "");
+    t = t.replace(/\s?\[\d+(?:,\s*\d+)*\]/g, "");
+    let out = "";
+    for (const ch of t) {
+      const r = REPLACE[ch];
+      if (r !== undefined) {
+        out += r;
+      } else if (ch === `
+` || G1_GLYPH_PX[ch] !== undefined) {
+        out += ch;
+      }
+    }
+    return out.split(`
+`).map((l) => l.replace(/ {2,}/g, " ").trim()).filter((l) => l.length > 0).join(`
+`);
+  }
+  function splitLongWord(word, maxPx) {
+    const parts = [];
+    let cur = "";
+    let w = 0;
+    const hyphen = charPx("-");
+    for (const ch of word) {
+      const cw = charPx(ch);
+      if (cur && w + cw + hyphen > maxPx) {
+        parts.push(cur + "-");
+        cur = "";
+        w = 0;
+      }
+      cur += ch;
+      w += cw;
+    }
+    if (cur)
+      parts.push(cur);
+    return parts;
+  }
+  function wrapLines(text, maxPx = G1_LINE_PX) {
+    const lines = [];
+    const space = charPx(" ");
+    for (const para of text.split(`
+`)) {
+      const words = para.split(" ").filter(Boolean);
+      let cur = "";
+      let w = 0;
+      for (const word of words) {
+        const pieces = textPx(word) > maxPx ? splitLongWord(word, maxPx) : [word];
+        for (const piece of pieces) {
+          const pw = textPx(piece);
+          if (!cur) {
+            cur = piece;
+            w = pw;
+          } else if (w + space + pw <= maxPx) {
+            cur += " " + piece;
+            w += space + pw;
+          } else {
+            lines.push(cur);
+            cur = piece;
+            w = pw;
+          }
+        }
+      }
+      if (cur)
+        lines.push(cur);
+    }
+    return lines;
+  }
+  var FOOTER = {
+    ru: { next: "дальше", last: "назад · сначала" },
+    en: { next: "next", last: "back · first page" }
+  };
+  function paginate(text, opts = {}) {
+    const linesPerScreen = opts.linesPerScreen ?? G1_LINES;
+    const maxPx = opts.maxPx ?? G1_LINE_PX;
+    const lines = wrapLines(text, maxPx);
+    if (lines.length === 0)
+      return [];
+    if (lines.length <= linesPerScreen)
+      return [lines.join(`
+`)];
+    const perPage = linesPerScreen - 1;
+    const total = Math.ceil(lines.length / perPage);
+    const pages = [];
+    for (let i = 0;i < total; i++) {
+      const chunk = lines.slice(i * perPage, (i + 1) * perPage);
+      const words = FOOTER[opts.lang ?? "ru"];
+      const hint = i === total - 1 ? words.last : words.next;
+      const footer = `${i + 1}/${total} · ${hint}`;
+      pages.push([...chunk, footer].join(`
+`));
+    }
+    return pages;
+  }
+  function fitScreen(text, maxLines = G1_LINES) {
+    const lines = wrapLines(sanitizeForG1(text));
+    if (lines.length <= maxLines)
       return lines.join(`
 `);
-    return pointsScreen(allPoints.slice(-1));
-  }
-  function parseAnswer(text, fallbackQ) {
-    const t = String(text ?? "").trim();
-    if (!t || isSkip(t))
-      return null;
-    const q = /^\s*(?:Q|В|Вопрос)\s*[:：]\s*(.+)$/im.exec(t)?.[1]?.trim();
-    const aMatch = /^\s*(?:A|О|Ответ)\s*[:：]\s*([\s\S]+)$/im.exec(t);
-    const a = (aMatch ? aMatch[1] : t.replace(/^\s*(?:Q|В|Вопрос)\s*[:：].*$/im, "")).replace(/\*\*/g, "").replace(/\s*\n\s*/g, " ").trim();
-    if (!a || isSkip(a))
-      return null;
-    return { q: q || fallbackQ, a };
-  }
-  function pointsScreen(points) {
-    const lines = wrapLines(sanitizeForG1(points.map((p) => "• " + p).join(`
-`)));
-    if (lines.length <= G1_LINES)
-      return lines.join(`
-`);
-    const kept = lines.slice(0, G1_LINES);
-    kept[G1_LINES - 1] = kept[G1_LINES - 1].replace(/\s*\S*$/, "") + "…";
+    const kept = lines.slice(0, maxLines);
+    kept[maxLines - 1] = kept[maxLines - 1].replace(/\s*\S*$/, "") + "…";
     return kept.join(`
 `);
-  }
-  function answerScreen(q, a) {
-    const qLines = wrapLines(sanitizeForG1("? " + q));
-    const qLine = qLines.length > 1 ? qLines[0].replace(/\s*\S*$/, "") + "…" : qLines[0] ?? "";
-    const aLines = wrapLines(sanitizeForG1("→ " + a));
-    const room = G1_LINES - (qLine ? 1 : 0);
-    const shown = aLines.slice(0, room);
-    if (aLines.length > room)
-      shown[room - 1] = shown[room - 1].replace(/\s*\S*$/, "") + "…";
-    return [qLine, ...shown].filter(Boolean).join(`
-`);
-  }
-
-  class Lecture {
-    deps;
-    active = false;
-    record;
-    screen = "";
-    session = 0;
-    buffer = [];
-    recent = [];
-    lastSummaryAt = 0;
-    summarizing = false;
-    answering = false;
-    pendingQuestion = null;
-    holdUntil = 0;
-    pendingFeed = false;
-    lastNewCount = 0;
-    flushTimer = null;
-    holdTimer = null;
-    lastErrorShownAt = -Infinity;
-    constructor(deps, saved = null) {
-      this.deps = deps;
-      this.record = saved;
-    }
-    start() {
-      this.stopTimers();
-      this.session++;
-      this.active = true;
-      this.buffer = [];
-      this.recent = [];
-      this.summarizing = false;
-      this.answering = false;
-      this.pendingQuestion = null;
-      this.pendingFeed = false;
-      this.holdUntil = 0;
-      this.lastSummaryAt = this.deps.now();
-      const prev = this.record;
-      const resume = Boolean(prev?.endedAt && this.deps.now() - prev.endedAt < LECTURE_RESUME_MS);
-      if (resume && prev)
-        delete prev.endedAt;
-      else
-        this.record = { startedAt: this.deps.now(), notes: [] };
-      this.deps.save(this.record);
-      const en = this.deps.lang() === "en";
-      const sec = this.timing().intervalMs / 1000;
-      this.setScreen(en ? `Lecture mode
-• key points every ~${sec} s
-• answers to the lecturer's questions
-Stop: «стоп лекция»` : `Режим лекции
-• тезисы примерно раз в ${sec} с
-• ответы на вопросы лектора
-Выключить: «стоп лекция»`);
-      this.deps.log("lecture", resume ? "Режим лекции включён — продолжаю прежний конспект" : "Режим лекции включён");
-      this.deps.onChange();
-    }
-    stop() {
-      const notes = this.record?.notes ?? [];
-      const summary = { points: notes.filter((n) => n.kind === "point").length, answers: notes.filter((n) => n.kind !== "point").length };
-      if (!this.active)
-        return summary;
-      this.active = false;
-      this.session++;
-      this.stopTimers();
-      this.buffer = [];
-      this.pendingQuestion = null;
-      this.pendingFeed = false;
-      this.screen = "";
-      if (this.record) {
-        this.record.endedAt = this.deps.now();
-        this.deps.save(this.record);
-      }
-      this.deps.log("lecture", `Режим лекции выключен: тезисов ${summary.points}, ответов ${summary.answers}`);
-      this.deps.onChange();
-      return summary;
-    }
-    onSpeech(text) {
-      if (!this.active)
-        return;
-      const t = String(text ?? "").trim();
-      if (!t)
-        return;
-      this.buffer.push(t);
-      this.recent.push(t);
-      this.trimRecent();
-      const q = findAudienceQuestion(t);
-      if (q)
-        this.answer(q, false);
-      const tm = this.timing();
-      const words = wordCount(this.buffer.join(" "));
-      const since = this.deps.now() - this.lastSummaryAt;
-      if (words >= tm.maxWords || words >= tm.minWords && since >= tm.intervalMs)
-        this.summarize();
-      this.armFlush();
-    }
-    async aside(placeholder, run) {
-      if (!this.active)
-        return;
-      const session = this.session;
-      this.setScreen(answerScreen(placeholder, "…"));
-      try {
-        const qa = await run();
-        if (session !== this.session || !qa)
-          return;
-        this.addNote({ t: this.deps.now(), kind: "you", q: qa.q, text: qa.a });
-        this.setScreen(answerScreen(qa.q, qa.a));
-        this.hold();
-      } catch (e) {
-        if (session !== this.session)
-          return;
-        this.showError(e);
-      }
-    }
-    askUser(question) {
-      if (!this.active || !question.trim())
-        return;
-      this.answer(question.trim(), true);
-    }
-    trimRecent() {
-      let words = wordCount(this.recent.join(" "));
-      while (this.recent.length > 1 && words > CONTEXT_WORDS) {
-        words -= wordCount(this.recent.shift());
-      }
-    }
-    timing() {
-      return lectureTiming(this.deps.everySec?.() ?? DEFAULT_LECTURE_EVERY_SEC);
-    }
-    armFlush() {
-      if (this.flushTimer != null)
-        this.deps.clearTimer(this.flushTimer);
-      const tm = this.timing();
-      this.flushTimer = this.deps.setTimer(() => {
-        this.flushTimer = null;
-        if (this.active && wordCount(this.buffer.join(" ")) >= tm.flushMinWords)
-          this.summarize();
-      }, tm.flushMs);
-    }
-    allPoints() {
-      return (this.record?.notes ?? []).filter((n) => n.kind === "point").map((n) => n.text);
-    }
-    async summarize() {
-      if (this.summarizing || !this.buffer.length)
-        return;
-      const session = this.session;
-      const chunk = this.buffer.join(" ");
-      this.buffer = [];
-      this.summarizing = true;
-      this.lastSummaryAt = this.deps.now();
-      const prev = this.allPoints().slice(-PREV_POINTS);
-      const { system, user } = buildPointsPrompt(prev, chunk, this.deps.lang(), this.timing().maxPoints);
-      try {
-        const reply = await this.deps.complete(system, user);
-        if (session !== this.session)
-          return;
-        const points = parsePoints(reply);
-        if (!points.length) {
-          this.deps.log("lecture", `Тезисов нет (${wordCount(chunk)} слов без сути)`);
-          return;
-        }
-        const t = this.deps.now();
-        for (const p of points)
-          this.addNote({ t, kind: "point", text: p });
-        this.deps.log("lecture", points.map((p) => "• " + p).join(" "));
-        this.lastNewCount = points.length;
-        if (this.deps.now() < this.holdUntil)
-          this.pendingFeed = true;
-        else
-          this.setScreen(feedScreen(this.allPoints(), points.length));
-      } catch (e) {
-        if (session !== this.session)
-          return;
-        this.showError(e);
-      } finally {
-        if (session === this.session) {
-          this.summarizing = false;
-          if (wordCount(this.buffer.join(" ")) >= this.timing().maxWords)
-            this.summarize();
-        }
-      }
-    }
-    async answer(question, fromUser) {
-      if (this.answering) {
-        if (fromUser || !this.pendingQuestion?.fromUser)
-          this.pendingQuestion = { text: question, fromUser };
-        return;
-      }
-      const session = this.session;
-      this.answering = true;
-      this.deps.log("lecture", `${fromUser ? "Ваш вопрос" : "Вопрос лектора"}: ${question}`);
-      if (fromUser)
-        this.setScreen(answerScreen(question, "…думаю"));
-      const { system, user } = buildAnswerPrompt(this.recent.join(" "), question, fromUser ? detectLang(question) : this.deps.lang(), fromUser);
-      try {
-        const reply = await this.deps.complete(system, user);
-        if (session !== this.session)
-          return;
-        const qa = parseAnswer(reply, question);
-        if (!qa) {
-          this.deps.log("lecture", "Организационный вопрос — без ответа");
-          return;
-        }
-        this.addNote({ t: this.deps.now(), kind: fromUser ? "you" : "qa", q: qa.q, text: qa.a });
-        this.deps.log("lecture", `→ ${qa.a}`);
-        this.setScreen(answerScreen(qa.q, qa.a));
-        this.hold();
-      } catch (e) {
-        if (session !== this.session)
-          return;
-        this.showError(e);
-      } finally {
-        if (session === this.session) {
-          this.answering = false;
-          const next = this.pendingQuestion;
-          this.pendingQuestion = null;
-          if (next)
-            this.answer(next.text, next.fromUser);
-        }
-      }
-    }
-    hold() {
-      this.holdUntil = this.deps.now() + LECTURE_ANSWER_HOLD_MS;
-      if (this.holdTimer != null)
-        this.deps.clearTimer(this.holdTimer);
-      this.holdTimer = this.deps.setTimer(() => {
-        this.holdTimer = null;
-        this.holdUntil = 0;
-        if (!this.active)
-          return;
-        if (this.pendingFeed) {
-          this.setScreen(feedScreen(this.allPoints(), this.lastNewCount));
-          this.pendingFeed = false;
-        }
-      }, LECTURE_ANSWER_HOLD_MS);
-    }
-    addNote(n) {
-      if (!this.record)
-        this.record = { startedAt: n.t, notes: [] };
-      this.record.notes.push(n);
-      if (this.record.notes.length > NOTES_MAX)
-        this.record.notes.splice(0, this.record.notes.length - NOTES_MAX);
-      this.deps.save(this.record);
-      this.deps.onChange();
-    }
-    setScreen(text) {
-      this.screen = text;
-      this.deps.show(text);
-      this.deps.onChange();
-    }
-    showError(e) {
-      const human = this.deps.explainError(e);
-      this.deps.log("error", `Лекция: ${human}`);
-      const now = this.deps.now();
-      if (now - this.lastErrorShownAt < ERROR_SHOW_EVERY_MS)
-        return;
-      this.lastErrorShownAt = now;
-      if (now >= this.holdUntil)
-        this.setScreen(human);
-    }
-    stopTimers() {
-      for (const k of ["flushTimer", "holdTimer"]) {
-        if (this[k] != null)
-          this.deps.clearTimer(this[k]);
-        this[k] = null;
-      }
-    }
   }
 
   // src/shared/inflate.ts
@@ -6625,6 +5980,10 @@ Stop: «стоп лекция»` : `Режим лекции
   function toWorld(lat, lng) {
     const s = Math.sin(Math.max(-85.05, Math.min(85.05, lat)) * Math.PI / 180);
     return { x: (lng + 180) / 360, y: 0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI) };
+  }
+  function fromWorld(x, y) {
+    const n = Math.PI - 2 * Math.PI * y;
+    return { lat: 180 / Math.PI * Math.atan(Math.sinh(n)), lng: x * 360 - 180 };
   }
   function metersPerWorld(lat) {
     return EARTH_CIRCUMFERENCE * Math.cos(lat * Math.PI / 180);
@@ -7846,6 +7205,1541 @@ ${modeLabel(mode)}
     }
   }
 
+  // src/background/guide.ts
+  var INFO_LAYERS = new Set(["poi", "place", "transportation_name", "housenumber"]);
+  var INFO_PROPS = new Set(["class", "subclass", "name", "name:ru", "name:en", "name_en", "name:latin", "rank", "housenumber"]);
+  function poiInterest(cls, sub) {
+    switch (cls) {
+      case "castle":
+        return sub === "ruins" ? { score: 3.5, kind: "руины" } : { score: 4, kind: "замок" };
+      case "museum":
+        return { score: 3, kind: "музей" };
+      case "monument":
+        return { score: 3, kind: "памятник" };
+      case "memorial":
+        return { score: 2.5, kind: "мемориал" };
+      case "attraction":
+        return sub === "viewpoint" ? { score: 2, kind: "смотровая площадка" } : { score: 3, kind: "достопримечательность" };
+      case "place_of_worship":
+        return {
+          score: 2.5,
+          kind: sub === "christian" ? "церковь" : sub === "jewish" ? "синагога" : sub === "muslim" ? "мечеть" : sub === "buddhist" ? "буддийский храм" : "храм"
+        };
+      case "zoo":
+        return { score: 3, kind: "зоопарк" };
+      case "theatre":
+        return { score: 2, kind: "театр" };
+      case "town_hall":
+        return sub === "townhall" ? { score: 2.5, kind: "ратуша" } : sub === "courthouse" ? { score: 1.5, kind: "суд" } : null;
+      case "college":
+        return sub === "university" ? { score: 2, kind: "университет" } : null;
+      case "art_gallery":
+        return sub === "artwork" ? { score: 1.5, kind: "арт-объект" } : sub === "arts_centre" ? { score: 2, kind: "арт-центр" } : sub === "gallery" ? { score: 1, kind: "галерея" } : null;
+      case "library":
+        return sub === "library" ? { score: 1.5, kind: "библиотека" } : null;
+      case "garden":
+        return { score: 1.5, kind: "сад" };
+      case "park":
+        return sub === "park" ? { score: 1.5, kind: "парк" } : null;
+      case "cemetery":
+        return { score: 1.5, kind: "кладбище" };
+      case "stadium":
+        return { score: 1.5, kind: "стадион" };
+      case "fountain":
+        return { score: 1.5, kind: "фонтан" };
+      case "railway":
+        return sub === "station" ? { score: 1, kind: "вокзал" } : null;
+    }
+    return null;
+  }
+  function tileInfo(bytes, z, tx, ty) {
+    const tile = decodeTile(bytes, { layers: INFO_LAYERS, props: INFO_PROPS });
+    const n = 2 ** z;
+    const info = { pois: [], places: [], streets: [], houses: [] };
+    const at = (extent, gx, gy) => ({ x: (tx + gx / extent) / n, y: (ty + gy / extent) / n });
+    const str = (v) => v == null ? "" : String(v).trim();
+    const poi = tile.poi;
+    if (poi) {
+      for (const f of poi.features) {
+        const name = str(f.props.name) || str(f.props["name:latin"]);
+        const g = f.geom[0];
+        if (!name || !g || g.length < 2)
+          continue;
+        const cls = str(f.props.class);
+        const sub = str(f.props.subclass);
+        const it = poiInterest(cls, sub);
+        if (!it)
+          continue;
+        const ru = str(f.props["name:ru"]);
+        const en = str(f.props["name:en"]) || str(f.props.name_en);
+        let score = it.score;
+        if (ru && ru !== name)
+          score += 1.5;
+        else if (en && en !== name)
+          score += 0.3;
+        const rank = Number(f.props.rank);
+        if (Number.isFinite(rank) && rank <= 5)
+          score += 0.3;
+        info.pois.push({ name, ru, cls, sub, ...at(poi.extent, g[0], g[1]), score, kind: it.kind });
+      }
+    }
+    const place = tile.place;
+    if (place) {
+      for (const f of place.features) {
+        const name = str(f.props.name) || str(f.props["name:latin"]);
+        const g = f.geom[0];
+        if (!name || !g)
+          continue;
+        info.places.push({ cls: str(f.props.class), name, ru: str(f.props["name:ru"]), ...at(place.extent, g[0], g[1]) });
+      }
+    }
+    const tn = tile.transportation_name;
+    if (tn) {
+      for (const f of tn.features) {
+        const name = str(f.props.name) || str(f.props["name:latin"]);
+        if (!name || f.type !== 2)
+          continue;
+        const s = 1 / (tn.extent * n);
+        info.streets.push({
+          name,
+          p: f.geom.map((line) => {
+            const w = new Array(line.length);
+            for (let i = 0;i < line.length; i += 2) {
+              w[i] = tx / n + line[i] * s;
+              w[i + 1] = ty / n + line[i + 1] * s;
+            }
+            return w;
+          })
+        });
+      }
+    }
+    const hn = tile.housenumber;
+    if (hn) {
+      for (const f of hn.features) {
+        const num = str(f.props.housenumber);
+        const g = f.geom[0];
+        if (!num || !g)
+          continue;
+        info.houses.push({ n: num, ...at(hn.extent, g[0], g[1]) });
+      }
+    }
+    return info;
+  }
+  function segDist(px, py, ax, ay, bx, by) {
+    const dx = bx - ax;
+    const dy = by - ay;
+    const len = dx * dx + dy * dy;
+    const t = len ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len)) : 0;
+    return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+  }
+  function poisNear(infos, me, radius) {
+    const w = toWorld(me.lat, me.lng);
+    const mpw = metersPerWorld(me.lat);
+    const byName = new Map;
+    for (const info of infos) {
+      for (const p of info.pois) {
+        const d = Math.hypot(p.x - w.x, p.y - w.y) * mpw;
+        if (d > radius)
+          continue;
+        const key = normalize(p.name);
+        const prev = byName.get(key);
+        if (prev && prev.d <= d)
+          continue;
+        const ll = fromWorld(p.x, p.y);
+        byName.set(key, { ...p, lat: ll.lat, lng: ll.lng, d, b: bearing(me, ll) });
+      }
+    }
+    return [...byName.values()].sort((a, b) => b.score - b.d / 150 - (a.score - a.d / 150));
+  }
+  function addressAt(infos, me) {
+    const w = toWorld(me.lat, me.lng);
+    const mpw = metersPerWorld(me.lat);
+    let house = null;
+    for (const info of infos) {
+      for (const h of info.houses) {
+        const d = Math.hypot(h.x - w.x, h.y - w.y) * mpw;
+        if (d <= 40 && (!house || d < house.d))
+          house = { ...h, d };
+      }
+    }
+    const ref = house ?? { x: w.x, y: w.y };
+    let street = null;
+    for (const info of infos) {
+      for (const s of info.streets) {
+        for (const line of s.p) {
+          for (let i = 0;i + 3 < line.length; i += 2) {
+            const d = segDist(ref.x, ref.y, line[i], line[i + 1], line[i + 2], line[i + 3]) * mpw;
+            if (d <= 80 && (!street || d < street.d))
+              street = { name: s.name, d };
+          }
+        }
+      }
+    }
+    const nearest = (classes, maxM) => {
+      let best = null;
+      for (const info of infos) {
+        for (const p of info.places) {
+          if (!classes.includes(p.cls))
+            continue;
+          const d = Math.hypot(p.x - w.x, p.y - w.y) * mpw;
+          if (d <= maxM && (!best || d < best.d))
+            best = { name: p.ru || p.name, d };
+        }
+      }
+      return best?.name ?? "";
+    };
+    return {
+      street: street?.name ?? "",
+      house: street && house ? house.n : "",
+      area: nearest(["suburb", "quarter", "neighbourhood"], 2500),
+      city: nearest(["city", "town", "village"], 15000)
+    };
+  }
+  function addressLine(a) {
+    if (!a)
+      return "";
+    const street = [a.street, a.house].filter(Boolean).join(" ");
+    return [street, a.area, a.city].filter(Boolean).join(", ");
+  }
+  var COMPASS = ["на север", "на северо-восток", "на восток", "на юго-восток", "на юг", "на юго-запад", "на запад", "на северо-запад"];
+  var RELATIVE = ["впереди", "впереди справа", "справа", "сзади справа", "сзади", "сзади слева", "слева", "впереди слева"];
+  function compassWord(b) {
+    return COMPASS[Math.round((b % 360 + 360) % 360 / 45) % 8];
+  }
+  function relativeWord(b, heading) {
+    const diff = ((b - heading) % 360 + 360) % 360;
+    return RELATIVE[Math.round(diff / 45) % 8];
+  }
+  function whereIs(hit, heading) {
+    const dir = heading == null ? compassWord(hit.b) : relativeWord(hit.b, heading);
+    return hit.d < 25 ? "прямо здесь" : `${formatDistance(hit.d)}, ${dir}`;
+  }
+  function poiTitle(p) {
+    return p.ru && p.ru !== p.name ? p.ru : p.name;
+  }
+  function aroundText(hits, heading) {
+    if (!hits.length)
+      return `Рядом на карте нет достопримечательностей.
+Спросите: «Что это за здание?»`;
+    return ["Рядом интересное:", ...hits.map((h) => `• ${poiTitle(h)} (${h.kind}) — ${whereIs(h, heading)}`)].join(`
+`);
+  }
+  var WHERE = [
+    "где я",
+    "где я сейчас",
+    "где я нахожусь",
+    "где я сейчас нахожусь",
+    "где мы",
+    "где мы сейчас",
+    "где мы находимся",
+    "какой здесь адрес",
+    "какой тут адрес",
+    "какой это адрес",
+    "мой адрес",
+    "на какой я улице",
+    "на какой мы улице",
+    "какая это улица",
+    "что это за улица",
+    "where am i",
+    "where are we",
+    "what street is this",
+    "what is this street"
+  ];
+  var AROUND = [
+    "что рядом",
+    "что есть рядом",
+    "что интересного рядом",
+    "что интересного вокруг",
+    "что вокруг",
+    "что тут интересного",
+    "что здесь интересного",
+    "что посмотреть рядом",
+    "что тут посмотреть",
+    "что здесь посмотреть",
+    "достопримечательности",
+    "достопримечательности рядом",
+    "какие достопримечательности рядом",
+    "what s around",
+    "what is around",
+    "what s nearby",
+    "what is nearby",
+    "anything interesting nearby",
+    "sights nearby"
+  ];
+  var AUTO_ON = [
+    "гид",
+    "включи гида",
+    "включи гид",
+    "режим гида",
+    "гид на прогулке",
+    "включи гид на прогулке",
+    "экскурсия",
+    "включи экскурсию",
+    "start guide",
+    "guide mode",
+    "guide on"
+  ];
+  var AUTO_OFF = [
+    "выключи гида",
+    "выключи гид",
+    "стоп гид",
+    "стоп гида",
+    "гид стоп",
+    "хватит гида",
+    "выключи экскурсию",
+    "стоп экскурсия",
+    "stop guide",
+    "guide off"
+  ];
+  var SETS = {
+    where: new Set(WHERE.map(normalize)),
+    around: new Set(AROUND.map(normalize)),
+    on: new Set(AUTO_ON.map(normalize)),
+    off: new Set(AUTO_OFF.map(normalize))
+  };
+  var THING = "(?:здание|место|дом|домик|памятник|церковь|собор|храм|башня|мост|площадь|статуя|скульптура|замок|дворец|музей|парк|строение|сооружение|монумент|колонна|арка|ворота|особняк|фонтан|театр|костел|костёл|мечеть|синагога)";
+  var WHAT_RU = new RegExp(`^(?:а |и |слушай |скажи )?(?:что|че|чё)(?: это)?(?: за)? ${THING}(?: такое| такая| такой)?(?: перед нами| передо мной| перед мной| рядом| справа| слева| впереди| напротив| тут| здесь)?$`);
+  var ABOUT_RU = new RegExp(`^(?:расскажи|расскажите)(?: мне)? (?:про|о|об) (?:это|этот|эту|этом|этой) ${THING.replace("здание", "здание|здании|месте|памятнике|доме|соборе|храме|мосте")}$`);
+  var WHAT_EN = /^(?:so |and )?(?:what s|what is|tell me about) (?:this|that) (?:building|place|monument|church|statue|bridge|tower|castle|house)$/;
+  function parseGuideCommand(text) {
+    const n = normalize(String(text ?? "").replace(/[?？!.…]+$/u, ""));
+    if (!n)
+      return null;
+    let words = n.split(" ").filter(Boolean);
+    const FILLERS = /^(пожалуйста|ну|так|давай|а|и|окей|ок|please|ok|okay)$/;
+    while (words.length > 1 && FILLERS.test(words[0]))
+      words = words.slice(1);
+    while (words.length > 1 && FILLERS.test(words[words.length - 1]))
+      words = words.slice(0, -1);
+    const s = words.join(" ");
+    if (SETS.where.has(s))
+      return { kind: "where" };
+    if (SETS.around.has(s))
+      return { kind: "around" };
+    if (SETS.off.has(s))
+      return { kind: "auto", on: false };
+    if (SETS.on.has(s))
+      return { kind: "auto", on: true };
+    if (WHAT_RU.test(s) || ABOUT_RU.test(s) || WHAT_EN.test(s))
+      return { kind: "what" };
+    return null;
+  }
+  function isPlaceQuestion(text) {
+    if (parseGuideCommand(text)?.kind === "what")
+      return true;
+    const n = normalize(text);
+    return new RegExp(`(?:^| )(?:это|этот|эта|этом|этой|перед нами|передо мной|напротив) ${THING}(?: |$)`).test(n) || /\bthis (?:building|place|monument|church)\b/.test(n);
+  }
+  function placeContext(me, address, hits, heading) {
+    const acc = Number.isFinite(me.accuracy) && me.accuracy > 0 ? `, точность ±${Math.round(me.accuracy)} м` : "";
+    const where = addressLine(address);
+    const lines = [
+      `Где пользователь сейчас (GPS телефона${acc}): ${where ? where + " " : ""}(${me.lat.toFixed(5)}, ${me.lng.toFixed(5)}).`
+    ];
+    if (heading != null)
+      lines.push(`Он идёт ${compassWord(heading)}.`);
+    if (hits.length) {
+      lines.push("Рядом на карте (OpenStreetMap):");
+      for (const h of hits.slice(0, 8)) {
+        const names = h.ru && h.ru !== h.name ? `${h.name} / ${h.ru}` : h.name;
+        lines.push(`• ${names} — ${h.kind}, ${formatDistance(h.d)} ${compassWord(h.b)}${heading != null ? ` (${relativeWord(h.b, heading)})` : ""}`);
+      }
+    }
+    return lines.join(`
+`);
+  }
+  var PLACE_RULES = "Пользователь спрашивает о здании или месте рядом с собой. Камеры нет: определи по адресу, координатам, направлению движения и списку объектов рядом, что это вероятнее всего (обычно ближайший заметный объект впереди или рядом). Если вариантов несколько — назови главный и коротко второй. Дай 1–2 интересных факта: когда и кем построено, чем известно. Ищи в интернете, если нужно. Не выдумывай даты и имена: если не уверен — так и скажи. До 50 слов.";
+  function buildNotePrompt(hit, address, lang) {
+    const system = [
+      "Ты — гид в умных очках. Пользователь гуляет и проходит мимо места, отмеченного на карте. Текст показывается на крошечном дисплее.",
+      "Напиши 1–2 самых интересных факта об этом месте: когда и кем построено, чем знаменито, связанная история. Найди сведения в интернете, если нужно.",
+      `До 30 слов, на ${lang === "en" ? "английском (English)" : "русском"} языке, без вступлений и без повторения названия.`,
+      "Не выдумывай даты, имена и события. Если не знаешь точно, что это за место, или о нём нечего интересно рассказать — ответь ровно SKIP.",
+      "Без Markdown."
+    ].join(`
+`);
+    const names = hit.ru && hit.ru !== hit.name ? `${hit.name} (${hit.ru})` : hit.name;
+    const where = addressLine(address);
+    return {
+      system,
+      user: `${names} — ${hit.kind}.${where ? ` Адрес рядом: ${where}.` : ""} Координаты: ${hit.lat.toFixed(5)}, ${hit.lng.toFixed(5)}.`
+    };
+  }
+  function cleanNote(reply) {
+    const t = String(reply ?? "").trim();
+    if (!t || /^skip\b/i.test(t) || /\bSKIP\s*$/.test(t))
+      return null;
+    return t;
+  }
+  var GUIDE_NEAR_M = 70;
+  var GUIDE_FAR_M = 130;
+  var GUIDE_MIN_SCORE = 2.5;
+  var GUIDE_GAP_MS = 60000;
+  var GUIDE_CHECK_MS = 12000;
+  var GUIDE_CHECK_M = 25;
+  var GUIDE_REPEAT_MS = 6 * 3600000;
+
+  class WalkGuide {
+    deps;
+    active = false;
+    heading = null;
+    notes = [];
+    stopWatch = null;
+    prev = null;
+    lastCheck = null;
+    lastNoteAt = -Infinity;
+    busy = false;
+    seen = new Map;
+    constructor(deps) {
+      this.deps = deps;
+    }
+    start() {
+      if (this.active)
+        return;
+      this.active = true;
+      this.prev = null;
+      this.lastCheck = null;
+      this.heading = null;
+      try {
+        this.stopWatch = this.deps.watch((p) => void this.onPosition(p));
+      } catch (e) {
+        this.deps.log("error", `Гид: нет геопозиции (${String(e?.message ?? e)})`);
+      }
+      this.deps.log("info", "Гид на прогулке включён: расскажу о местах, мимо которых идёте");
+      this.deps.onChange();
+    }
+    stop() {
+      if (!this.active)
+        return;
+      this.active = false;
+      try {
+        this.stopWatch?.();
+      } catch {}
+      this.stopWatch = null;
+      this.deps.log("info", "Гид на прогулке выключен");
+      this.deps.onChange();
+    }
+    async onPosition(p) {
+      if (!this.active || !Number.isFinite(p?.lat) || !Number.isFinite(p?.lng))
+        return;
+      if (Number(p.accuracy) > 60)
+        return;
+      const me = { lat: p.lat, lng: p.lng };
+      if (!this.prev)
+        this.prev = me;
+      else if (distanceM(this.prev, me) >= 12) {
+        this.heading = bearing(this.prev, me);
+        this.prev = me;
+      }
+      const now = this.deps.now();
+      if (this.busy || now - this.lastNoteAt < GUIDE_GAP_MS)
+        return;
+      if (this.lastCheck && now - this.lastCheck.at < GUIDE_CHECK_MS && distanceM(this.lastCheck.p, me) < GUIDE_CHECK_M)
+        return;
+      this.lastCheck = { at: now, p: me };
+      this.busy = true;
+      try {
+        const { hits, address } = await this.deps.around(me, GUIDE_FAR_M);
+        const hit = this.pick(hits);
+        if (!hit)
+          return;
+        const key = `${normalize(hit.name)}@${hit.lat.toFixed(3)},${hit.lng.toFixed(3)}`;
+        const text = await this.deps.note(hit, address);
+        if (!this.active)
+          return;
+        if (!text) {
+          this.seen.set(key, this.deps.now());
+          this.deps.log("info", `Гид: о «${hit.name}» рассказать нечего`);
+          return;
+        }
+        const title = `${poiTitle(hit)} — ${whereIs(hit, this.heading)}`;
+        if (!this.deps.show(title, text))
+          return;
+        this.seen.set(key, this.deps.now());
+        this.lastNoteAt = this.deps.now();
+        this.notes.push({ t: this.deps.now(), name: poiTitle(hit), kind: hit.kind, text });
+        if (this.notes.length > 30)
+          this.notes.splice(0, this.notes.length - 30);
+        this.deps.log("info", `Гид: ${poiTitle(hit)} — ${text}`);
+        this.deps.onChange();
+      } catch (e) {
+        this.deps.log("info", `Гид: ${String(e?.message ?? e)}`);
+      } finally {
+        this.busy = false;
+      }
+    }
+    pick(hits) {
+      const now = this.deps.now();
+      let best = null;
+      for (const h of hits) {
+        if (h.score < GUIDE_MIN_SCORE)
+          continue;
+        if (h.d > (h.score >= 4 ? GUIDE_FAR_M : GUIDE_NEAR_M))
+          continue;
+        const key = `${normalize(h.name)}@${h.lat.toFixed(3)},${h.lng.toFixed(3)}`;
+        const at = this.seen.get(key);
+        if (at != null && now - at < GUIDE_REPEAT_MS)
+          continue;
+        if (this.heading != null && h.d > 25) {
+          const diff = Math.abs((h.b - this.heading + 540) % 360 - 180);
+          if (diff > 120)
+            continue;
+        }
+        const v = h.score * 25 - h.d;
+        if (!best || v > best.v)
+          best = { hit: h, v };
+      }
+      return best?.hit ?? null;
+    }
+  }
+
+  // src/background/replies.ts
+  var REPLY_PAUSE_MS = 1600;
+  var LANG_RU = {
+    en: "английском",
+    de: "немецком",
+    fr: "французском",
+    es: "испанском",
+    it: "итальянском",
+    pt: "португальском",
+    pl: "польском",
+    uk: "украинском",
+    nl: "нидерландском",
+    sv: "шведском",
+    tr: "турецком",
+    ga: "ирландском",
+    zh: "китайском",
+    ja: "японском",
+    ko: "корейском",
+    ar: "арабском",
+    he: "иврите",
+    hi: "хинди",
+    el: "греческом",
+    cs: "чешском",
+    ro: "румынском",
+    hu: "венгерском",
+    fi: "финском",
+    da: "датском",
+    no: "норвежском",
+    ru: "русском"
+  };
+  var NON_LATIN = new Set(["zh", "ja", "ko", "ar", "he", "hi", "el", "th", "fa"]);
+  var primary = (tag) => String(tag ?? "").toLowerCase().split(/[-_]/)[0];
+  function buildReplyPrompt(heard, userLang) {
+    const last = heard[heard.length - 1];
+    const code = primary(last?.lang ?? "");
+    const theirs = LANG_RU[code] ? `${LANG_RU[code]} языке` : "языке собеседника";
+    const mine = userLang === "en" ? "английский" : "русский";
+    const system = [
+      "Ты помогаешь пользователю говорить с иностранцем через умные очки. Пользователь читает перевод речи собеседника и отвечает сам, вслух.",
+      `Предложи 2 коротких варианта ответа от лица пользователя на ${theirs}: естественно, вежливо, до 8 слов. Варианты должны различаться по смыслу (например, согласиться и уточнить или вежливо отказаться).`,
+      NON_LATIN.has(code) ? "Пиши ответ латиницей (транскрипцией: пиньинь, ромадзи и т. п.) — очки не показывают другие алфавиты." : "",
+      `После каждого варианта — « | » и перевод на ${mine}.`,
+      `Формат строго, без пояснений:
+1. <ответ> | <перевод>
+2. <ответ> | <перевод>`,
+      "Если реплика не требует ответа (рассказ, объявление по громкой связи, обрывок фразы) — ответь ровно SKIP."
+    ].filter(Boolean).join(`
+`);
+    const lines = heard.slice(-3).map((h) => h.orig ? `«${h.orig}» (перевод: «${h.text}»)` : `«${h.text}»`);
+    return { system, user: `Собеседник сказал${lines.length > 1 ? " (последнее — внизу)" : ""}:
+${lines.join(`
+`)}` };
+  }
+  function parseReplies(text) {
+    const t = String(text ?? "").trim();
+    if (!t || /^skip\b/i.test(t))
+      return [];
+    const out = [];
+    for (const raw of t.split(`
+`)) {
+      const body = raw.replace(/\*\*/g, "").trim().replace(/^(?:[-•*]\s*)?(?:\d[.)]\s*)?/, "");
+      const cut = body.includes("|") ? body.indexOf("|") : body.lastIndexOf(" — ");
+      const sayRaw = cut >= 0 ? body.slice(0, cut) : body;
+      const meansRaw = cut >= 0 ? body.slice(cut + (body[cut] === "|" ? 1 : 3)) : "";
+      const say = sayRaw.trim().replace(/^[«"“]|[»"”]$/g, "").trim();
+      const means = meansRaw.trim().replace(/^[(«"“]|[)»"”]$/g, "").trim();
+      if (!say || /^skip\b/i.test(say))
+        continue;
+      out.push({ say, means });
+      if (out.length === 2)
+        break;
+    }
+    return out;
+  }
+  function replyScreen(lastTranslation, replies) {
+    const opt = replies.flatMap((r) => wrapLines(sanitizeForG1(`→ ${r.say}${r.means ? ` (${r.means})` : ""}`)));
+    if (opt.length > G1_LINES) {
+      const short = replies.flatMap((r) => wrapLines(sanitizeForG1(`→ ${r.say}`)));
+      return short.slice(0, G1_LINES).join(`
+`);
+    }
+    const room = G1_LINES - opt.length;
+    const above = room > 0 ? wrapLines(sanitizeForG1(lastTranslation)).slice(-room) : [];
+    return [...above, ...opt].join(`
+`);
+  }
+  function isReplyRequest(text) {
+    const n = String(text ?? "").toLowerCase().replace(/ё/g, "е").replace(/[^\p{L}\s]/gu, " ").replace(/\s+/g, " ").trim();
+    return /^(?:а |и |ну )?(?:что|как) (?:мне )?ответить$|^подскажи(?:те)? (?:ответ|что ответить)$|^варианты ответа$|^what (?:do|should) i (?:say|answer|reply)$/.test(n);
+  }
+
+  // src/background/lecture.ts
+  var DEFAULT_LECTURE_EVERY_SEC = 15;
+  var LECTURE_EVERY_MIN_SEC = 10;
+  var LECTURE_EVERY_MAX_SEC = 60;
+  function lectureTiming(everySec) {
+    const sec = Math.max(LECTURE_EVERY_MIN_SEC, Math.min(LECTURE_EVERY_MAX_SEC, Math.round(Number(everySec) || DEFAULT_LECTURE_EVERY_SEC)));
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(v)));
+    return {
+      intervalMs: sec * 1000,
+      minWords: clamp(sec * 1.2, 10, 70),
+      maxWords: clamp(sec * 4, 50, 240),
+      flushMs: clamp(sec * 500, 4000, 12000),
+      flushMinWords: 8,
+      maxPoints: sec <= 25 ? 2 : 3
+    };
+  }
+  var LECTURE_ANSWER_HOLD_MS = 30000;
+  var CONTEXT_WORDS = 600;
+  var LECTURE_RESUME_MS = 20 * 60000;
+  var PREV_POINTS = 8;
+  var NOTES_MAX = 400;
+  var ERROR_SHOW_EVERY_MS = 60000;
+  function wordCount(s) {
+    return String(s ?? "").split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length;
+  }
+  var HOUSEKEEPING = [
+    "any questions",
+    "are there any questions",
+    "do you have any questions",
+    "any more questions",
+    "any other questions",
+    "questions so far",
+    "can you hear me",
+    "can everyone hear",
+    "can you all hear",
+    "can you see",
+    "can everyone see",
+    "is that clear",
+    "is this clear",
+    "does that make sense",
+    "does this make sense",
+    "are you with me",
+    "are we ready",
+    "everyone ready",
+    "is everyone ready",
+    "are you ready",
+    "is everyone here",
+    "shall we start",
+    "shall we begin",
+    "shall we continue",
+    "ok",
+    "okay",
+    "right",
+    "yes",
+    "all right",
+    "alright",
+    "you know",
+    "есть вопросы",
+    "есть ли вопросы",
+    "какие то вопросы",
+    "все слышат",
+    "всем слышно",
+    "меня слышно",
+    "понятно",
+    "всем понятно",
+    "всё понятно",
+    "все понятно",
+    "готовы",
+    "продолжим",
+    "начнем",
+    "начинаем",
+    "да"
+  ];
+  var AUDIENCE_CUES = [
+    "does anyone",
+    "does anybody",
+    "can anyone",
+    "can anybody",
+    "can someone",
+    "could anyone",
+    "could someone",
+    "anyone know",
+    "anybody know",
+    "who can tell",
+    "who knows",
+    "who can explain",
+    "who wants to",
+    "any ideas",
+    "any guesses",
+    "what do you think",
+    "what would you say",
+    "raise your hand",
+    "hands up",
+    "who remembers",
+    "кто знает",
+    "кто может",
+    "кто скажет",
+    "кто нибудь",
+    "как вы думаете",
+    "есть идеи",
+    "кто помнит",
+    "поднимите руку"
+  ];
+  function findAudienceQuestion(text) {
+    const sentences = String(text ?? "").replace(/\s+/g, " ").split(/(?<=[.!?…])\s+/).map((s) => s.trim()).filter(Boolean);
+    for (let i = sentences.length - 1;i >= 0; i--) {
+      const s = sentences[i];
+      const n = normalize(s);
+      if (wordCount(s) < 4)
+        continue;
+      if (HOUSEKEEPING.some((h) => n === h || n.startsWith(h + " ")))
+        continue;
+      if (/\?["»”')\s]*$/.test(s) || AUDIENCE_CUES.some((c) => (" " + n + " ").includes(" " + c + " ")))
+        return s;
+    }
+    return null;
+  }
+  function langName(lang) {
+    return lang === "en" ? "английском (English)" : "русском";
+  }
+  function buildPointsPrompt(prevPoints, chunk, lang, maxPoints = 2) {
+    const system = [
+      "Ты помогаешь студенту на лекции. Твой ответ показывается на крошечном дисплее умных очков: 5 строк примерно по 30 символов.",
+      "Тебе дают свежий фрагмент речи лектора, распознанный автоматически: возможны ошибки распознавания и обрывки фраз — угадывай смысл по контексту.",
+      `Выдели суть: ${maxPoints <= 1 ? "один короткий тезис" : `1–${maxPoints} коротких тезиса (чаще хватает одного)`} на ${langName(lang)} языке, каждый с новой строки и начинается с «• », не длиннее 12 слов.`,
+      "Не переводи и не пересказывай дословно — только главное: определения, утверждения, формулы, числа и даты, примеры, выводы. Термины можно оставлять в оригинале.",
+      "Если лектор цитирует кого-то, сделай отдельный тезис «Цитата: автор (источник) — суть»; если цитату приписали не тому — укажи настоящего автора.",
+      "Не повторяй уже записанные тезисы. Если во фрагменте нет ничего содержательного (приветствие, организационные моменты, шум, повтор), ответь ровно SKIP.",
+      "Без Markdown, без вступлений и пояснений."
+    ].join(`
+`);
+    const prev = prevPoints.length ? `Уже записанные тезисы:
+${prevPoints.map((p) => "• " + p).join(`
+`)}
+
+` : "";
+    return { system, user: `${prev}Новый фрагмент лекции:
+«${chunk.trim()}»` };
+  }
+  function buildAnswerPrompt(context, question, lang, fromUser) {
+    const system = fromUser ? [
+      "Студент сидит на лекции и тихо задаёт тебе вопрос. Ответ показывается на крошечном дисплее умных очков.",
+      `Ответь коротко и по делу, не больше 30 слов, на ${langName(lang)} языке. Если вопрос относится к лекции — учитывай её контекст.`,
+      `Формат ровно две строки:
+Q: <вопрос, до 8 слов>
+A: <ответ>`,
+      "Без Markdown и вступлений."
+    ].join(`
+`) : [
+      "Ты помогаешь студенту на лекции. Лектор только что обратился к аудитории с вопросом; текст распознан автоматически, возможны ошибки.",
+      `Дай короткий правильный ответ, который студент может сказать вслух: не больше 25 слов, на ${langName(lang)} языке. Учитывай контекст лекции.`,
+      `Формат ровно две строки:
+Q: <вопрос лектора, до 8 слов>
+A: <ответ>`,
+      "Если это организационный вопрос (есть ли вопросы, слышно ли, понятно ли, готовы ли) или вопрос, на который нечего ответить по существу, ответь ровно SKIP.",
+      "Без Markdown и вступлений."
+    ].join(`
+`);
+    const ctx = context.trim() ? `Недавно на лекции:
+«${context.trim()}»
+
+` : "";
+    return { system, user: `${ctx}${fromUser ? "Вопрос студента" : "Вопрос лектора"}: «${question.trim()}»` };
+  }
+  var isSkip = (t) => /^\s*skip\b/i.test(t) || /^\s*[—–-]\s*$/.test(t);
+  function parsePoints(text) {
+    if (!String(text ?? "").trim() || isSkip(text))
+      return [];
+    return String(text).split(/\n+/).map((l) => l.replace(/^\s*(?:[•*\-–—]|\d+[.)])\s*/, "").replace(/\*\*/g, "").trim()).filter((l) => l && !isSkip(l)).slice(0, 3);
+  }
+  function feedScreen(allPoints, newCount) {
+    const blocks = [];
+    let used = 0;
+    for (let i = allPoints.length - 1;i >= 0; i--) {
+      const isNew = i >= allPoints.length - newCount;
+      const lines = wrapLines(sanitizeForG1((isNew ? "• " : "· ") + allPoints[i]));
+      if (used + lines.length > G1_LINES) {
+        if (!blocks.length)
+          blocks.unshift(lines);
+        break;
+      }
+      blocks.unshift(lines);
+      used += lines.length;
+    }
+    const lines = blocks.flat();
+    if (lines.length <= G1_LINES)
+      return lines.join(`
+`);
+    return pointsScreen(allPoints.slice(-1));
+  }
+  function parseAnswer(text, fallbackQ) {
+    const t = String(text ?? "").trim();
+    if (!t || isSkip(t))
+      return null;
+    const q = /^\s*(?:Q|В|Вопрос)\s*[:：]\s*(.+)$/im.exec(t)?.[1]?.trim();
+    const aMatch = /^\s*(?:A|О|Ответ)\s*[:：]\s*([\s\S]+)$/im.exec(t);
+    const a = (aMatch ? aMatch[1] : t.replace(/^\s*(?:Q|В|Вопрос)\s*[:：].*$/im, "")).replace(/\*\*/g, "").replace(/\s*\n\s*/g, " ").trim();
+    if (!a || isSkip(a))
+      return null;
+    return { q: q || fallbackQ, a };
+  }
+  function pointsScreen(points) {
+    const lines = wrapLines(sanitizeForG1(points.map((p) => "• " + p).join(`
+`)));
+    if (lines.length <= G1_LINES)
+      return lines.join(`
+`);
+    const kept = lines.slice(0, G1_LINES);
+    kept[G1_LINES - 1] = kept[G1_LINES - 1].replace(/\s*\S*$/, "") + "…";
+    return kept.join(`
+`);
+  }
+  function answerScreen(q, a) {
+    const qLines = wrapLines(sanitizeForG1("? " + q));
+    const qLine = qLines.length > 1 ? qLines[0].replace(/\s*\S*$/, "") + "…" : qLines[0] ?? "";
+    const aLines = wrapLines(sanitizeForG1("→ " + a));
+    const room = G1_LINES - (qLine ? 1 : 0);
+    const shown = aLines.slice(0, room);
+    if (aLines.length > room)
+      shown[room - 1] = shown[room - 1].replace(/\s*\S*$/, "") + "…";
+    return [qLine, ...shown].filter(Boolean).join(`
+`);
+  }
+
+  class Lecture {
+    deps;
+    active = false;
+    record;
+    screen = "";
+    session = 0;
+    buffer = [];
+    recent = [];
+    lastSummaryAt = 0;
+    summarizing = false;
+    answering = false;
+    pendingQuestion = null;
+    holdUntil = 0;
+    pendingFeed = false;
+    lastNewCount = 0;
+    flushTimer = null;
+    holdTimer = null;
+    lastErrorShownAt = -Infinity;
+    constructor(deps, saved = null) {
+      this.deps = deps;
+      this.record = saved;
+    }
+    start() {
+      this.stopTimers();
+      this.session++;
+      this.active = true;
+      this.buffer = [];
+      this.recent = [];
+      this.summarizing = false;
+      this.answering = false;
+      this.pendingQuestion = null;
+      this.pendingFeed = false;
+      this.holdUntil = 0;
+      this.lastSummaryAt = this.deps.now();
+      const prev = this.record;
+      const resume = Boolean(prev?.endedAt && this.deps.now() - prev.endedAt < LECTURE_RESUME_MS);
+      if (resume && prev)
+        delete prev.endedAt;
+      else
+        this.record = { startedAt: this.deps.now(), notes: [] };
+      this.deps.save(this.record);
+      const en = this.deps.lang() === "en";
+      const sec = this.timing().intervalMs / 1000;
+      this.setScreen(en ? `Lecture mode
+• key points every ~${sec} s
+• answers to the lecturer's questions
+Stop: «стоп лекция»` : `Режим лекции
+• тезисы примерно раз в ${sec} с
+• ответы на вопросы лектора
+Выключить: «стоп лекция»`);
+      this.deps.log("lecture", resume ? "Режим лекции включён — продолжаю прежний конспект" : "Режим лекции включён");
+      this.deps.onChange();
+    }
+    stop() {
+      const notes = this.record?.notes ?? [];
+      const summary = { points: notes.filter((n) => n.kind === "point").length, answers: notes.filter((n) => n.kind !== "point").length };
+      if (!this.active)
+        return summary;
+      this.active = false;
+      this.session++;
+      this.stopTimers();
+      this.buffer = [];
+      this.pendingQuestion = null;
+      this.pendingFeed = false;
+      this.screen = "";
+      if (this.record) {
+        this.record.endedAt = this.deps.now();
+        this.deps.save(this.record);
+      }
+      this.deps.log("lecture", `Режим лекции выключен: тезисов ${summary.points}, ответов ${summary.answers}`);
+      this.deps.onChange();
+      return summary;
+    }
+    onSpeech(text) {
+      if (!this.active)
+        return;
+      const t = String(text ?? "").trim();
+      if (!t)
+        return;
+      this.buffer.push(t);
+      this.recent.push(t);
+      this.trimRecent();
+      const q = findAudienceQuestion(t);
+      if (q)
+        this.answer(q, false);
+      const tm = this.timing();
+      const words = wordCount(this.buffer.join(" "));
+      const since = this.deps.now() - this.lastSummaryAt;
+      if (words >= tm.maxWords || words >= tm.minWords && since >= tm.intervalMs)
+        this.summarize();
+      this.armFlush();
+    }
+    async aside(placeholder, run) {
+      if (!this.active)
+        return;
+      const session = this.session;
+      this.setScreen(answerScreen(placeholder, "…"));
+      try {
+        const qa = await run();
+        if (session !== this.session || !qa)
+          return;
+        this.addNote({ t: this.deps.now(), kind: "you", q: qa.q, text: qa.a });
+        this.setScreen(answerScreen(qa.q, qa.a));
+        this.hold();
+      } catch (e) {
+        if (session !== this.session)
+          return;
+        this.showError(e);
+      }
+    }
+    askUser(question) {
+      if (!this.active || !question.trim())
+        return;
+      this.answer(question.trim(), true);
+    }
+    trimRecent() {
+      let words = wordCount(this.recent.join(" "));
+      while (this.recent.length > 1 && words > CONTEXT_WORDS) {
+        words -= wordCount(this.recent.shift());
+      }
+    }
+    timing() {
+      return lectureTiming(this.deps.everySec?.() ?? DEFAULT_LECTURE_EVERY_SEC);
+    }
+    armFlush() {
+      if (this.flushTimer != null)
+        this.deps.clearTimer(this.flushTimer);
+      const tm = this.timing();
+      this.flushTimer = this.deps.setTimer(() => {
+        this.flushTimer = null;
+        if (this.active && wordCount(this.buffer.join(" ")) >= tm.flushMinWords)
+          this.summarize();
+      }, tm.flushMs);
+    }
+    allPoints() {
+      return (this.record?.notes ?? []).filter((n) => n.kind === "point").map((n) => n.text);
+    }
+    async summarize() {
+      if (this.summarizing || !this.buffer.length)
+        return;
+      const session = this.session;
+      const chunk = this.buffer.join(" ");
+      this.buffer = [];
+      this.summarizing = true;
+      this.lastSummaryAt = this.deps.now();
+      const prev = this.allPoints().slice(-PREV_POINTS);
+      const { system, user } = buildPointsPrompt(prev, chunk, this.deps.lang(), this.timing().maxPoints);
+      try {
+        const reply = await this.deps.complete(system, user);
+        if (session !== this.session)
+          return;
+        const points = parsePoints(reply);
+        if (!points.length) {
+          this.deps.log("lecture", `Тезисов нет (${wordCount(chunk)} слов без сути)`);
+          return;
+        }
+        const t = this.deps.now();
+        for (const p of points)
+          this.addNote({ t, kind: "point", text: p });
+        this.deps.log("lecture", points.map((p) => "• " + p).join(" "));
+        this.lastNewCount = points.length;
+        if (this.deps.now() < this.holdUntil)
+          this.pendingFeed = true;
+        else
+          this.setScreen(feedScreen(this.allPoints(), points.length));
+      } catch (e) {
+        if (session !== this.session)
+          return;
+        this.showError(e);
+      } finally {
+        if (session === this.session) {
+          this.summarizing = false;
+          if (wordCount(this.buffer.join(" ")) >= this.timing().maxWords)
+            this.summarize();
+        }
+      }
+    }
+    async answer(question, fromUser) {
+      if (this.answering) {
+        if (fromUser || !this.pendingQuestion?.fromUser)
+          this.pendingQuestion = { text: question, fromUser };
+        return;
+      }
+      const session = this.session;
+      this.answering = true;
+      this.deps.log("lecture", `${fromUser ? "Ваш вопрос" : "Вопрос лектора"}: ${question}`);
+      if (fromUser)
+        this.setScreen(answerScreen(question, "…думаю"));
+      const { system, user } = buildAnswerPrompt(this.recent.join(" "), question, fromUser ? detectLang(question) : this.deps.lang(), fromUser);
+      try {
+        const reply = await this.deps.complete(system, user);
+        if (session !== this.session)
+          return;
+        const qa = parseAnswer(reply, question);
+        if (!qa) {
+          this.deps.log("lecture", "Организационный вопрос — без ответа");
+          return;
+        }
+        this.addNote({ t: this.deps.now(), kind: fromUser ? "you" : "qa", q: qa.q, text: qa.a });
+        this.deps.log("lecture", `→ ${qa.a}`);
+        this.setScreen(answerScreen(qa.q, qa.a));
+        this.hold();
+      } catch (e) {
+        if (session !== this.session)
+          return;
+        this.showError(e);
+      } finally {
+        if (session === this.session) {
+          this.answering = false;
+          const next = this.pendingQuestion;
+          this.pendingQuestion = null;
+          if (next)
+            this.answer(next.text, next.fromUser);
+        }
+      }
+    }
+    hold() {
+      this.holdUntil = this.deps.now() + LECTURE_ANSWER_HOLD_MS;
+      if (this.holdTimer != null)
+        this.deps.clearTimer(this.holdTimer);
+      this.holdTimer = this.deps.setTimer(() => {
+        this.holdTimer = null;
+        this.holdUntil = 0;
+        if (!this.active)
+          return;
+        if (this.pendingFeed) {
+          this.setScreen(feedScreen(this.allPoints(), this.lastNewCount));
+          this.pendingFeed = false;
+        }
+      }, LECTURE_ANSWER_HOLD_MS);
+    }
+    addNote(n) {
+      if (!this.record)
+        this.record = { startedAt: n.t, notes: [] };
+      this.record.notes.push(n);
+      if (this.record.notes.length > NOTES_MAX)
+        this.record.notes.splice(0, this.record.notes.length - NOTES_MAX);
+      this.deps.save(this.record);
+      this.deps.onChange();
+    }
+    setScreen(text) {
+      this.screen = text;
+      this.deps.show(text);
+      this.deps.onChange();
+    }
+    showError(e) {
+      const human = this.deps.explainError(e);
+      this.deps.log("error", `Лекция: ${human}`);
+      const now = this.deps.now();
+      if (now - this.lastErrorShownAt < ERROR_SHOW_EVERY_MS)
+        return;
+      this.lastErrorShownAt = now;
+      if (now >= this.holdUntil)
+        this.setScreen(human);
+    }
+    stopTimers() {
+      for (const k of ["flushTimer", "holdTimer"]) {
+        if (this[k] != null)
+          this.deps.clearTimer(this[k]);
+        this[k] = null;
+      }
+    }
+  }
+
+  // src/background/openai.ts
+  var OPENAI_URL = "https://api.openai.com/v1/responses";
+  function pad2(n) {
+    return n < 10 ? "0" + n : String(n);
+  }
+  function localDateTime(d = new Date) {
+    const days = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
+    const off = -d.getTimezoneOffset();
+    const sign = off >= 0 ? "+" : "-";
+    const tz = `UTC${sign}${pad2(Math.floor(Math.abs(off) / 60))}:${pad2(Math.abs(off) % 60)}`;
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())} (${days[d.getDay()]}, ${tz})`;
+  }
+  function buildInstructions(s, now = new Date, questionLang = "ru", extra = "") {
+    const parts = [
+      "Ты — голосовой помощник. Твои ответы показываются на крошечном дисплее умных очков Even Realities G1: 5 строк примерно по 30 символов, монохромный текст. Пользователь не видит телефон.",
+      "Отвечай на том же языке, на котором задан последний вопрос: на русский вопрос — по-русски, на английский — по-английски (English question → answer in English). Если пользователь прямо попросил другой язык — используй его.",
+      "Пиши обычным текстом без Markdown: без заголовков, звёздочек, таблиц, ссылок, эмодзи и блоков кода.",
+      `Начинай сразу с сути, без вступлений и повторения вопроса. По умолчанию уложись примерно в ${s.answerWords} слов. Если пользователь просит подробнее или вопрос этого требует — можно длиннее, короткими абзацами.`,
+      "Списки оформляй короткими строками, каждая начинается с «• ». Числа пиши цифрами.",
+      "Вопрос получен через распознавание речи и может содержать ошибки — угадывай смысл по контексту.",
+      "Старайся отвечать сразу, без встречных вопросов: если чего-то не хватает (например, города отправления), сделай разумное предположение — по сведениям о пользователе, если они есть, — коротко назови его и ответь. Переспрашивай, только если без уточнения ответ бесполезен, и тогда задай один короткий вопрос.",
+      "Учитывай предыдущие реплики разговора: пользователь может задавать уточняющие вопросы.",
+      `Текущие дата и время у пользователя: ${localDateTime(now)}.`
+    ];
+    if (s.aboutMe.trim())
+      parts.push(`Что известно о пользователе (учитывай, когда уместно):
+${s.aboutMe.trim()}`);
+    if (s.instructions.trim())
+      parts.push(`Дополнительные пожелания пользователя:
+${s.instructions.trim()}`);
+    if (extra.trim())
+      parts.push(extra.trim());
+    parts.push(questionLang === "en" ? "The latest question was asked in English. Answer in English (unless the user explicitly asks for another language)." : "Последний вопрос задан по-русски — отвечай по-русски (если пользователь прямо не попросил другой язык).");
+    return parts.join(`
+
+`);
+  }
+  function effortFor(s) {
+    if (s.effort !== "auto")
+      return s.effort;
+    const m = s.model.toLowerCase();
+    if (m.includes("terra") || m.includes("luna"))
+      return "none";
+    if (m.includes("sol") || m.includes("astra"))
+      return "low";
+    return null;
+  }
+  function openAIMaxTokens(s) {
+    const base = Math.min(8000, Math.max(800, s.answerWords * 12));
+    const effort = effortFor(s);
+    if (effort === "high")
+      return 16000;
+    if (effort === "medium")
+      return Math.max(base, 8000);
+    if (effort === "low")
+      return Math.max(base, 4000);
+    return base;
+  }
+  function buildRequestBody(s, history, question, opts = {}) {
+    const recent = s.historyMessages > 0 ? history.slice(-s.historyMessages) : [];
+    const input = [
+      ...recent.map((m) => ({ role: m.role, content: m.content })),
+      { role: "user", content: question }
+    ];
+    const body = {
+      model: s.model,
+      instructions: opts.system ?? buildInstructions(s, opts.now, detectLang(question), opts.extra),
+      input,
+      store: false,
+      max_output_tokens: openAIMaxTokens(s)
+    };
+    const effort = effortFor(s);
+    if (effort && opts.includeReasoning !== false)
+      body.reasoning = { effort };
+    if (s.webSearch)
+      body.tools = [{ type: "web_search" }];
+    return body;
+  }
+  function extractText(data) {
+    if (data && typeof data.output_text === "string" && data.output_text.trim())
+      return data.output_text.trim();
+    const out = [];
+    for (const item of Array.isArray(data?.output) ? data.output : []) {
+      if (item?.type !== "message")
+        continue;
+      for (const c of Array.isArray(item.content) ? item.content : []) {
+        if ((c?.type === "output_text" || c?.type === "text") && typeof c.text === "string")
+          out.push(c.text);
+      }
+    }
+    return out.join(`
+`).trim();
+  }
+
+  class OpenAIError extends Error {
+    status;
+    code;
+    raw;
+    constructor(message, status, code, raw) {
+      super(message);
+      this.status = status;
+      this.code = code;
+      this.raw = raw;
+      this.name = "OpenAIError";
+    }
+  }
+  function parseError(status, raw) {
+    let code = "";
+    let message = raw.slice(0, 300);
+    try {
+      const j = JSON.parse(raw);
+      code = String(j?.error?.code ?? j?.error?.type ?? "");
+      message = String(j?.error?.message ?? message);
+    } catch {}
+    return new OpenAIError(message, status, code, raw.slice(0, 1000));
+  }
+  function withTimeout(p, ms, setTimer) {
+    return new Promise((resolve, reject) => {
+      const t = setTimer(() => reject(new OpenAIError("timeout", 0, "timeout", "")), ms);
+      p.then((v) => {
+        clearTimeout(t);
+        resolve(v);
+      }, (e) => {
+        clearTimeout(t);
+        reject(e);
+      });
+    });
+  }
+  async function askOpenAI(fetchFn, s, history, question, opts = {}) {
+    if (!s.apiKey)
+      throw new OpenAIError("no key", 401, "no_key", "");
+    const now = opts.now ?? Date.now;
+    const setTimer = opts.setTimer ?? setTimeout;
+    const started = now();
+    const send = async (includeReasoning) => {
+      const body = JSON.stringify(buildRequestBody(s, history, question, { includeReasoning, system: opts.system, extra: opts.extra }));
+      let res;
+      try {
+        res = await withTimeout(fetchFn(OPENAI_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${s.apiKey}` },
+          body
+        }), opts.timeoutMs ?? 60000, setTimer);
+      } catch (e) {
+        if (e instanceof OpenAIError)
+          throw e;
+        throw new OpenAIError(String(e?.message ?? e), 0, "network", "");
+      }
+      const raw = await res.text();
+      return { res, raw };
+    };
+    let { res, raw } = await send(true);
+    if (!res.ok && res.status === 400 && /reasoning|effort/i.test(raw) && effortFor(s)) {
+      ({ res, raw } = await send(false));
+    }
+    if (!res.ok)
+      throw parseError(res.status, raw);
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      throw new OpenAIError("bad json", res.status, "bad_json", raw.slice(0, 300));
+    }
+    const text = extractText(data);
+    if (!text) {
+      const reason = data?.incomplete_details?.reason ?? data?.status ?? "empty";
+      throw new OpenAIError(`empty answer (${reason})`, res.status, "empty", raw.slice(0, 300));
+    }
+    return { text, ms: now() - started, model: String(data?.model ?? s.model), usage: data?.usage };
+  }
+
+  // src/background/llm.ts
+  var PROVIDERS = {
+    openai: {
+      label: "ChatGPT",
+      company: "OpenAI",
+      keyField: "apiKey",
+      modelField: "model",
+      keyPlaceholder: "sk-…",
+      keyWhere: "platform.openai.com → API keys",
+      models: [
+        { id: "gpt-6.1-terra", label: "GPT‑6.1 Terra" },
+        { id: "gpt-6-luna", label: "GPT‑6 Luna" },
+        { id: "gpt-6.1-sol", label: "GPT‑6.1 Sol" },
+        { id: "gpt-6-astra", label: "GPT‑6 Astra" }
+      ]
+    },
+    anthropic: {
+      label: "Claude",
+      company: "Anthropic",
+      keyField: "anthropicKey",
+      modelField: "anthropicModel",
+      keyPlaceholder: "sk-ant-…",
+      keyWhere: "platform.claude.com/settings/keys → Create key; в поле Workspace выберите рабочее пространство (например, Default)",
+      models: [
+        { id: "claude-haiku-5-5", label: "Haiku 5.5" },
+        { id: "claude-sonnet-5-5", label: "Sonnet 5.5" },
+        { id: "claude-opus-5-5", label: "Opus 5.5" },
+        { id: "claude-fable-5-1", label: "Fable 5.1" }
+      ]
+    },
+    gemini: {
+      label: "Gemini",
+      company: "Google",
+      keyField: "geminiKey",
+      modelField: "geminiModel",
+      keyPlaceholder: "AIza…",
+      keyWhere: "aistudio.google.com/apikey → Create API key",
+      models: [
+        { id: "gemini-3.8-flash", label: "3.8 Flash" },
+        { id: "gemini-3.5-flash-lite", label: "3.5 Flash‑Lite" },
+        { id: "gemini-4-argon", label: "4 Argon" }
+      ]
+    }
+  };
+  function asProvider(v) {
+    return v === "anthropic" || v === "gemini" ? v : "openai";
+  }
+  function keyFor(s, p) {
+    return String(s[PROVIDERS[p].keyField] ?? "");
+  }
+  function modelFor(s, p) {
+    return String(s[PROVIDERS[p].modelField] ?? "");
+  }
+  function modelLabel(p, id) {
+    return PROVIDERS[p].models.find((m) => m.id === id)?.label ?? id;
+  }
+  function displayName(s, p) {
+    return `${PROVIDERS[p].label} ${modelLabel(p, modelFor(s, p))}`;
+  }
+
+  class LLMError extends Error {
+    provider;
+    status;
+    code;
+    constructor(message, provider, status, code) {
+      super(message);
+      this.provider = provider;
+      this.status = status;
+      this.code = code;
+      this.name = "LLMError";
+    }
+  }
+  function explainLLMError(p, status, code, message) {
+    const name = p === "openai" ? "OpenAI" : PROVIDERS[p].label;
+    const m = (message || "").toLowerCase();
+    const c = (code || "").toLowerCase();
+    if (c === "no_key")
+      return `Нет ключа ${name}. Добавьте его в настройках приложения.`;
+    if (c === "timeout")
+      return `${name} не ответил вовремя. Повторите вопрос.`;
+    if (status === 0)
+      return `Нет связи с ${name}. Проверьте интернет на телефоне.`;
+    if (status === 401 || c === "authentication_error" || /api key not valid|invalid api key|invalid x-api-key/.test(m))
+      return `Ключ ${name} не принят. Проверьте ключ в настройках.`;
+    if (/anthropic-workspace-id|not scoped to a workspace/.test(m))
+      return "Ключ Claude не привязан к рабочему пространству. Создайте новый на platform.claude.com/settings/keys и выберите Workspace (например, Default).";
+    if (c === "insufficient_quota" || /credit balance|billing|insufficient.*(funds|credit)/.test(m) || p === "openai" && m.includes("quota"))
+      return p === "openai" ? "На счёте OpenAI API нет средств. Пополните баланс на platform.openai.com." : `На счёте ${name} нет средств. Пополните баланс у ${PROVIDERS[p].company}.`;
+    if (p === "gemini" && (status === 429 || c === "resource_exhausted"))
+      return "Лимит Gemini исчерпан. Подождите минуту или подключите оплату в Google AI Studio.";
+    if (c === "empty")
+      return /max_output_tokens|max_tokens|incomplete/.test(m) ? `${name}: ответ не уместился — модель потратила лимит на размышления. Уменьшите «Размышления» в настройках.` : `${name} вернул пустой ответ. Повторите вопрос.`;
+    if (status === 529 || c === "overloaded_error")
+      return `${name} сейчас перегружен. Повторите через минуту.`;
+    if (status === 429)
+      return `${name} просит подождать (лимит запросов). Повторите через минуту.`;
+    if (status === 404 || c === "model_not_found" || c === "not_found_error" || c === "not_found")
+      return "Модель недоступна для вашего ключа. Выберите другую в настройках.";
+    if (status === 403)
+      return `Доступ запрещён: проверьте ключ и права ${name}.`;
+    if (status >= 500)
+      return `Сбой на стороне ${name}. Повторите вопрос.`;
+    return `Ошибка ${name} ${status}${code ? " (" + code + ")" : ""}.`;
+  }
+  function alternatingHistory(history, limit) {
+    const recent = limit > 0 ? history.slice(-limit) : [];
+    const out = [];
+    for (const m of recent) {
+      if (!out.length && m.role !== "user")
+        continue;
+      if (out.length && out[out.length - 1].role === m.role) {
+        out[out.length - 1] = { ...out[out.length - 1], content: out[out.length - 1].content + `
+` + m.content };
+      } else
+        out.push(m);
+    }
+    if (out.length && out[out.length - 1].role === "user")
+      out.pop();
+    return out;
+  }
+  function maxTokens(s) {
+    const base = Math.min(8000, Math.max(1024, s.answerWords * 12));
+    if (s.effort === "high")
+      return Math.max(base, 16000);
+    if (s.effort === "medium")
+      return Math.max(base, 8000);
+    return base;
+  }
+  async function post(p, fetchFn, url, headers, body, opts) {
+    const setTimer = opts.setTimer ?? setTimeout;
+    const req = fetchFn(url, { method: "POST", headers, body: JSON.stringify(body) });
+    let res;
+    try {
+      res = await new Promise((resolve, reject) => {
+        const t = setTimer(() => reject(new LLMError("timeout", p, 0, "timeout")), opts.timeoutMs ?? 60000);
+        req.then((v) => {
+          clearTimeout(t);
+          resolve(v);
+        }, (e) => {
+          clearTimeout(t);
+          reject(e);
+        });
+      });
+    } catch (e) {
+      if (e instanceof LLMError)
+        throw e;
+      throw new LLMError(String(e?.message ?? e), p, 0, "network");
+    }
+    return { ok: res.ok, status: res.status, raw: await res.text() };
+  }
+  function parseJson(p, status, raw) {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      throw new LLMError(`bad json: ${raw.slice(0, 200)}`, p, status, "bad_json");
+    }
+  }
+  var ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
+  var ANTHROPIC_VERSION = "2023-06-01";
+  function anthropicReasoning(s) {
+    const m = s.anthropicModel.toLowerCase();
+    if (s.effort === "auto" || s.effort === "none") {
+      if (m.includes("haiku"))
+        return { thinking: { type: "disabled" }, output_config: { effort: "low" } };
+      if (m.includes("sonnet"))
+        return { thinking: { type: "between_tools" }, output_config: { effort: "low" } };
+      return { output_config: { effort: "low" } };
+    }
+    return { output_config: { effort: s.effort } };
+  }
+  function buildAnthropicBody(s, history, question, opts = {}) {
+    const body = {
+      model: s.anthropicModel,
+      max_tokens: maxTokens(s),
+      system: opts.system ?? buildInstructions(s, opts.now, detectLang(question), opts.extra),
+      messages: [
+        ...alternatingHistory(history, s.historyMessages).map((m) => ({ role: m.role, content: m.content })),
+        { role: "user", content: question }
+      ]
+    };
+    if (opts.includeReasoning !== false)
+      Object.assign(body, anthropicReasoning(s));
+    if (s.webSearch)
+      body.tools = [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }];
+    return body;
+  }
+  function extractAnthropicText(data) {
+    const blocks = Array.isArray(data?.content) ? data.content : [];
+    let start = 0;
+    blocks.forEach((b, i) => {
+      if (b?.type === "web_search_tool_result")
+        start = i + 1;
+    });
+    const tail = blocks.slice(start).filter((b) => b?.type === "text" && typeof b.text === "string");
+    const use = tail.length ? tail : blocks.filter((b) => b?.type === "text" && typeof b.text === "string");
+    return use.map((b) => b.text).join("").trim();
+  }
+  async function askAnthropic(fetchFn, s, history, q, opts) {
+    const key = s.anthropicKey;
+    if (!key)
+      throw new LLMError("no key", "anthropic", 401, "no_key");
+    const headers = { "content-type": "application/json", "x-api-key": key, "anthropic-version": ANTHROPIC_VERSION };
+    let r = await post("anthropic", fetchFn, ANTHROPIC_URL, headers, buildAnthropicBody(s, history, q, { system: opts.system, extra: opts.extra }), opts);
+    if (!r.ok && r.status === 400 && /thinking|effort|output_config/i.test(r.raw)) {
+      r = await post("anthropic", fetchFn, ANTHROPIC_URL, headers, buildAnthropicBody(s, history, q, { includeReasoning: false, system: opts.system, extra: opts.extra }), opts);
+    }
+    const data = parseJson("anthropic", r.status, r.raw);
+    if (!r.ok) {
+      throw new LLMError(String(data?.error?.message ?? r.raw.slice(0, 300)), "anthropic", r.status, String(data?.error?.type ?? ""));
+    }
+    const text = extractAnthropicText(data);
+    if (!text)
+      throw new LLMError(`empty answer (${data?.stop_reason ?? "?"})`, "anthropic", r.status, "empty");
+    return {
+      text,
+      ms: 0,
+      model: String(data?.model ?? s.anthropicModel),
+      usage: { input_tokens: data?.usage?.input_tokens, output_tokens: data?.usage?.output_tokens }
+    };
+  }
+  var GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
+  function geminiThinkingLevel(s) {
+    if (s.effort === "low" || s.effort === "medium" || s.effort === "high")
+      return s.effort;
+    return s.geminiModel.toLowerCase().includes("lite") ? "minimal" : "low";
+  }
+  function buildGeminiBody(s, history, question, opts = {}) {
+    const generationConfig = { maxOutputTokens: maxTokens(s) };
+    if (opts.includeReasoning !== false)
+      generationConfig.thinkingConfig = { thinkingLevel: geminiThinkingLevel(s) };
+    const body = {
+      systemInstruction: { parts: [{ text: opts.system ?? buildInstructions(s, opts.now, detectLang(question), opts.extra) }] },
+      contents: [
+        ...alternatingHistory(history, s.historyMessages).map((m) => ({
+          role: m.role === "assistant" ? "model" : "user",
+          parts: [{ text: m.content }]
+        })),
+        { role: "user", parts: [{ text: question }] }
+      ],
+      generationConfig
+    };
+    if (s.webSearch)
+      body.tools = [{ google_search: {} }];
+    return body;
+  }
+  function extractGeminiText(data) {
+    const parts = data?.candidates?.[0]?.content?.parts ?? [];
+    return parts.filter((p) => p && !p.thought && typeof p.text === "string").map((p) => p.text).join("").trim();
+  }
+  async function askGemini(fetchFn, s, history, q, opts) {
+    const key = s.geminiKey;
+    if (!key)
+      throw new LLMError("no key", "gemini", 401, "no_key");
+    const url = `${GEMINI_BASE}${encodeURIComponent(s.geminiModel)}:generateContent`;
+    const headers = { "Content-Type": "application/json", "x-goog-api-key": key };
+    let r = await post("gemini", fetchFn, url, headers, buildGeminiBody(s, history, q, { system: opts.system, extra: opts.extra }), opts);
+    if (!r.ok && r.status === 400 && /thinking/i.test(r.raw)) {
+      r = await post("gemini", fetchFn, url, headers, buildGeminiBody(s, history, q, { includeReasoning: false, system: opts.system, extra: opts.extra }), opts);
+    }
+    const data = parseJson("gemini", r.status, r.raw);
+    if (!r.ok) {
+      throw new LLMError(String(data?.error?.message ?? r.raw.slice(0, 300)), "gemini", r.status, String(data?.error?.status ?? ""));
+    }
+    const text = extractGeminiText(data);
+    if (!text) {
+      const reason = data?.promptFeedback?.blockReason ?? data?.candidates?.[0]?.finishReason ?? "?";
+      throw new LLMError(`empty answer (${reason})`, "gemini", r.status, "empty");
+    }
+    const u = data?.usageMetadata ?? {};
+    return {
+      text,
+      ms: 0,
+      model: String(data?.modelVersion ?? s.geminiModel),
+      usage: { input_tokens: u.promptTokenCount, output_tokens: (u.candidatesTokenCount ?? 0) + (u.thoughtsTokenCount ?? 0) }
+    };
+  }
+  async function askLLM(fetchFn, s, provider, history, question, opts = {}) {
+    const now = opts.now ?? Date.now;
+    const started = now();
+    try {
+      let res;
+      if (provider === "anthropic")
+        res = await askAnthropic(fetchFn, s, history, question, opts);
+      else if (provider === "gemini")
+        res = await askGemini(fetchFn, s, history, question, opts);
+      else
+        res = await askOpenAI(fetchFn, s, history, question, opts);
+      return { ...res, ms: now() - started, provider };
+    } catch (e) {
+      if (e instanceof LLMError)
+        throw e;
+      if (e instanceof OpenAIError)
+        throw new LLMError(e.message, "openai", e.status, e.code);
+      throw new LLMError(String(e?.message ?? e), provider, 0, "network");
+    }
+  }
+
   // src/background/phrase.ts
   function buildPhrasePrompt(phrase, lang) {
     const target = PHRASE_LANG_NAME[lang];
@@ -8199,7 +9093,7 @@ A: <автор — источник, год>`,
     const t = String(text ?? "").trim();
     return wordCount(t) >= 5 && !ENDS_WITH_QUESTION.test(t) && CLAIM_CUE.test(t);
   }
-  function buildTipPrompt(context, prevTips, goal, lang) {
+  function buildTipPrompt(context, prevTips, goal, lang, search = false) {
     const L = TIP_LABELS[lang];
     const system = [
       "Ты — аналитик и фактчекер в умных очках. Пользователь разговаривает с другим человеком; тебе дают свежую расшифровку речи (возможны ошибки распознавания). Если голоса различаются, реплики помечены «Вы:» (пользователь) и «Собеседник:»; метки могут ошибаться.",
@@ -8213,7 +9107,7 @@ A: <автор — источник, год>`,
       `${L.evidence}: <конкретный факт, цифра, исследование, закон или прецедент, подтверждающий или опровергающий позицию в разговоре>`,
       `${L.true}: <утверждение верно — чем подтверждается, если это неочевидно или собеседник сомневается>`,
       `${L.answer}: <ответ по существу, если пользователю только что задали вопрос>`,
-      "Называй источник кратко в скобках, если знаешь его точно (ВОЗ, 2023; Росстат; ГК РФ ст. 475). Никогда не придумывай цифры, исследования и источники; не уверен — пиши «Спорно» или SKIP.",
+      search ? "Проверь прозвучавшее утверждение поиском в интернете и опирайся на найденное. Источник называй кратко в скобках (ВОЗ, 2023; Росстат; BBC). Никогда не придумывай цифры, исследования и источники; ничего надёжного не нашёл — пиши «Спорно» или SKIP." : "Называй источник кратко в скобках, если знаешь его точно (ВОЗ, 2023; Росстат; ГК РФ ст. 475). Никогда не придумывай цифры, исследования и источники; не уверен — пиши «Спорно» или SKIP.",
       "Опирайся на последние реплики. Не повторяй прошлые находки.",
       `Пиши на ${lang === "en" ? "английском (English)" : "русском"} языке. Без Markdown и пояснений.`,
       "Если в последних репликах нет ни утверждений, которые стоит проверить, ни фактов, которые стоит уточнить (бытовой разговор, эмоции, пауза, всё уже проверено), — ответь ровно SKIP."
@@ -8260,6 +9154,7 @@ ${prevTips.map((t) => "— " + t).join(`
     tipBusy = false;
     lastTipAt = 0;
     wordsSinceTip = 0;
+    claimSinceTip = false;
     lastAnswerAt = -Infinity;
     feed = [];
     feedSeq = 0;
@@ -8281,6 +9176,7 @@ ${prevTips.map((t) => "— " + t).join(`
       this.tipBusy = false;
       this.lastTipAt = this.deps.now();
       this.wordsSinceTip = 0;
+      this.claimSinceTip = false;
       this.lastAnswerAt = -Infinity;
       this.feed = [];
       const prev = this.record;
@@ -8378,7 +9274,10 @@ ${prevTips.map((t) => "— " + t).join(`
         if (trigger)
           this.request(trigger, "");
       }
-      this.maybeTip(looksLikeClaim(t));
+      const claim = looksLikeClaim(t);
+      if (claim)
+        this.claimSinceTip = true;
+      this.maybeTip(claim);
     }
     askUser(question) {
       if (!this.active || !question.trim())
@@ -8481,12 +9380,16 @@ ${prevTips.map((t) => "— " + t).join(`
       this.tipBusy = true;
       this.lastTipAt = this.deps.now();
       this.wordsSinceTip = 0;
+      const search = this.claimSinceTip && Boolean(this.deps.search?.());
+      this.claimSinceTip = false;
       const context = [...this.recent, this.interim].filter(Boolean).join(" ");
       const lang = detectLang(context.split(/\s+/).slice(-60).join(" "));
       const prevTips = (this.record?.notes ?? []).slice(-PREV_TIPS).map((n) => `${n.q}: ${n.text}`);
-      const { system, user } = buildTipPrompt(context, prevTips, this.deps.goal?.() ?? "", lang);
+      const { system, user } = buildTipPrompt(context, prevTips, this.deps.goal?.() ?? "", lang, search);
+      if (search)
+        this.deps.log("talk", "Проверяю утверждение в интернете…");
       try {
-        const reply = await this.deps.complete(system, user);
+        const reply = await this.deps.complete(system, user, search ? { search: true } : undefined);
         if (session !== this.session)
           return;
         const tip = parseTip(reply);
@@ -8625,6 +9528,11 @@ ${prevTips.map((t) => "— " + t).join(`
     navMode: "walking",
     navMap: true,
     navMiniMap: true,
+    useLocation: true,
+    useCalendar: true,
+    guideAuto: false,
+    translateReplies: true,
+    talkSearch: true,
     v: SETTINGS_VERSION
   };
   function migrateSettings(raw) {
@@ -8694,6 +9602,11 @@ ${prevTips.map((t) => "— " + t).join(`
       navMode: ["walking", "driving", "cycling"].includes(pick("navMode")) ? pick("navMode") : "walking",
       navMap: pick("navMap") !== false,
       navMiniMap: pick("navMiniMap") !== false,
+      useLocation: pick("useLocation") !== false,
+      useCalendar: pick("useCalendar") !== false,
+      guideAuto: pick("guideAuto") === true,
+      translateReplies: pick("translateReplies") !== false,
+      talkSearch: pick("talkSearch") !== false,
       v: SETTINGS_VERSION
     };
   }
@@ -8779,6 +9692,18 @@ ${prevTips.map((t) => "— " + t).join(`
   }
 
   // src/background/assistant.ts
+  function within(p, ms) {
+    return new Promise((resolve) => {
+      const t = setTimeout(() => resolve(null), ms);
+      p.then((v) => {
+        clearTimeout(t);
+        resolve(v);
+      }, () => {
+        clearTimeout(t);
+        resolve(null);
+      });
+    });
+  }
   var SILENCE_MS = 1600;
   var TRANSLATE_IDLE_MS = 20000;
   var TRANSLATE_RENDER_MS = 350;
@@ -8806,6 +9731,7 @@ ${prevTips.map((t) => "— " + t).join(`
   var DASHBOARD_WARNING = "Mentra считает, что голова поднята, и показывает свою панель (время, заряд) вместо ответа. " + "Опустите голову. Если не помогает: Mentra → Settings → Dashboard → выключите Contextual Dashboard " + "или увеличьте Adjust Head-Up Angle.";
   var PHRASE_WAIT_MS = 8000;
   var NAV_WAIT_MS = 9000;
+  var GUIDE_SHOW_MS = 25000;
   var NAV_TURN_MS = 4500;
   var NAV_BUSY_MS = 25000;
   var NAV_MSG_MS = 6000;
@@ -8855,6 +9781,11 @@ ${prevTips.map((t) => "— " + t).join(`
     nav;
     lecture;
     talk;
+    guide;
+    trHeard = [];
+    trReplyTimer = null;
+    trReplySeq = 0;
+    trReplies = [];
     now;
     setTimer;
     clearTimerFn;
@@ -8883,7 +9814,8 @@ ${prevTips.map((t) => "— " + t).join(`
         onChange: () => this.changed()
       }, deps.store.loadLecture());
       this.talk = new Talk({
-        complete: (system, user) => this.completeOnce(system, user),
+        complete: (system, user, opts) => this.completeOnce(system, user, opts),
+        search: () => this.settings.talkSearch,
         explainError: (e) => {
           const err = e;
           return explainLLMError(err?.provider ?? asProvider(this.settings.provider), Number(err?.status) || 0, String(err?.code ?? ""), String(err?.message ?? ""));
@@ -8920,24 +9852,41 @@ ${prevTips.map((t) => "— " + t).join(`
         prefetch: deps.nav?.prefetch ? (route) => deps.nav.prefetch(route) : undefined,
         watch: deps.nav?.watch ? (cb) => deps.nav.watch(cb) : undefined
       });
+      this.guide = new WalkGuide({
+        around: async (c, r) => {
+          const infos = await this.deps.context?.around(c, r) ?? [];
+          return { hits: poisNear(infos, c, r), address: infos.length ? addressAt(infos, c) : null };
+        },
+        note: async (hit, address) => {
+          const { system, user } = buildNotePrompt(hit, address, this.settings.translateTo === "en-US" ? "en" : "ru");
+          return cleanNote(await this.completeOnce(system, user, { search: true, words: 40 }));
+        },
+        show: (title, text) => this.showGuideNote(title, text),
+        log: (kind, msg) => this.addLog(kind, msg),
+        now: () => this.now(),
+        watch: (cb) => this.deps.context ? this.deps.context.watch(cb) : () => {},
+        onChange: () => this.changed()
+      });
+      if (this.settings.guideAuto && deps.context)
+        this.guide.start();
     }
-    async completeOnce(system, user) {
+    async completeOnce(system, user, opts = {}) {
       const provider = asProvider(this.settings.provider);
       const quick = {
         ...this.settings,
-        webSearch: false,
+        webSearch: Boolean(opts.search),
         historyMessages: 0,
-        answerWords: 40,
+        answerWords: opts.words ?? 40,
         effort: this.settings.effort === "medium" || this.settings.effort === "high" ? "low" : this.settings.effort
       };
       const res = await askLLM(this.deps.fetch, quick, provider, [], user, {
         system,
-        timeoutMs: 30000,
+        timeoutMs: opts.search ? 45000 : 30000,
         setTimer: (fn, ms) => this.setTimer(fn, ms),
         now: this.now
       });
       const usage = res.usage ? `, токены ${res.usage.input_tokens ?? "?"}→${res.usage.output_tokens ?? "?"}` : "";
-      this.addLog("openai", `${PROVIDERS[provider].label}: ${(res.ms / 1000).toFixed(1)} с (${res.model}${usage})`);
+      this.addLog("openai", `${PROVIDERS[provider].label}${opts.search ? " с поиском" : ""}: ${(res.ms / 1000).toFixed(1)} с (${res.model}${usage})`);
       return res.text;
     }
     addLog(kind, msg) {
@@ -9030,6 +9979,10 @@ ${prevTips.map((t) => "— " + t).join(`
       this.settings = merged;
       this.deps.store.saveSettings(merged);
       this.addLog("info", "Настройки сохранены");
+      if (merged.guideAuto && this.deps.context)
+        this.guide.start();
+      else
+        this.guide.stop();
       if (mapWas !== `${this.navMapOn()}|${this.settings.navMiniMap}`) {
         this.nav.mapChanged();
         if (this.nav.active && this.phase === "idle" && this.clearTimer_ == null)
@@ -9171,6 +10124,9 @@ ${prevTips.map((t) => "— " + t).join(`
       const nav = this.navIntent(body);
       if (nav)
         return nav();
+      const guide = this.guideIntent(body);
+      if (guide)
+        return guide();
       const cmd = parseCommand(body);
       if (cmd && (wake.matched || this.commandRelevant(cmd))) {
         this.command(cmd, "voice");
@@ -9303,7 +10259,7 @@ ${prevTips.map((t) => "— " + t).join(`
             return;
           }
         }
-        const nav = this.committed.length === 0 ? this.navIntent(clean) : null;
+        const nav = this.committed.length === 0 ? this.navIntent(clean) ?? this.guideIntent(clean) : null;
         if (nav) {
           this.cancelTimer("silenceTimer");
           this.cancelTimer("wakeTimer");
@@ -9412,9 +10368,15 @@ ${prevTips.map((t) => "— " + t).join(`
       this.show(fitScreen(`» ${q}
 …${providerOverride || provider !== "openai" ? label + " " : ""}думает`));
       try {
-        const res = await askLLM(this.deps.fetch, this.settings, provider, this.history, q, {
+        const ctx = await this.questionContext(q);
+        if (seq !== this.requestSeq)
+          return;
+        const settings = ctx.search && !this.settings.webSearch ? { ...this.settings, webSearch: true } : this.settings;
+        const res = await askLLM(this.deps.fetch, settings, provider, this.history, q, {
           setTimer: (fn, ms) => this.setTimer(fn, ms),
-          now: this.now
+          now: this.now,
+          extra: ctx.extra,
+          timeoutMs: settings.webSearch ? 75000 : 60000
         });
         if (seq !== this.requestSeq) {
           this.addLog("info", "Ответ на отменённый вопрос пропущен");
@@ -9462,7 +10424,7 @@ ${prevTips.map((t) => "— " + t).join(`
       this.flash(message, 8000);
       this.changed();
     }
-    showPage(i) {
+    showPage(i, clearMs) {
       if (!this.pages.length)
         return;
       this.page = Math.max(0, Math.min(this.pages.length - 1, i));
@@ -9478,7 +10440,8 @@ ${prevTips.map((t) => "— " + t).join(`
             this.showPage(this.page + 1);
         }, this.settings.autoAdvanceSec * 1000);
       }
-      if (this.settings.clearAfterSec > 0 && last) {
+      const clearAfter = clearMs ?? this.settings.clearAfterSec * 1000;
+      if (clearAfter > 0 && last) {
         this.clearTimer_ = this.setTimer(() => {
           this.clearTimer_ = null;
           if (this.phase === "answering") {
@@ -9488,7 +10451,7 @@ ${prevTips.map((t) => "— " + t).join(`
             this.addLog("display", "Ответ убран по таймеру (последняя страница прочитана)");
             this.changed();
           }
-        }, this.settings.clearAfterSec * 1000);
+        }, clearAfter);
       }
       this.autoHidden = false;
       this.changed();
@@ -9513,6 +10476,8 @@ ${prevTips.map((t) => "— " + t).join(`
       this.interim = "";
       this.trFinals = [];
       this.trInterim = null;
+      this.trHeard = [];
+      this.trReplies = [];
       this.translationScreen = "";
       this.phase = "translating";
       const target = this.settings.translateTo;
@@ -9589,7 +10554,7 @@ Notes are in the app.` : `Лекция выключена.
         return;
       if (mine && this.tryPhrase(body))
         return;
-      const nav = mine ? this.navIntent(body, !wake.matched) : null;
+      const nav = mine ? this.navIntent(body, !wake.matched) ?? this.guideIntent(body, !wake.matched) : null;
       if (nav)
         return nav();
       const cmd = parseCommand(body);
@@ -9731,7 +10696,7 @@ Hints: ${hints}. The list is in the app.` : `Беседа выключена.
         return;
       if (this.tryPhrase(body))
         return;
-      const nav = this.navIntent(body, !wake.matched);
+      const nav = this.navIntent(body, !wake.matched) ?? this.guideIntent(body, !wake.matched);
       if (nav)
         return nav();
       const goal = wake.matched ? goalIn(t) : null;
@@ -9804,6 +10769,8 @@ ${goal}` : "Цель беседы убрана.", 3000);
         this.clearTimerFn(this.trIdleTimer);
         this.trIdleTimer = null;
       }
+      this.cancelReplyTimer();
+      this.trReplySeq++;
     }
     onTranscriptWhileTranslating(t) {
       const wake = this.wake(t);
@@ -9815,9 +10782,13 @@ ${goal}` : "Цель беседы убрана.", 3000);
       }
       if (tcmd === "start")
         return;
+      if ((wake.matched || detectLang(body) === "ru") && isReplyRequest(body)) {
+        this.suggestReplies(true);
+        return;
+      }
       if (this.trySwitchMode(body))
         return;
-      const nav = this.navIntent(body, !wake.matched);
+      const nav = this.navIntent(body, !wake.matched) ?? this.guideIntent(body, !wake.matched);
       if (nav)
         return nav();
       const cmd = parseCommand(body);
@@ -9839,8 +10810,10 @@ ${goal}` : "Цель беседы убрана.", 3000);
       if (!text)
         return;
       if (isPassthrough(ev, this.settings.translateTo))
-        return;
+        return this.cancelReplyTimer();
       const id = ev.utteranceId ?? "_";
+      this.cancelReplyTimer();
+      this.trReplySeq++;
       if (ev.isFinal) {
         this.trFinals.push(text);
         if (this.trFinals.length > TRANSLATE_KEEP)
@@ -9848,6 +10821,11 @@ ${goal}` : "Цель беседы убрана.", 3000);
         if (!this.trInterim || this.trInterim.id === id)
           this.trInterim = null;
         this.addLog("translate", `${ev.sourceLanguage ? "[" + primaryLang(ev.sourceLanguage) + "] " : ""}${text}`);
+        this.trHeard.push({ orig: String(ev.originalText ?? "").trim(), text, lang: String(ev.sourceLanguage ?? "") });
+        if (this.trHeard.length > 3)
+          this.trHeard.splice(0, this.trHeard.length - 3);
+        this.trReplies = [];
+        this.armReplies();
       } else {
         this.trInterim = { id, text };
       }
@@ -10215,6 +11193,262 @@ ${goal}` : "Цель беседы убрана.", 3000);
       }
       return out.slice(0, 8);
     }
+    travelHeading() {
+      if (this.nav.active && this.nav.heading != null)
+        return this.nav.heading;
+      return this.guide.heading;
+    }
+    async questionContext(q) {
+      const host = this.deps.context;
+      if (!host)
+        return { extra: "", search: false };
+      const lang = detectLang(q);
+      const place = isPlaceQuestion(q);
+      const weather = needsWeather(q);
+      const town = weather ? weatherPlace(q) : null;
+      const calendar = this.settings.useCalendar && needsCalendar(q);
+      const whereWanted = this.settings.useLocation || place;
+      const fixWanted = whereWanted || weather && !town;
+      if (!fixWanted && !weather && !calendar)
+        return { extra: "", search: false };
+      const cal = calendar ? this.calendarContext(q) : Promise.resolve("");
+      const fix = fixWanted ? await within(host.here(place ? 30000 : 600000, place ? 6000 : 1500), place ? 7000 : 2000) : null;
+      if (fixWanted && !fix)
+        this.addLog("info", "Геопозиция не получена — отвечаю без неё");
+      const [where, wx, events] = await Promise.all([
+        fix && whereWanted ? this.whereContext(fix, place) : Promise.resolve(""),
+        weather ? this.weatherContext(town, fix, lang) : Promise.resolve(""),
+        cal
+      ]);
+      const got = [where && (place ? "место и что рядом" : "место"), wx && "погода", events && "календарь"].filter(Boolean);
+      if (got.length)
+        this.addLog("info", `К вопросу добавлено: ${got.join(", ")}`);
+      return { extra: [contextBlock([where, wx, events]), place ? PLACE_RULES : ""].filter(Boolean).join(`
+
+`), search: place };
+    }
+    async whereContext(fix, place) {
+      const radius = place ? 220 : 120;
+      const infos = await within(this.deps.context.around(fix, radius), place ? 5000 : 1500) ?? [];
+      const address = infos.length ? addressAt(infos, fix) : null;
+      const hits = place ? poisNear(infos, fix, radius).slice(0, 8) : [];
+      return placeContext(fix, address, hits, this.travelHeading());
+    }
+    async weatherContext(town, fix, lang) {
+      const host = this.deps.context;
+      let at = null;
+      if (town) {
+        for (const v of placeVariants(town)) {
+          const g = pickGeocode(await within(host.geocode(v, lang), 4000), v);
+          if (g) {
+            at = { lat: g.lat, lng: g.lng, label: `${g.name}${g.country ? ", " + g.country : ""}` };
+            break;
+          }
+        }
+        if (!at) {
+          this.addLog("info", `Погода: город «${town}» не найден`);
+          return `Погоду для «${town}» найти не удалось.`;
+        }
+      } else if (fix)
+        at = { lat: fix.lat, lng: fix.lng, label: "там, где пользователь" };
+      if (!at)
+        return "";
+      const data = await within(host.weather(at.lat, at.lng), 6000);
+      if (!data?.current) {
+        this.addLog("info", "Погода: Open-Meteo не ответил");
+        return "";
+      }
+      return formatWeather(data, at.label);
+    }
+    async calendarContext(q) {
+      const host = this.deps.context;
+      if (!host.status().calendar) {
+        this.addLog("info", "Календарь: нет разрешения CALENDAR — загрузите EVA-IA заново по ссылке, чтобы Mentra спросила доступ");
+        return "Календарь телефона недоступен: у приложения нет разрешения на календарь.";
+      }
+      const w = calendarWindow(q, new Date(this.now()));
+      const r = await within(host.calendar(w.from, w.to), 6000);
+      if (!r) {
+        this.addLog("info", "Календарь: телефон не ответил (возможно, нет доступа к календарю в iOS)");
+        return "Календарь телефона не прочитан (нет доступа или телефон не ответил).";
+      }
+      this.addLog("info", `Календарь (${w.label}): событий ${r.events.length}`);
+      return formatEvents(r.events, w.label, r.truncated);
+    }
+    guideIntent(body, strict = false) {
+      const c = parseGuideCommand(body);
+      if (!c || strict)
+        return null;
+      switch (c.kind) {
+        case "where":
+          return () => void this.whereAmI();
+        case "around":
+          return () => void this.whatsAround();
+        case "what":
+          return this.phase === "lecture" || this.phase === "talk" ? null : () => void this.ask(body, "voice");
+        case "auto":
+          return () => this.setGuide(c.on, "voice");
+      }
+    }
+    setGuide(on, source) {
+      if (on && !this.deps.context) {
+        this.flash("Гид недоступен в этой версии Mentra.", 4000);
+        return;
+      }
+      if (this.settings.guideAuto !== on)
+        this.updateSettings({ guideAuto: on });
+      if (source === "voice")
+        this.flash(on ? `Гид включён: расскажу о местах,
+мимо которых идёте.
+Выключить: «стоп гид»` : "Гид выключен.", 3500);
+    }
+    async myPosition() {
+      const host = this.deps.context;
+      if (!host)
+        return null;
+      return within(host.here(20000, 8000), 9000);
+    }
+    async whereAmI() {
+      const q = "Где я?";
+      this.addLog("cmd", "Гид: где я");
+      if (!this.inMode())
+        this.show("Определяю, где вы…");
+      const fix = await this.myPosition();
+      if (!fix)
+        return this.guideFail(`Не удалось определить, где вы.
+Проверьте геолокацию для Mentra.`);
+      const infos = await within(this.deps.context.around(fix, 150), 7000) ?? [];
+      const where = addressLine(infos.length ? addressAt(infos, fix) : null);
+      const acc = Number.isFinite(fix.accuracy) && fix.accuracy > 0 ? ` ±${Math.round(fix.accuracy)} м` : "";
+      const answer = `${where || (infos.length ? "Адреса на карте рядом нет" : "Карты этого места нет на телефоне")}
+${fix.lat.toFixed(5)}, ${fix.lng.toFixed(5)}${acc}`;
+      this.guideAnswer(q, answer);
+    }
+    async whatsAround() {
+      const q = "Что интересного рядом?";
+      this.addLog("cmd", "Гид: что рядом");
+      if (!this.inMode())
+        this.show("Смотрю, что рядом…");
+      const fix = await this.myPosition();
+      if (!fix)
+        return this.guideFail(`Не удалось определить, где вы.
+Проверьте геолокацию для Mentra.`);
+      const infos = await within(this.deps.context.around(fix, 450), 12000);
+      if (!infos?.length)
+        return this.guideFail(`Карты этого места нет:
+нет интернета и она не скачана.`);
+      const hits = poisNear(infos, fix, 450).filter((h) => h.score >= 1.5).slice(0, 5);
+      this.guideAnswer(q, aroundText(hits, this.travelHeading()));
+    }
+    inMode() {
+      return this.phase === "translating" || this.phase === "lecture" || this.phase === "talk";
+    }
+    guideFail(text) {
+      this.addLog("error", `Гид: ${text.replace(/\n/g, " ")}`);
+      if (!this.inMode() && this.phase !== "idle" && this.phase !== "answering")
+        return;
+      this.flash(text, 6000);
+    }
+    guideAnswer(question, answer) {
+      const at = this.now();
+      this.history.push({ role: "user", content: question, at }, { role: "assistant", content: answer, at });
+      this.deps.store.saveHistory(this.history);
+      this.addLog("display", answer.replace(/\n/g, " · "));
+      if (this.inMode()) {
+        this.flash(answer, 15000);
+        return;
+      }
+      if (this.phase === "capturing" || this.phase === "thinking")
+        return;
+      this.requestSeq++;
+      this.lastQuestion = question;
+      this.lastAnswer = answer;
+      this.lastError = "";
+      this.pages = paginate(sanitizeForG1(answer));
+      this.page = 0;
+      this.followUpUntil = 0;
+      this.showPage(0);
+    }
+    showGuideNote(title, text) {
+      if (this.phase !== "idle" || this.clearTimer_ != null || this.navWait || this.phraseWait)
+        return false;
+      const at = this.now();
+      this.history.push({ role: "user", content: `Гид: ${title}`, at }, { role: "assistant", content: text, at, by: asProvider(this.settings.provider) });
+      this.deps.store.saveHistory(this.history);
+      this.lastQuestion = title;
+      this.lastAnswer = text;
+      this.pages = paginate(sanitizeForG1(`${title}
+${text}`));
+      this.page = 0;
+      this.followUpUntil = 0;
+      this.showPage(0, GUIDE_SHOW_MS);
+      return true;
+    }
+    cancelReplyTimer() {
+      if (this.trReplyTimer != null)
+        this.clearTimerFn(this.trReplyTimer);
+      this.trReplyTimer = null;
+    }
+    armReplies() {
+      this.cancelReplyTimer();
+      if (!this.settings.translateReplies)
+        return;
+      this.trReplyTimer = this.setTimer(() => {
+        this.trReplyTimer = null;
+        this.suggestReplies(false);
+      }, REPLY_PAUSE_MS);
+    }
+    async suggestReplies(onDemand) {
+      if (this.phase !== "translating")
+        return;
+      const heard = this.trHeard.slice(-3);
+      const last = heard[heard.length - 1];
+      if (!last) {
+        if (onDemand)
+          this.flash("Собеседник ещё ничего не сказал.", 2500);
+        return;
+      }
+      if (!onDemand && wordCount(last.orig || last.text) < 2)
+        return;
+      const provider = asProvider(this.settings.provider);
+      if (!keyFor(this.settings, provider)) {
+        if (onDemand)
+          this.flash(explainLLMError(provider, 401, "no_key", ""), 5000);
+        return;
+      }
+      const seq = ++this.trReplySeq;
+      if (onDemand) {
+        this.addLog("cmd", "Перевод: что ответить");
+        this.show(replyScreen(last.text, [{ say: "…", means: "" }]));
+      }
+      try {
+        const { system, user } = buildReplyPrompt(heard, this.settings.translateTo === "en-US" ? "en" : "ru");
+        const replies = parseReplies(await this.completeOnce(system, user));
+        if (seq !== this.trReplySeq || this.phase !== "translating")
+          return;
+        if (!replies.length) {
+          this.addLog("translate", "Варианты ответа: здесь ответ не нужен");
+          if (onDemand)
+            this.show(this.translationScreen || fitScreen(last.text));
+          return;
+        }
+        this.trReplies = replies;
+        const screen = replyScreen(last.text, replies);
+        this.translationScreen = screen;
+        this.show(screen);
+        this.armTranslateIdle();
+        this.addLog("translate", `Можно ответить: ${replies.map((r) => `${r.say}${r.means ? ` (${r.means})` : ""}`).join(" / ")}`);
+        this.changed();
+      } catch (e) {
+        if (seq !== this.trReplySeq)
+          return;
+        const err = e;
+        const human = explainLLMError(err?.provider ?? provider, Number(err?.status) || 0, String(err?.code ?? ""), String(err?.message ?? ""));
+        this.addLog("error", `Варианты ответа: ${human}`);
+        if (onDemand)
+          this.flash(human, 5000);
+      }
+    }
     snapshot() {
       const hint = (k) => k ? `${k.slice(0, k.startsWith("sk-ant-") ? 7 : 3)}…${k.slice(-4)}` : "";
       const provider = asProvider(this.settings.provider);
@@ -10248,6 +11482,13 @@ ${goal}` : "Цель беседы убрана.", 3000);
           frameId: this.nav.frameId,
           streets: this.nav.roads.length
         },
+        guide: {
+          active: this.guide.active,
+          available: Boolean(this.deps.context),
+          notes: this.guide.notes.slice(-10)
+        },
+        context: this.deps.context ? this.deps.context.status() : { location: false, calendar: false },
+        replies: this.trReplies,
         glassesConnected: this.glassesConnected,
         settings: {
           ...this.settings,
@@ -10424,6 +11665,7 @@ ${goal}` : "Цель беседы убрана.", 3000);
     templateAt = 0;
     inflight = new Map;
     decoded = new Map;
+    infos = new Map;
     failedAt = new Map;
     download = null;
     cancelled = false;
@@ -10552,6 +11794,33 @@ ${goal}` : "Цель беседы убрана.", 3000);
         throw new Error("нет карты этого места (нет интернета и не скачана заранее)");
       return out;
     }
+    async around(center, radiusM) {
+      await this.ready();
+      const tiles = tilesAround(center.lat, center.lng, radiusM);
+      const out = [];
+      for (const t of tiles) {
+        const k = key(TILE_ZOOM, t.x, t.y);
+        let info = this.infos.get(k);
+        if (!info) {
+          const bytes = await this.raw(TILE_ZOOM, t.x, t.y);
+          if (!bytes)
+            continue;
+          try {
+            info = tileInfo(bytes, TILE_ZOOM, t.x, t.y);
+          } catch (e) {
+            this.deps.log("error", `Карта: участок ${t.x}/${t.y} не прочитан (${String(e?.message ?? e)})`);
+            continue;
+          }
+          this.infos.set(k, info);
+          if (this.infos.size > DECODED_MAX)
+            this.infos.delete(this.infos.keys().next().value);
+        }
+        out.push(info);
+      }
+      if (!out.length)
+        throw new Error("нет карты этого места (нет интернета и не скачана заранее)");
+      return out;
+    }
     async prefetchRoute(points) {
       if (!this.deps.blob || points.length < 2)
         return 0;
@@ -10670,6 +11939,7 @@ ${goal}` : "Цель беседы убрана.", 3000);
           await this.deps.blob.delete(k);
           this.index.delete(k);
           this.decoded.delete(k);
+          this.infos.delete(k);
         } catch {}
       }
       this.areas = this.areas.filter((a) => a.id !== id);
@@ -10688,6 +11958,7 @@ ${goal}` : "Цель беседы убрана.", 3000);
         } catch {}
       }
       this.decoded.clear();
+      this.infos.clear();
       this.areas = [];
       this.deps.saveAreas(this.areas);
       this.deps.log("nav", "Все карты удалены с телефона");
@@ -10696,7 +11967,7 @@ ${goal}` : "Цель беседы убрана.", 3000);
   }
 
   // src/background/index.ts
-  var APP_VERSION = "1.15.1";
+  var APP_VERSION = "1.16.0";
   function newToken() {
     return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
       const r = Math.random() * 16 | 0;
@@ -10716,25 +11987,56 @@ ${goal}` : "Цель беседы убрана.", 3000);
       });
     });
   }
-  function makeNavHost(session, log, tiles) {
+  function makeLocator(session) {
+    let fix = null;
+    let pending = null;
+    const remember = (p) => {
+      const lat = Number(p?.lat);
+      const lng = Number(p?.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng))
+        return;
+      const acc = Number(p?.accuracy);
+      fix = { lat, lng, accuracy: Number.isFinite(acc) && acc > 0 ? acc : undefined, at: Date.now() };
+    };
+    const copy = (f) => ({ lat: f.lat, lng: f.lng, accuracy: f.accuracy });
+    return {
+      async here(maxAgeMs, waitMs) {
+        if (fix && Date.now() - fix.at <= maxAgeMs)
+          return copy(fix);
+        if (typeof session.location?.getOnce !== "function")
+          return null;
+        if (!pending) {
+          pending = Promise.resolve(session.location.getOnce()).then(remember).catch(() => {}).finally(() => {
+            pending = null;
+          });
+        }
+        await withTimeout2(pending, waitMs, "location").catch(() => {});
+        return fix && Date.now() - fix.at <= Math.max(maxAgeMs, 600000) ? copy(fix) : null;
+      },
+      watch(onPosition) {
+        const off = session.location?.onUpdate?.((p) => {
+          remember(p);
+          onPosition({ lat: Number(p?.lat), lng: Number(p?.lng), accuracy: Number.isFinite(Number(p?.accuracy)) ? Number(p.accuracy) : undefined });
+        });
+        return () => {
+          try {
+            off?.();
+          } catch {}
+        };
+      }
+    };
+  }
+  function makeNavHost(session, log, tiles, locator) {
     const nav = session.navigation;
     if (!nav || typeof nav.start !== "function")
       return;
     let token = newToken();
     let termsAsked = false;
-    let lastFix = null;
     return {
       problem: () => nav.hasPermission === false ? "нет разрешения на геопозицию — загрузите EVA-IA заново: Mentra → Settings → Miniapp Developer Settings → Load Miniapp from URL" : "",
       async locate() {
-        if (lastFix && Date.now() - lastFix.at < 60000)
-          return { lat: lastFix.lat, lng: lastFix.lng };
-        const fix = await session.location.getOnce();
-        const lat = Number(fix?.lat);
-        const lng = Number(fix?.lng);
-        if (!Number.isFinite(lat) || !Number.isFinite(lng))
-          return null;
-        lastFix = { lat, lng, at: Date.now() };
-        return { lat, lng };
+        const f = await locator.here(60000, 15000);
+        return f ? { lat: f.lat, lng: f.lng } : null;
       },
       async suggest(query, near) {
         token = newToken();
@@ -10772,14 +12074,7 @@ ${goal}` : "Цель беседы убрана.", 3000);
       },
       roads: (center, radius) => tiles.features(center, radius),
       prefetch: (route) => void tiles.prefetchRoute(route),
-      watch(onPosition) {
-        const off = session.location?.onUpdate?.((p) => onPosition({ lat: Number(p?.lat), lng: Number(p?.lng), accuracy: p?.accuracy }));
-        return () => {
-          try {
-            off?.();
-          } catch {}
-        };
-      }
+      watch: (onPosition) => locator.watch(onPosition)
     };
   }
   function getKV() {
@@ -10812,6 +12107,12 @@ ${goal}` : "Цель беседы убрана.", 3000);
       return { x: 0, y: 0, w: d?.width ?? 576, h: d?.height ?? 200 };
     };
     const snap = () => ({ ...assistant.snapshot(), version: APP_VERSION, maps: mapsState() });
+    const getJson = async (url, ms = 15000) => {
+      const res = await withTimeout2(globalThis.fetch(url, { method: "GET", headers: { Accept: "application/json" } }), ms, "fetch");
+      if (!res?.ok)
+        throw new Error(`HTTP ${res?.status}`);
+      return JSON.parse(await res.text());
+    };
     const blob = session.blob;
     const tiles = new TileStore({
       blob: blob && typeof blob.setFromUrl === "function" ? {
@@ -10820,12 +12121,7 @@ ${goal}` : "Цель беседы убрана.", 3000);
         list: () => blob.list(),
         delete: (k) => blob.delete(k)
       } : null,
-      fetchJson: async (url) => {
-        const res = await withTimeout2(globalThis.fetch(url), 15000, "TileJSON");
-        if (!res?.ok)
-          throw new Error(`HTTP ${res?.status}`);
-        return JSON.parse(await res.text());
-      },
+      fetchJson: (url) => getJson(url),
       log: (kind, msg) => assistant.addLog(kind, msg),
       now: () => Date.now(),
       onChange: () => pushState(),
@@ -10838,6 +12134,22 @@ ${goal}` : "Цель беседы убрана.", 3000);
       download: tiles.download,
       areas: tiles.areas
     });
+    const locator = makeLocator(session);
+    const context = {
+      status: () => ({
+        location: session.location?.hasPermission === true,
+        calendar: session.phone?.calendar?.hasPermission === true
+      }),
+      here: (maxAgeMs, waitMs) => locator.here(maxAgeMs, waitMs),
+      around: (center, radius) => tiles.around(center, radius),
+      weather: (lat, lng) => getJson(openMeteoUrl(lat, lng), 8000),
+      geocode: (name, lang) => getJson(geocodeUrl(name, lang), 6000),
+      async calendar(from, to) {
+        const r = await session.phone.calendar.listEvents({ startsAt: from, endsAt: to, limit: 50 });
+        return { events: Array.isArray(r?.events) ? r.events : [], truncated: Boolean(r?.truncated) };
+      },
+      watch: (onPosition) => locator.watch(onPosition)
+    };
     const assistant = new Assistant({
       store,
       fetch: (url, init) => globalThis.fetch(url, init),
@@ -10850,7 +12162,8 @@ ${goal}` : "Цель беседы убрана.", 3000);
         session.sendRequest({ type: "miniapp_display", view: "main", layout: { layoutType: "bitmap_view", data } })?.catch?.((e) => assistant.addLog("error", `Картинка на очках: ${String(e?.message ?? e)}`));
       },
       onChange: pushState,
-      nav: makeNavHost(session, (msg) => assistant.addLog("info", msg), tiles)
+      nav: makeNavHost(session, (msg) => assistant.addLog("info", msg), tiles, locator),
+      context: session.location ? context : undefined
     });
     assistant.addLog("info", `Запущено, версия ${APP_VERSION}`);
     const storageOk = store.selfTest();
@@ -10917,6 +12230,10 @@ ${goal}` : "Цель беседы убрана.", 3000);
         const navProblem = assistant.navProblem();
         if (navProblem)
           assistant.addLog("info", `Навигатор: ${navProblem}`);
+        if (session.phone?.calendar && session.phone.calendar.hasPermission !== true)
+          assistant.addLog("info", "Календарь недоступен: нет разрешения CALENDAR — загрузите EVA-IA заново по ссылке");
+        if (assistant.settings.guideAuto)
+          assistant.guide.start();
       });
     } catch {}
     try {
@@ -10957,6 +12274,14 @@ ${goal}` : "Цель беседы убрана.", 3000);
         assistant.startTalk("ui");
       else if (cmd === "talkStop")
         assistant.stopTalk("ui");
+      else if (cmd === "where")
+        assistant.whereAmI();
+      else if (cmd === "around")
+        assistant.whatsAround();
+      else if (cmd === "guideOn")
+        assistant.setGuide(true, "ui");
+      else if (cmd === "guideOff")
+        assistant.setGuide(false, "ui");
       else if (["next", "prev", "first", "repeat", "hide", "cancel", "reset"].includes(cmd))
         assistant.command(cmd, p?.source === "key" ? "key" : "ui");
       return snap();

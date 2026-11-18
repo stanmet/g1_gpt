@@ -1,8 +1,8 @@
 {
   "packageName": "com.g1gpt.assistant",
-  "version": "1.15.1",
+  "version": "1.16.0",
   "name": "EVA-IA",
-  "description": "Голосовой помощник для Even Realities G1: ChatGPT, Claude или Gemini, перевод речи, тезисы лекций, подсказки в разговоре и навигатор",
+  "description": "Голосовой помощник для Even Realities G1: ChatGPT, Claude или Gemini, перевод речи с подсказками ответа, тезисы лекций, проверка фактов в разговоре, навигатор и гид",
   "icon": "icon.png",
   "type": "standard",
   "sdkVersion": "0.3.0",
@@ -18,7 +18,11 @@
     },
     {
       "type": "LOCATION",
-      "description": "Прокладывать маршрут от того места, где вы находитесь, и вести по нему (навигатор)."
+      "description": "Вести по маршруту, отвечать «где я» и что рядом, учитывать место и погоду в ответах."
+    },
+    {
+      "type": "CALENDAR",
+      "description": "Отвечать на вопросы о ваших планах: «что у меня завтра?»."
     }
   ],
   "hardwareRequirements": [

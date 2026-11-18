@@ -87,9 +87,16 @@ function fakeBlobHost() {
   return {files, urls, replies}
 }
 
-function makeHost(openaiAnswers: string[], store = new Map<string, string>()) {
+/** Open-Meteo's answer shape (forecast), trimmed. */
+const FORECAST = {
+  current: {time: "2026-11-18T14:00", temperature_2m: 9.2, apparent_temperature: 6.1, precipitation: 0.2, weather_code: 61, wind_speed_10m: 5.5},
+  daily: {time: ["2026-11-18"], weather_code: [61], temperature_2m_max: [10], temperature_2m_min: [5], precipitation_probability_max: [80], precipitation_sum: [3.2]},
+}
+
+function makeHost(openaiAnswers: string[], store = new Map<string, string>(), opts: {calendar?: boolean} = {}) {
   const sent: Env[] = []
   const openaiCalls: any[] = []
+  const webCalls: string[] = []
   const blobHost = fakeBlobHost()
   let ctx: any
 
@@ -110,19 +117,32 @@ function makeHost(openaiAnswers: string[], store = new Map<string, string>()) {
           capabilities: {modelName: "Even Realities G1", display: {width: 640, height: 200, canPosition: false}},
           visibility: "foreground",
           // canonical names, as Mentra sends them (computed from the installed miniapp.json)
-          permissions: {microphone: true, location: true, camera: false, notifications: false, calendar: false},
+          permissions: {microphone: true, location: true, camera: false, notifications: false, calendar: opts.calendar === true},
           configuration: {},
         },
       })
     } else if (env.requestId) {
+      const calendar = (p: any) => ({
+        events: [{id: "e1", calendarId: "c", title: "Стоматолог", startsAt: new Date(new Date(p.startsAt).getTime() + 10 * 3600_000).toISOString(), endsAt: new Date(new Date(p.startsAt).getTime() + 11 * 3600_000).toISOString(), allDay: false, links: []}],
+        truncated: false,
+      })
       const data =
-        type === "miniapp_render" ? {status: "displayed", degraded: true} : ((NAV_REPLIES[type] ?? blobHost.replies[type])?.(env.payload) ?? null)
+        type === "miniapp_render"
+          ? {status: "displayed", degraded: true}
+          : type === "miniapp_calendar_list_events"
+            ? calendar(env.payload)
+            : ((NAV_REPLIES[type] ?? blobHost.replies[type])?.(env.payload) ?? null)
       deliver({payload: {type: "miniapp_request_result", ok: true, data}, requestId: env.requestId})
     }
     return null
   }
 
   const fetch = async (url: string, init: any) => {
+    if (/open-meteo\.com/.test(url)) {
+      webCalls.push(url)
+      const raw = JSON.stringify(FORECAST)
+      return {ok: true, status: 200, text: async () => raw, json: async () => JSON.parse(raw)}
+    }
     if (/openfreemap/.test(url)) {
       const raw = JSON.stringify({tiles: ["https://tiles.openfreemap.org/planet/20251101_001001_pt/{z}/{x}/{y}.pbf"]})
       return {ok: true, status: 200, text: async () => raw, json: async () => JSON.parse(raw)}
@@ -159,7 +179,7 @@ function makeHost(openaiAnswers: string[], store = new Map<string, string>()) {
   const renders = () => sent.filter((e) => e.payload?.type === "miniapp_render").map((e) => e.payload.elements?.[0]?.text ?? "<clear>")
   const uiReplies = () => sent.filter((e) => e.payload?.type === "UI_SEND")
   const bitmaps = () => sent.filter((e) => e.payload?.type === "miniapp_display" && e.payload.layout?.layoutType === "bitmap_view").map((e) => e.payload.layout.data as string)
-  return {ctx, sent, openaiCalls, blobHost, store, ev, renders, uiReplies, bitmaps}
+  return {ctx, sent, openaiCalls, webCalls, blobHost, store, ev, renders, uiReplies, bitmaps}
 }
 
 test("built bundle: G1 transcript → OpenAI → render, follow-up keeps context", async () => {
@@ -504,3 +524,45 @@ test("built bundle: offline map — download an area, see progress, delete it", 
   expect(result("x").maps.areas).toHaveLength(0)
   expect(h.blobHost.files.size).toBe(0)
 }, 20000)
+
+test("built bundle: weather, calendar and «Где я?» through the real SDK bridge", async () => {
+  const h = makeHost(["Возьмите зонт.", "Завтра в 10 — стоматолог."], new Map(), {calendar: true})
+  vm.runInContext(readFileSync(BUNDLE, "utf8"), h.ctx, {filename: "background/index.js"})
+  h.ctx.__mentraInitCallback("s")
+  await sleep(50)
+  h.ev("_ui", {type: "UI_OPEN"})
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "saveSettings", payload: {apiKey: "sk-test-abcdefghijklmnop"}, seq: 1, requestId: "k"})
+  await sleep(30)
+
+  // the weather where you are: Mentra's location, then Open-Meteo, then the AI
+  h.ev("transcription:ru-RU", {text: "Вопрос, нужен ли сегодня зонт?", isFinal: true})
+  await sleep(2200)
+  expect(h.sent.some((e) => e.payload?.type === "miniapp_location_poll")).toBe(true)
+  expect(h.webCalls[0]).toMatch(/^https:\/\/api\.open-meteo\.com\/v1\/forecast\?latitude=53\.35&longitude=-6\.26&/)
+  expect(h.openaiCalls).toHaveLength(1)
+  const sys = h.openaiCalls[0].body.instructions as string
+  expect(sys).toContain("Погода — там, где пользователь (Open-Meteo), сейчас 14:00: 9 °C")
+  expect(sys).toContain("Где пользователь сейчас (GPS телефона, точность ±12 м)")
+  expect(h.renders().at(-1)).toBe("Возьмите зонт.")
+
+  // plans: Mentra's calendar request for tomorrow
+  h.ev("transcription:ru-RU", {text: "Вопрос, что у меня завтра?", isFinal: true})
+  await sleep(2200)
+  const req = h.sent.find((e) => e.payload?.type === "miniapp_calendar_list_events")!.payload
+  expect(new Date(req.endsAt).getTime() - new Date(req.startsAt).getTime()).toBe(24 * 3600_000)
+  expect(h.openaiCalls[1].body.instructions).toContain("Календарь телефона (завтра):")
+  expect(h.openaiCalls[1].body.instructions).toContain("Стоматолог")
+
+  // «Где я?» without the activator: no AI, the coordinates on the glasses
+  h.ev("transcription:ru-RU", {text: "Где я?", isFinal: true})
+  await sleep(300)
+  expect(h.openaiCalls).toHaveLength(2)
+  expect(h.renders().at(-1)).toContain("53.34980, -6.26030 ±12 м")
+
+  h.ev("_ui", {type: "UI_MESSAGE", channel: "getState", payload: {}, seq: 2, requestId: "st"})
+  await sleep(30)
+  const st = h.uiReplies().find((e) => e.payload.requestId === "st")!.payload.payload.result
+  expect(st.context).toEqual({location: true, calendar: true})
+  expect(st.guide).toMatchObject({active: false, available: true})
+  expect(st.version).toBe("1.16.0")
+}, 15000)

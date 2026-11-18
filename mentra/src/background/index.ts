@@ -4,7 +4,8 @@
  * lecture, conversation) → ChatGPT / Claude / Gemini → text on the G1 display.
  */
 import {registerMiniapp} from "@mentra/miniapp/background"
-import {Assistant} from "./assistant"
+import {Assistant, type ContextHost} from "./assistant"
+import {geocodeUrl, openMeteoUrl} from "./context"
 import {asProvider, keyFor, PROVIDERS} from "./llm"
 import type {NavHost, Place, TravelMode} from "./navigator"
 import {testPattern} from "./glassdraw"
@@ -46,25 +47,75 @@ function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
   })
 }
 
-function makeNavHost(session: any, log: (msg: string) => void, tiles: TileStore): NavHost | undefined {
+interface Fix {
+  lat: number
+  lng: number
+  accuracy?: number
+  at: number
+}
+
+/**
+ * The phone's position, shared by the navigator, questions and the guide: the last fix from any
+ * source (a one-off request or the live stream) is reused while it is fresh enough.
+ */
+function makeLocator(session: any) {
+  let fix: Fix | null = null
+  let pending: Promise<unknown> | null = null
+  const remember = (p: any) => {
+    const lat = Number(p?.lat)
+    const lng = Number(p?.lng)
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
+    const acc = Number(p?.accuracy)
+    fix = {lat, lng, accuracy: Number.isFinite(acc) && acc > 0 ? acc : undefined, at: Date.now()}
+  }
+  const copy = (f: Fix) => ({lat: f.lat, lng: f.lng, accuracy: f.accuracy})
+  return {
+    /** A fix no older than `maxAgeMs`; waits up to `waitMs` for a new one. A fix up to 10 min old is better than none. */
+    async here(maxAgeMs: number, waitMs: number): Promise<{lat: number; lng: number; accuracy?: number} | null> {
+      if (fix && Date.now() - fix.at <= maxAgeMs) return copy(fix)
+      if (typeof session.location?.getOnce !== "function") return null
+      if (!pending) {
+        pending = Promise.resolve(session.location.getOnce())
+          .then(remember)
+          .catch(() => {})
+          .finally(() => {
+            pending = null
+          })
+      }
+      await withTimeout(pending, waitMs, "location").catch(() => {})
+      return fix && Date.now() - fix.at <= Math.max(maxAgeMs, 600_000) ? copy(fix) : null
+    },
+    watch(onPosition: (p: {lat: number; lng: number; accuracy?: number}) => void): () => void {
+      const off = session.location?.onUpdate?.((p: any) => {
+        remember(p)
+        onPosition({lat: Number(p?.lat), lng: Number(p?.lng), accuracy: Number.isFinite(Number(p?.accuracy)) ? Number(p.accuracy) : undefined})
+      })
+      return () => {
+        try {
+          off?.()
+        } catch {
+          // ignore
+        }
+      }
+    },
+  }
+}
+
+type Locator = ReturnType<typeof makeLocator>
+
+function makeNavHost(session: any, log: (msg: string) => void, tiles: TileStore, locator: Locator): NavHost | undefined {
   const nav = session.navigation
   if (!nav || typeof nav.start !== "function") return undefined
   let token = newToken()
   let termsAsked = false
-  let lastFix: {lat: number; lng: number; at: number} | null = null
   return {
     problem: () =>
       nav.hasPermission === false
         ? "нет разрешения на геопозицию — загрузите EVA-IA заново: Mentra → Settings → Miniapp Developer Settings → Load Miniapp from URL"
         : "",
     async locate() {
-      if (lastFix && Date.now() - lastFix.at < 60_000) return {lat: lastFix.lat, lng: lastFix.lng}
-      const fix = await session.location.getOnce()
-      const lat = Number(fix?.lat)
-      const lng = Number(fix?.lng)
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
-      lastFix = {lat, lng, at: Date.now()}
-      return {lat, lng}
+      const f = await locator.here(60_000, 15_000)
+      return f ? {lat: f.lat, lng: f.lng} : null
     },
     async suggest(query, near) {
       token = newToken()
@@ -100,16 +151,7 @@ function makeNavHost(session: any, log: (msg: string) => void, tiles: TileStore)
     },
     roads: (center, radius) => tiles.features(center, radius),
     prefetch: (route) => void tiles.prefetchRoute(route),
-    watch(onPosition) {
-      const off = session.location?.onUpdate?.((p: any) => onPosition({lat: Number(p?.lat), lng: Number(p?.lng), accuracy: p?.accuracy}))
-      return () => {
-        try {
-          off?.()
-        } catch {
-          // ignore
-        }
-      }
-    },
+    watch: (onPosition) => locator.watch(onPosition),
   }
 }
 
@@ -147,6 +189,13 @@ registerMiniapp((session: any) => {
 
   const snap = () => ({...assistant.snapshot(), version: APP_VERSION, maps: mapsState()})
 
+  /** GET a JSON document (map index, weather, geocoding). */
+  const getJson = async (url: string, ms = 15_000) => {
+    const res: any = await withTimeout((globalThis as any).fetch(url, {method: "GET", headers: {Accept: "application/json"}}), ms, "fetch")
+    if (!res?.ok) throw new Error(`HTTP ${res?.status}`)
+    return JSON.parse(await res.text())
+  }
+
   // ── Map tiles on the phone (offline maps) ───────────────────────
   const blob = session.blob
   const tiles = new TileStore({
@@ -159,11 +208,7 @@ registerMiniapp((session: any) => {
             delete: (k) => blob.delete(k),
           } as BlobApi)
         : null,
-    fetchJson: async (url) => {
-      const res: any = await withTimeout((globalThis as any).fetch(url), 15_000, "TileJSON")
-      if (!res?.ok) throw new Error(`HTTP ${res?.status}`)
-      return JSON.parse(await res.text())
-    },
+    fetchJson: (url) => getJson(url),
     log: (kind, msg) => assistant.addLog(kind, msg),
     now: () => Date.now(),
     onChange: () => pushState(),
@@ -176,6 +221,24 @@ registerMiniapp((session: any) => {
     download: tiles.download,
     areas: tiles.areas,
   })
+
+  // ── Where you are, the weather, the calendar (questions and the guide) ──
+  const locator = makeLocator(session)
+  const context: ContextHost = {
+    status: () => ({
+      location: session.location?.hasPermission === true,
+      calendar: session.phone?.calendar?.hasPermission === true,
+    }),
+    here: (maxAgeMs, waitMs) => locator.here(maxAgeMs, waitMs),
+    around: (center, radius) => tiles.around(center, radius),
+    weather: (lat, lng) => getJson(openMeteoUrl(lat, lng), 8000),
+    geocode: (name, lang) => getJson(geocodeUrl(name, lang), 6000),
+    async calendar(from, to) {
+      const r: any = await session.phone.calendar.listEvents({startsAt: from, endsAt: to, limit: 50})
+      return {events: Array.isArray(r?.events) ? r.events : [], truncated: Boolean(r?.truncated)}
+    },
+    watch: (onPosition) => locator.watch(onPosition),
+  }
 
   const assistant = new Assistant({
     store,
@@ -194,7 +257,8 @@ registerMiniapp((session: any) => {
         ?.catch?.((e: unknown) => assistant.addLog("error", `Картинка на очках: ${String((e as Error)?.message ?? e)}`))
     },
     onChange: pushState,
-    nav: makeNavHost(session, (msg) => assistant.addLog("info", msg), tiles),
+    nav: makeNavHost(session, (msg) => assistant.addLog("info", msg), tiles, locator),
+    context: session.location ? context : undefined,
   })
 
   assistant.addLog("info", `Запущено, версия ${APP_VERSION}`)
@@ -284,6 +348,10 @@ registerMiniapp((session: any) => {
       if (session.transcription?.hasPermission === false) assistant.addLog("error", "Нет разрешения MICROPHONE в манифесте")
       const navProblem = assistant.navProblem()
       if (navProblem) assistant.addLog("info", `Навигатор: ${navProblem}`)
+      if (session.phone?.calendar && session.phone.calendar.hasPermission !== true)
+        assistant.addLog("info", "Календарь недоступен: нет разрешения CALENDAR — загрузите EVA-IA заново по ссылке")
+      // «Гид на прогулке» needs the location permission, known only now
+      if (assistant.settings.guideAuto) assistant.guide.start()
     })
   } catch {
     // ignore
@@ -330,6 +398,10 @@ registerMiniapp((session: any) => {
     else if (cmd === "lectureStop") assistant.stopLecture("ui")
     else if (cmd === "talk") assistant.startTalk("ui")
     else if (cmd === "talkStop") assistant.stopTalk("ui")
+    else if (cmd === "where") void assistant.whereAmI()
+    else if (cmd === "around") void assistant.whatsAround()
+    else if (cmd === "guideOn") assistant.setGuide(true, "ui")
+    else if (cmd === "guideOff") assistant.setGuide(false, "ui")
     else if (["next", "prev", "first", "repeat", "hide", "cancel", "reset"].includes(cmd)) assistant.command(cmd, p?.source === "key" ? "key" : "ui")
     return snap()
   })

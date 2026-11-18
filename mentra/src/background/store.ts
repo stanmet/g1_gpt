@@ -56,6 +56,16 @@ export interface Settings {
   navMap: boolean
   /** Navigator picture: the small map next to the arrow. */
   navMiniMap: boolean
+  /** Every question to the AI says where you are (street, district, coordinates). */
+  useLocation: boolean
+  /** Questions about plans and meetings read the phone calendar (needs CALENDAR). */
+  useCalendar: boolean
+  /** «Гид на прогулке»: walking past a sight, a short note about it appears by itself. */
+  guideAuto: boolean
+  /** Translation mode: after the other person speaks, two short replies in their language. */
+  translateReplies: boolean
+  /** Conversation mode: claims are checked with a web search. */
+  talkSearch: boolean
   /** Settings schema version, for one-time migrations of stored settings. */
   v: number
 }
@@ -96,6 +106,11 @@ export const DEFAULT_SETTINGS: Settings = {
   navMode: "walking",
   navMap: true,
   navMiniMap: true,
+  useLocation: true,
+  useCalendar: true,
+  guideAuto: false,
+  translateReplies: true,
+  talkSearch: true,
   v: SETTINGS_VERSION,
 }
 
@@ -192,6 +207,11 @@ export function normalizeSettings(raw: Partial<Settings> | null | undefined, bas
     navMode: (["walking", "driving", "cycling"] as NavMode[]).includes(pick("navMode")) ? pick("navMode") : "walking",
     navMap: pick("navMap") !== false,
     navMiniMap: pick("navMiniMap") !== false,
+    useLocation: pick("useLocation") !== false,
+    useCalendar: pick("useCalendar") !== false,
+    guideAuto: pick("guideAuto") === true,
+    translateReplies: pick("translateReplies") !== false,
+    talkSearch: pick("talkSearch") !== false,
     v: SETTINGS_VERSION,
   }
 }
